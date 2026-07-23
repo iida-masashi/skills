@@ -17,6 +17,9 @@ Claude Code と Gemini CLI の両方から共有して使う、自作エージ�
 | [`consultant-toolkit`](./consultant-toolkit/) | コンサルタント向け財務データ取得・AI駆動SCM/財務ダッシュボード・ERP PMO自動化ツールキット |
 | [`python-safe-coding`](./python-safe-coding/) | AST基盤の安全なリファクタリング・厳格な型付け強制・統一品質ゲート（`psc`） |
 | [`pe-market-research`](./pe-market-research/) | PE投資先候補調査向けの業界横断リサーチワークフロー（プレイヤー発見→資本構造検証→M&A適性評価→ファクトチェック） |
+| [`vault-api`](./vault-api/) | Obsidian Local REST API経由でVaultを直接操作（全文検索・読み取り・一覧・追記・リネーム・削除） |
+| [`vault-orphan-check`](./vault-orphan-check/) | Obsidian Vaultの孤立ノート（どこからもwikilinkされていないノート）を検出 |
+| [`vault-thin-notes`](./vault-thin-notes/) | Obsidian Vault配下の薄ノート（指定バイト数未満の.md）を検出し強化対象を発見 |
 
 いずれのSKILL.mdも `<vault>`、`<quartz-repo>`、`<convmd-repo>`、`<your-org>/<your-repo>` のようなプレースホルダを含む。自分の環境の実パス・リポジトリ名に置き換えて使う。
 
@@ -29,26 +32,13 @@ Claude Code は `~/.claude/skills/<name>/`、Gemini CLI は `~/.gemini/skills/<n
 ```bat
 git clone https://github.com/iida-masashi/skill.git C:\Users\<you>\claude-gemini-skills
 
-mklink /J "C:\Users\<you>\.claude\skills\convmd" "C:\Users\<you>\claude-gemini-skills\convmd"
-mklink /J "C:\Users\<you>\.claude\skills\awa-publish" "C:\Users\<you>\claude-gemini-skills\awa-publish"
-mklink /J "C:\Users\<you>\.claude\skills\awa-sync" "C:\Users\<you>\claude-gemini-skills\awa-sync"
-mklink /J "C:\Users\<you>\.claude\skills\deliverable-review" "C:\Users\<you>\claude-gemini-skills\deliverable-review"
-mklink /J "C:\Users\<you>\.claude\skills\anaplan-skill" "C:\Users\<you>\claude-gemini-skills\anaplan-skill"
-mklink /J "C:\Users\<you>\.claude\skills\promo-forecast-skill" "C:\Users\<you>\claude-gemini-skills\promo-forecast-skill"
-mklink /J "C:\Users\<you>\.claude\skills\consultant-toolkit" "C:\Users\<you>\claude-gemini-skills\consultant-toolkit"
-mklink /J "C:\Users\<you>\.claude\skills\python-safe-coding" "C:\Users\<you>\claude-gemini-skills\python-safe-coding"
-mklink /J "C:\Users\<you>\.claude\skills\pe-market-research" "C:\Users\<you>\claude-gemini-skills\pe-market-research"
-
-mklink /J "C:\Users\<you>\.gemini\skills\convmd" "C:\Users\<you>\claude-gemini-skills\convmd"
-mklink /J "C:\Users\<you>\.gemini\skills\awa-publish" "C:\Users\<you>\claude-gemini-skills\awa-publish"
-mklink /J "C:\Users\<you>\.gemini\skills\awa-sync" "C:\Users\<you>\claude-gemini-skills\awa-sync"
-mklink /J "C:\Users\<you>\.gemini\skills\deliverable-review" "C:\Users\<you>\claude-gemini-skills\deliverable-review"
-mklink /J "C:\Users\<you>\.gemini\skills\anaplan-skill" "C:\Users\<you>\claude-gemini-skills\anaplan-skill"
-mklink /J "C:\Users\<you>\.gemini\skills\promo-forecast-skill" "C:\Users\<you>\claude-gemini-skills\promo-forecast-skill"
-mklink /J "C:\Users\<you>\.gemini\skills\consultant-toolkit" "C:\Users\<you>\claude-gemini-skills\consultant-toolkit"
-mklink /J "C:\Users\<you>\.gemini\skills\python-safe-coding" "C:\Users\<you>\claude-gemini-skills\python-safe-coding"
-mklink /J "C:\Users\<you>\.gemini\skills\pe-market-research" "C:\Users\<you>\claude-gemini-skills\pe-market-research"
+for /D %s in ("C:\Users\<you>\claude-gemini-skills\*") do (
+  mklink /J "C:\Users\<you>\.claude\skills\%~ns" "%s"
+  mklink /J "C:\Users\<you>\.gemini\skills\%~ns" "%s"
+)
 ```
+
+（`.git`フォルダもマッチしてしまうので、その行だけエラーが出るが無視してよい。気になる場合は1行ずつ`for /D %s in (...) do if not "%~ns"==".git" (...)`のように除外するか、個別に列挙する。）
 
 `mklink /J`（junction）は管理者権限不要。`/D`（シンボリックリンク）は管理者権限が必要なため使っていない。
 
