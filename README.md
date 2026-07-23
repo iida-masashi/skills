@@ -22,7 +22,7 @@ Claude Code は `~/.claude/skills/<name>/`、Gemini CLI は `~/.gemini/skills/<n
 ### セットアップ（新しい環境での復元）
 
 ```bat
-git clone <このリポジトリのURL> C:\Users\<you>\claude-gemini-skills
+git clone https://github.com/iida-masashi/skill.git C:\Users\<you>\claude-gemini-skills
 
 mklink /J "C:\Users\<you>\.claude\skills\convmd" "C:\Users\<you>\claude-gemini-skills\convmd"
 mklink /J "C:\Users\<you>\.claude\skills\awa-publish" "C:\Users\<you>\claude-gemini-skills\awa-publish"
