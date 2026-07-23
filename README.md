@@ -22,7 +22,7 @@ Claude Code と Gemini CLI の両方から共有して使う、自作エージ�
 | [`vault-thin-notes`](./vault-thin-notes/) | Obsidian Vault配下の薄ノート（指定バイト数未満の.md）を検出し強化対象を発見 |
 | [`shrine-note-template`](./shrine-note-template/) | 神社・神格の専門ノート作成用の標準12セクション構造テンプレート |
 | [`essay-note-template`](./essay-note-template/) | 神格・氏族・論考型の専門ノート用テンプレート（shrine-note-templateの論考版） |
-| [`context-compression-skill`](./context-compression-skill/) | シェルコマンド・検索・ファイル読み込みの出力をコンテキストに入る前に圧縮する方針集。本体は`~/.claude/commands/context-compression.md`側にあり、このSKILL.mdは自動発見用スタブ |
+| [`context-compression-skill`](./context-compression-skill/) | シェルコマンド・検索・ファイル読み込みの出力をコンテキストに入る前に圧縮する方針集 |
 
 いずれのSKILL.mdも `<vault>`、`<quartz-repo>`、`<convmd-repo>`、`<your-org>/<your-repo>` のようなプレースホルダを含む。自分の環境の実パス・リポジトリ名に置き換えて使う。
 
@@ -57,10 +57,6 @@ fsutil reparsepoint query "C:\Users\<you>\.claude\skills\convmd"
 
 このスキルはもともと別リポジトリ（`iida-masashi/checker`）で開発している。ここに置いているのはgit履歴を持たないスナップショットで、実行に必要なファイルのみを含む（`.venv`・`.git`・キャッシュ類は除外済み）。本体の開発・Cloud Runデプロイ等は元リポジトリ側で行う。
 
-## context-compression-skill について
-
-このSKILL.mdは自動発見用のスタブで、内容は「本体は`~/.claude/commands/context-compression.md`を参照」としか書いていない。実際のルール本文はそちらのファイル側にある。このリポジトリだけをcloneしても本体は付いてこないため、`~/.claude/commands/context-compression.md`は別途各環境で用意する必要がある（現状Gitでは管理していない）。
-
 ## 移管元について
 
-`anaplan-skill`・`promo-forecast-skill`・`consultant-toolkit`・`python-safe-coding`はもともと別のPublicリポジトリ（`iida-masashi/Skills`）で管理していたが、Claude Code / Gemini CLI 両方から使う運用と非公開化のため、このリポジトリに一本化した。旧リポジトリはarchive済み。
+`anaplan-skill`・`promo-forecast-skill`・`consultant-toolkit`・`python-safe-coding`はもともと別のPublicリポジトリ（`iida-masashi/Skills`）で管理していたが、Claude Code / Gemini CLI 両方から使う運用と非公開化のため、このリポジトリに一本化した。旧リポジトリは`iida-masashi/oldSkills`にリネームしarchive済み。
