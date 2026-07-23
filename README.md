@@ -52,11 +52,3 @@ fsutil reparsepoint query "C:\Users\<you>\.claude\skills\convmd"
 ```
 
 `Reparse Tag: Mount Point` と、実体のパスが表示されれば正しくリンクされている。
-
-## deliverable-review について
-
-このスキルはもともと別リポジトリ（`iida-masashi/checker`）で開発している。ここに置いているのはgit履歴を持たないスナップショットで、実行に必要なファイルのみを含む（`.venv`・`.git`・キャッシュ類は除外済み）。本体の開発・Cloud Runデプロイ等は元リポジトリ側で行う。
-
-## 移管元について
-
-`anaplan-skill`・`promo-forecast-skill`・`consultant-toolkit`・`python-safe-coding`はもともと別のPublicリポジトリ（`iida-masashi/Skills`）で管理していたが、Claude Code / Gemini CLI 両方から使う運用と非公開化のため、このリポジトリに一本化した。旧リポジトリは`iida-masashi/oldSkills`にリネームしarchive済み。
