@@ -1,0 +1,50 @@
+# claude-gemini-skills
+
+Claude Code と Gemini CLI の両方から共有して使う、自作エージェントスキル集。
+
+## 構成
+
+各サブフォルダが1つのスキル。`SKILL.md`（フロントマターに `name`/`description`）が本体。
+
+| スキル | 用途 |
+|---|---|
+| [`convmd`](./convmd/) | Web記事・SNS・動画/音声・デジタルアーカイブ・ローカルOffice/PDFファイルをObsidian向けMarkdownに変換するCLI（convMD）の呼び出し方の知識 |
+| [`awa-publish`](./awa-publish/) | Obsidian Vault → Quartz → GitHub Pagesの公開パイプライン（sync→build検証→commit→push）をワンステップで実行 |
+| [`awa-sync`](./awa-sync/) | 上記からcommit/pushを除いた、ローカル同期・プレビュー専用バリアント |
+| [`deliverable-review`](./deliverable-review/) | クライアント納品前のPowerPoint/Word/PDF自己点検（情報漏洩・AI生成痕跡・正確性・コンサルスタイル・戦略の質の5〜6分類チェック） |
+
+いずれのSKILL.mdも `<vault>`、`<quartz-repo>`、`<convmd-repo>`、`<your-org>/<your-repo>` のようなプレースホルダを含む。自分の環境の実パス・リポジトリ名に置き換えて使う。
+
+## 両ツールから使う仕組み
+
+Claude Code は `~/.claude/skills/<name>/`、Gemini CLI は `~/.gemini/skills/<name>/` をそれぞれ個人スキルディレクトリとして読む。このリポジトリはその実体を1箇所（ここ）に集約し、両方のディレクトリからWindowsのディレクトリジャンクション（`mklink /J`）で参照させることで、片方を編集すれば両方に反映される状態にしている。
+
+### セットアップ（新しい環境での復元）
+
+```bat
+git clone <このリポジトリのURL> C:\Users\<you>\claude-gemini-skills
+
+mklink /J "C:\Users\<you>\.claude\skills\convmd" "C:\Users\<you>\claude-gemini-skills\convmd"
+mklink /J "C:\Users\<you>\.claude\skills\awa-publish" "C:\Users\<you>\claude-gemini-skills\awa-publish"
+mklink /J "C:\Users\<you>\.claude\skills\awa-sync" "C:\Users\<you>\claude-gemini-skills\awa-sync"
+mklink /J "C:\Users\<you>\.claude\skills\deliverable-review" "C:\Users\<you>\claude-gemini-skills\deliverable-review"
+
+mklink /J "C:\Users\<you>\.gemini\skills\convmd" "C:\Users\<you>\claude-gemini-skills\convmd"
+mklink /J "C:\Users\<you>\.gemini\skills\awa-publish" "C:\Users\<you>\claude-gemini-skills\awa-publish"
+mklink /J "C:\Users\<you>\.gemini\skills\awa-sync" "C:\Users\<you>\claude-gemini-skills\awa-sync"
+mklink /J "C:\Users\<you>\.gemini\skills\deliverable-review" "C:\Users\<you>\claude-gemini-skills\deliverable-review"
+```
+
+`mklink /J`（junction）は管理者権限不要。`/D`（シンボリックリンク）は管理者権限が必要なため使っていない。
+
+確認方法:
+
+```bat
+fsutil reparsepoint query "C:\Users\<you>\.claude\skills\convmd"
+```
+
+`Reparse Tag: Mount Point` と、実体のパスが表示されれば正しくリンクされている。
+
+## deliverable-review について
+
+このスキルはもともと別リポジトリ（`iida-masashi/checker`）で開発している。ここに置いているのはgit履歴を持たないスナップショットで、実行に必要なファイルのみを含む（`.venv`・`.git`・キャッシュ類は除外済み）。本体の開発・Cloud Runデプロイ等は元リポジトリ側で行う。

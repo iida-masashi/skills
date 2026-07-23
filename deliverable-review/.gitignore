@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Build / packaging
+build/
+dist/
+*.egg-info/
+
+# Dev helpers
+scripts/_smoke_make_sample.py
+/tmp/
+
+# Editors / IDEs
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env
+*.pem
+*.key
+gcp-key.json
+service-account*.json
+
+# Generated output
+*_review.md
+*_marked.pptx
+*_marked.docx
+*_sanitized.pptx
+*_sanitized.docx
+*_sanitized.pdf
+*_aicheck.json
+*_aicheck_prompt.md
+*_aicheck_review.md
