@@ -1,0 +1,173 @@
+# ========================================
+# consultant-toolkit Configuration File
+# ========================================
+
+# Company Configuration
+companies:
+  piolax:
+    ticker: "5988.T"
+    display_name: "Piolax (5988.T)"
+    color: "#e00078"
+  unipres:
+    ticker: "5949.T"
+    display_name: "Unipres (5949.T)"
+    color: "red"
+  nhk_spring:
+    ticker: "5991.T"
+    display_name: "NHK Spring (5991.T)"
+    color: "#00aedb"
+  hakuto:
+    ticker: "7433.T"
+    display_name: "Hakuto (7433.T)"
+    color: "#ff6600"
+  macnica:
+    ticker: "3132.T"
+    display_name: "Macnica HD (3132.T)"
+    color: "#0066cc"
+  shinko_shoji:
+    ticker: "8141.T"
+    display_name: "Shinko Shoji (8141.T)"
+    color: "#009933"
+  sanshin:
+    ticker: "8150.T"
+    display_name: "Sanshin Electronics (8150.T)"
+    color: "#9900cc"
+  innotech:
+    ticker: "9880.T"
+    display_name: "Innotech (9880.T)"
+    color: "#cc0033"
+  kaga_electronics:
+    ticker: "8154.T"
+    display_name: "Kaga Electronics (8154.T)"
+    color: "#ff9900"
+
+# Financial Analysis Constants
+financial:
+  wacc_benchmark: 0.05       # 資本コスト目安 (5%)
+  target_margin: 0.20        # 限界利益率目標 (20%)
+  # (#13) COGSが取得できない場合の推定原価率。業種に合わせて変更可能。
+  # 製造業: 0.75, 半導体商社・流通: 0.85, SaaS/サービス: 0.30
+  default_cogs_ratio: 0.75
+  # (#13) 実効税率が取得できない場合のデフォルト。日本企業は約30%。
+  default_tax_rate: 0.30
+
+# UI/Animation Settings
+ui:
+  animation_duration_ms: 2500
+  animation_transition_ms: 1500
+
+# Mock Data Generation Settings
+mock_data:
+  start_year: 2015
+  end_year: 2024
+
+  # カテゴリ別売上基本値・利益率
+  categories:
+    standard_fasteners:
+      base_revenue: 55000
+      base_margin: 0.28
+      volume_divisor: 100
+    precision_springs:
+      base_revenue: 30000
+      base_margin: 0.30
+      volume_divisor: 100
+    air_dampers:
+      base_revenue: 15000
+      base_margin: 0.35
+      volume_divisor: 500
+    ev_battery_parts:
+      base_revenue: 500
+      base_margin: 0.45
+      volume_divisor: 1500
+    medical_catheters:
+      base_revenue: 3000
+      base_margin: 0.50
+      volume_divisor: 5000
+
+  # 年度別マクロ経済係数（売上成長率）
+  macro_revenue_factors:
+    2015: 1.0
+    2016: 1.02
+    2017: 1.05
+    2018: 1.03
+    2019: 1.0
+    2020: 0.92
+    2021: 0.95
+    2022: 1.08
+    2023: 1.06
+    2024: 1.02
+
+  # 年度別材料費影響
+  material_cost_impacts:
+    2015: 0.0
+    2016: 0.0
+    2017: -0.02
+    2018: -0.03
+    2019: -0.01
+    2020: 0.02
+    2021: -0.02
+    2022: -0.05
+    2023: -0.03
+    2024: -0.01
+
+  # EV Battery Parts 成長パラメータ
+  ev_growth:
+    exponent: 1.8        # 成長率の指数
+    coefficient: 0.1     # 成長係数
+
+  # Medical Catheters 成長パラメータ
+  medical_growth:
+    threshold_year: 2021
+    coefficient: 0.04    # 年間成長率係数
+
+# Sentiment Analysis Settings
+sentiment:
+  range_negative: [-1.0, -0.3]
+  range_neutral: [-0.3, 0.3]
+  range_positive: [0.3, 1.0]
+
+# Market Analysis Settings
+market_analysis:
+  cache_ttl: 300  # 5分（Market dataは頻繁に更新）
+
+  indices:
+    - name: "S&P 500"
+      ticker: "^GSPC"
+    - name: "Nasdaq 100"
+      ticker: "^IXIC"
+    - name: "Nikkei 225"
+      ticker: "^N225"
+    - name: "Euro Stoxx 50"
+      ticker: "^STOXX50E"
+    - name: "Shanghai Comp"
+      ticker: "000001.SS"
+
+  forex:
+    - name: "USD/JPY"
+      ticker: "JPY=X"
+    - name: "EUR/USD"
+      ticker: "EURUSD=X"
+
+  commodities:
+    - name: "Gold"
+      ticker: "GC=F"
+    - name: "Crude Oil (WTI)"
+      ticker: "CL=F"
+    - name: "Bitcoin"
+      ticker: "BTC-USD"
+
+  sectors:
+    - name: "Tech (XLK)"
+      ticker: "XLK"
+    - name: "Finance (XLF)"
+      ticker: "XLF"
+    - name: "Energy (XLE)"
+      ticker: "XLE"
+    - name: "Healthcare (XLV)"
+      ticker: "XLV"
+
+# Cache Settings
+cache:
+  financial_data_ttl: 3600    # 1時間
+  competitor_data_ttl: 86400  # 24時間
+  market_data_ttl: 300        # 5分

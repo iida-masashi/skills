@@ -1,0 +1,53 @@
+name: Quality Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  psc-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # `psc gate --since` needs git history
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Restore psc cache
+        uses: actions/cache@v4
+        with:
+          path: .psc-cache
+          key: psc-cache-${{ runner.os }}-${{ hashFiles('uv.lock') }}-${{ github.sha }}
+          restore-keys: |
+            psc-cache-${{ runner.os }}-${{ hashFiles('uv.lock') }}-
+            psc-cache-${{ runner.os }}-
+
+      - name: Sync (frozen lock for reproducibility)
+        run: uv sync --frozen
+
+      - name: Install psc as console script
+        run: uv pip install -e .
+
+      - name: AST policy (cached)
+        run: uv run psc ast --baseline .psc-baseline.json --cache-dir .psc-cache .
+
+      - name: Quality gate
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            uv run psc gate \
+              --target . \
+              --since "origin/${{ github.base_ref }}" \
+              --baseline .psc-baseline.json \
+              --github-summary
+          else
+            uv run psc gate --target . --baseline .psc-baseline.json --github-summary
+          fi
+
+      - name: Pre-push checks
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: uv run psc prepush

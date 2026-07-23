@@ -1,0 +1,52 @@
+[project]
+name = "anaplan-skill"
+version = "2.1.0"
+description = "Anaplan integration suite for SCM demand forecasting and workspace history auditing."
+readme = "SKILL.md"
+requires-python = ">=3.12"
+dependencies = [
+    "polars>=1.0.0",
+    "google-genai>=0.2.0",
+    "numpy>=1.23.0",
+    "google-cloud-bigquery>=3.0.0",
+    "google-cloud-storage>=2.0.0",
+    "prophet>=1.1.0",
+    "anaplan-sdk>=0.1.0",
+    "scikit-learn>=1.2.0",
+    "sendgrid>=6.9.0",
+    "requests>=2.28.0",
+    "aiosmtpd>=1.4.0",
+    "streamlit>=1.28.0",
+    "plotly>=5.17.0",
+    "holidays>=0.35",
+    "configparser>=5.3.0",
+    "python-dateutil>=2.8.0",
+    "networkx>=3.0.0",
+    "pyvis>=0.3.1",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-mock"
+]
+
+[tool.setuptools]
+packages = ["libs"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["libs"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "N", "C4", "B"]
+ignore = ["E501", "B008", "E402", "E701", "E702", "E741", "N803", "N806", "N999", "B904", "B017", "F821"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true

@@ -1,0 +1,9 @@
+# .gemini/skills/anaplan-skill/.gitignore
+
+# Test outputs
+test_output/
+
+# Downloaded files / User generated artifacts
+*.xlsx
+*.csv
+anaplan_network.html

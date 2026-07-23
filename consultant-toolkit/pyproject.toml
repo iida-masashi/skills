@@ -1,0 +1,26 @@
+[project]
+name = "consultant-toolkit"
+version = "0.1.0"
+description = "SCM & SAP Management Consultant Toolkit"
+requires-python = ">=3.12"
+dependencies = [
+    "streamlit>=1.30.0",
+    "google-genai>=1.0.0",
+    "python-dotenv>=1.0.0",
+    "pandas>=2.0.0",
+    "polars>=0.20.0",
+    "fastexcel>=0.7.0",
+    "matplotlib>=3.7.0",
+    "seaborn>=0.13.0",
+    "plotly>=5.18.0",
+    "yfinance>=0.2.30",
+    "duckduckgo-search>=4.0.0",
+    "pytrends>=4.9.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["libs"]

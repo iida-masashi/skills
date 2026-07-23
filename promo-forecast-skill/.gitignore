@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / Packaging
+build/
+dist/
+*.egg-info/
+
+# Environments
+.env
+.venv/
+venv/
+
+# IDE / Editor
+.vscode/
+.idea/
+
+# Skill Specific
+promo_poc_data/

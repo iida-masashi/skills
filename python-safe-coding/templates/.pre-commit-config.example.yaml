@@ -1,0 +1,30 @@
+# Drop this into your repo as `.pre-commit-config.yaml`, then:
+#   pre-commit install
+#   pre-commit install --hook-type pre-push
+#
+# `psc-ast` runs on every commit on changed files.
+# `psc-prepush` runs once before each push.
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.7.0
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: psc-ast
+        name: psc — Polars-First AST policy
+        entry: psc ast
+        language: system
+        types: [python]
+        args: ["--baseline", ".psc-baseline.json", "--cache-dir", ".psc-cache"]
+
+      - id: psc-prepush
+        name: psc — Pre-push reproducibility checks
+        entry: psc prepush
+        language: system
+        pass_filenames: false
+        stages: [pre-push]

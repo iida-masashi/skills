@@ -1,0 +1,35 @@
+# Codecov configuration
+
+coverage:
+  precision: 2
+  round: down
+  range: "50...90"
+
+  status:
+    project:
+      default:
+        target: 70%
+        threshold: 5%
+        if_ci_failed: error
+
+    patch:
+      default:
+        target: 70%
+        threshold: 10%
+
+comment:
+  layout: "header, diff, files, footer"
+  behavior: default
+  require_changes: false
+
+ignore:
+  - "tests/"
+  - "scripts/data_analyzer.py"  # Pre-existing syntax error
+  - "**/__pycache__"
+  - "**/*.pyc"
+
+flags:
+  unittests:
+    paths:
+      - libs/consultant_toolkit/
+    carryforward: true

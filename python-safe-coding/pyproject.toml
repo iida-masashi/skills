@@ -1,0 +1,76 @@
+[project]
+name = "python-safe-coding"
+version = "0.3.0"
+description = "AST-based Safe Refactoring & Quality Gate Skill"
+requires-python = ">=3.12"
+dependencies = [
+    "ruff",
+    "mypy",
+    "pytest",
+    "pytest-cov>=7.1.0",
+]
+
+[project.optional-dependencies]
+# Self-healer pulls Gemini SDK only on demand. Install via:
+#   uv pip install -e ".[heal]"
+heal = [
+    "google-genai",
+    "python-dotenv",
+]
+
+[project.scripts]
+psc = "python_safe_coding.cli:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+# E/F/W: pycodestyle/pyflakes, I: isort, UP: pyupgrade, B: bugbear, SIM: simplify,
+# C90: mccabe, S: bandit, DTZ: timezone-aware datetime, PD: pandas-vet,
+# PTH: pathlib, RUF: ruff-native, ANN: annotations, T20: print, TRY: tryceratops,
+# LOG/G: logging hygiene, BLE: blind except, RET: return, PIE: misc.
+select = [
+    "E", "F", "W", "I", "UP", "B", "SIM", "C90", "S",
+    "DTZ", "PD", "PTH", "RUF", "ANN", "T20", "TRY",
+    "LOG", "G", "BLE", "RET", "PIE",
+]
+ignore = [
+    "ANN401",  # Allow `Any` when justified (rare; prefer concrete types).
+    "TRY003",  # Long messages in exceptions are OK in this project.
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests: assert is the standard mechanism; print is fine for debug; private import OK.
+"tests/**.py" = ["S101", "T20", "ANN", "SLF001"]
+# Subprocess wrapper: argv is constructed by callers, not user-supplied raw shell.
+"src/python_safe_coding/gate.py" = ["S603"]
+# CLI entry points may use root logger and pass argv to subprocess.
+"src/python_safe_coding/cli.py" = ["S603", "S607", "TRY401", "LOG015"]
+"src/python_safe_coding/healer.py" = ["S603", "S607", "TRY401", "BLE001"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.mypy]
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+
+[tool.coverage.run]
+# healer.py is mostly Gemini SDK glue; its testable bits live in test_healer.py.
+# The orchestration paths are exercised via integration once [heal] is installed.
+omit = ["src/python_safe_coding/healer.py"]
+
+[tool.python_safe_coding]
+# Project-specific dependency conflict rules consumed by `psc prepush`.
+# Each rule fails the gate if ALL listed packages appear in [project.dependencies].
+conflict_rules = []

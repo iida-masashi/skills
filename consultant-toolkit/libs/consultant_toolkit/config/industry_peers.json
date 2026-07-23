@@ -1,0 +1,102 @@
+{
+  "automotive_parts": {
+    "keywords": ["5988", "5949", "5991", "7203", "7267", "7988", "5943"],
+    "domestic_peers": ["5991.T", "7988.T", "5943.T", "5949.T"],
+    "global_peers": ["ITW", "STM.DE", "LEA"],
+    "description": "Automotive Parts & Components"
+  },
+  "food_snacks": {
+    "keywords": ["2229", "2226", "2206", "2201", "2220", "2269"],
+    "domestic_peers": ["2226.T", "2220.T", "2206.T", "2201.T", "2269.T"],
+    "description": "Food & Snacks (Japan)"
+  },
+  "electronics": {
+    "keywords": ["6758", "6501", "6502"],
+    "global_peers": ["AAPL", "MSFT", "GOOGL"],
+    "description": "Electronics & Technology"
+  },
+  "automotive": {
+    "keywords": ["7203", "7267", "7201", "7269", "7261", "7270", "7211"],
+    "domestic_peers": ["7267.T", "7201.T", "7269.T", "7261.T", "7270.T", "7211.T"],
+    "global_peers": ["GM", "F", "STLA", "VWAGY"],
+    "description": "Automotive Manufacturers (Japan)"
+  },
+  "beverages": {
+    "keywords": ["2502", "2503", "2579", "2587", "2267", "2593", "2501"],
+    "domestic_peers": ["2502.T", "2503.T", "2579.T", "2587.T", "2267.T", "2593.T", "2501.T"],
+    "global_peers": ["KO", "PEP", "BUD"],
+    "description": "Beverages (Japan)"
+  },
+  "banking": {
+    "keywords": ["8306", "8316", "8411", "7182", "8309"],
+    "domestic_peers": ["8306.T", "8316.T", "8411.T", "7182.T", "8309.T"],
+    "global_peers": ["JPM", "BAC", "HSBC", "BNP"],
+    "description": "Banking & Financial Groups (Japan)"
+  },
+  "insurance": {
+    "keywords": ["8766", "8750", "8725", "8630", "7181"],
+    "domestic_peers": ["8766.T", "8750.T", "8725.T", "8630.T", "7181.T"],
+    "global_peers": ["AIG", "MET", "PRU"],
+    "description": "Insurance (Japan)"
+  },
+  "real_estate": {
+    "keywords": ["8801", "8802", "8830", "3003", "3289"],
+    "domestic_peers": ["8802.T", "8801.T", "8830.T", "3003.T", "3289.T"],
+    "global_peers": ["AMT", "PLD", "EQIX"],
+    "description": "Real Estate (Japan)"
+  },
+  "retail": {
+    "keywords": ["9983", "8267", "3382", "7532", "7453"],
+    "domestic_peers": ["9983.T", "8267.T", "3382.T", "7532.T", "7453.T"],
+    "global_peers": ["WMT", "AMZN", "COST"],
+    "description": "Retail (Japan)"
+  },
+  "telecom": {
+    "keywords": ["9432", "9433", "9434", "4755", "9424"],
+    "domestic_peers": ["9432.T", "9433.T", "9434.T", "4755.T", "9424.T"],
+    "global_peers": ["T", "VZ", "TMUS"],
+    "description": "Telecommunications (Japan)"
+  },
+  "chemicals": {
+    "keywords": ["4063", "4901", "4452", "3407", "4507"],
+    "domestic_peers": ["4063.T", "4901.T", "4452.T", "3407.T", "4612.T"],
+    "global_peers": ["LIN", "APD", "SHW", "ECL"],
+    "description": "Chemicals & Materials (Japan)"
+  },
+  "steel": {
+    "keywords": ["5401", "5411", "5413", "5406", "5471"],
+    "domestic_peers": ["5401.T", "5411.T", "5413.T", "5406.T", "5471.T"],
+    "global_peers": ["X", "NUE", "STLD"],
+    "description": "Steel & Metals (Japan)"
+  },
+  "pharma": {
+    "keywords": ["4502", "4578", "4568", "4503", "4507"],
+    "domestic_peers": ["4502.T", "4578.T", "4568.T", "4503.T", "4507.T"],
+    "global_peers": ["JNJ", "PFE", "ABBV", "MRK"],
+    "description": "Pharmaceuticals (Japan)"
+  },
+  "machinery": {
+    "keywords": ["7011", "7012", "6301", "6326", "7013"],
+    "domestic_peers": ["7011.T", "7012.T", "6301.T", "6326.T", "7013.T"],
+    "global_peers": ["GE", "HON", "CAT", "BA"],
+    "description": "Machinery & Heavy Industry (Japan)"
+  },
+  "semiconductor": {
+    "keywords": ["8035", "6857", "6594", "6971", "6723"],
+    "domestic_peers": ["8035.T", "6857.T", "6594.T", "6971.T", "6723.T"],
+    "global_peers": ["NVDA", "ASML", "AMAT", "LRCX"],
+    "description": "Semiconductors & Electronics (Japan)"
+  },
+  "semiconductor_trading": {
+    "keywords": ["7433", "3132", "8154", "8141", "8150", "9880"],
+    "domestic_peers": ["3132.T", "8154.T", "8141.T", "8150.T", "9880.T"],
+    "global_peers": ["AVT", "ARW", "WCC"],
+    "description": "Semiconductor & Electronics Trading / Distribution (Japan)"
+  },
+  "it_software": {
+    "keywords": ["9984", "4307", "9613", "4768", "3672"],
+    "domestic_peers": ["9984.T", "4307.T", "9613.T", "4768.T", "3672.T"],
+    "global_peers": ["MSFT", "AAPL", "GOOGL", "META"],
+    "description": "IT & Software (Japan)"
+  }
+}

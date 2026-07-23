@@ -1,0 +1,10 @@
+polars
+pandas
+numpy
+darts
+prophet
+lightgbm
+streamlit
+plotly
+pytest
+optuna

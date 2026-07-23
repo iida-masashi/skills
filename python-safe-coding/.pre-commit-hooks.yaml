@@ -1,0 +1,16 @@
+- id: psc-ast
+  name: psc — Polars-First AST policy
+  description: Block pandas imports (and other AST policies) before commit.
+  entry: psc ast
+  language: python
+  types: [python]
+  args: ["--baseline", ".psc-baseline.json"]
+  require_serial: false
+
+- id: psc-prepush
+  name: psc — Pre-push reproducibility checks
+  description: Compile, uv lock sync, and project conflict rules.
+  entry: psc prepush
+  language: python
+  pass_filenames: false
+  stages: [pre-push]
