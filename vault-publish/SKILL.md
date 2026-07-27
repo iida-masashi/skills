@@ -1,9 +1,9 @@
 ---
-name: awa-publish
+name: vault-publish
 description: Sync an Obsidian Vault (awa-garden or religion-garden) to its Quartz repo's content/, verify a local build, commit, and push to deploy the digital garden on GitHub Pages. Invoke when the user wants to publish Vault changes, deploy to the Quartz site, or update a public digital garden — for either the 阿波説 (awa) Vault or the religion research Vault.
 ---
 
-# awa-publish: Vault → Quartz → GitHub Pages 公開パイプライン
+# vault-publish: Vault → Quartz → GitHub Pages 公開パイプライン
 
 Vault → Quartz → GitHub Pages の公開フロー全体をワンステップで実行する。**2つの対象（ターゲット）を扱える**: 阿波説デジタルガーデン(awa)と宗教研究デジタルガーデン(religion)。
 
@@ -21,7 +21,7 @@ Vault → Quartz → GitHub Pages の公開フロー全体をワンステップ�
 ユーザーが以下のような表現をしたとき:
 - 「Vaultを公開して」「デジタルガーデンを更新」「Quartzをデプロイ」
 - 「awa-garden に push」「religion-garden に push」「変更を反映したい」
-- 「/awa-publish」「/awa-publish religion」のように明示的に呼び出されたとき
+- 「/vault-publish」「/vault-publish religion」のように明示的に呼び出されたとき
 
 ### ターゲットの決め方
 
@@ -125,7 +125,7 @@ cd <quartz-repo> && git config http.postBuffer 524288000 && git push 2>&1
 
 | Flag | Effect |
 |---|---|
-| `awa` / `religion` | 対象ターゲットを明示指定（位置引数、例: `/awa-publish religion`） |
+| `awa` / `religion` | 対象ターゲットを明示指定（位置引数、例: `/vault-publish religion`） |
 | `--skip-build` | Step 3 (build verify) をスキップ。push 速度優先 |
 | `--message "..."` | commit message を上書き |
 | `--dry-run` | sync スクリプトを `--dry-run` 付きで実行し、何も commit/push しない |
