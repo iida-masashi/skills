@@ -32,7 +32,7 @@ APIキー/認証は既定で `C:\Users\iidam\gemini\.env` から自動読み込�
 cd claude-gemini-skills/web-search && uv run python tools/gemini_websearch.py "検索クエリ"
 ```
 
-出力: Geminiの回答本文 + `--- 出典 ---` 以下に `[番号] タイトル - URL` 形式の出典一覧（`grounding_chunks`由来）。
+出力: Geminiの回答本文 + `--- 出典 ---` 以下に `[番号] タイトル - URL` 形式の出典一覧（`grounding_chunks`由来）。URLはリダイレクトを自動追跡した解決済みの実URL（解決失敗時のみ元のリダイレクトURL＋`(解決失敗、リダイレクトURLのまま)`）。`--no-resolve`を渡すと解決処理自体を無効化できる。
 
 ### URL取得（WebFetch相当）
 
@@ -47,10 +47,10 @@ cd claude-gemini-skills/web-search && uv run python tools/gemini_webfetch.py "<U
 ## Highlights
 
 - **Gemini API優先＋Claude WebSearch/WebFetchフォールバック** — ClaudeのWebSearchはセッション単位の回数上限があり枯渇しやすいが、Geminiは別課金枠で消費しない。ClaudeのWebFetchは証明書エラー等で失敗するサイトがあるが、Geminiの`url_context`ツールはGoogle側の取得経路を使うため成功する場合がある。
-- **判断フロー**: (1)まずGemini経由を試す→(2)取得ステータスが`FAILED`、または回答が空・的外れ・情報不足ならClaude側WebSearch/WebFetchで再試行→(3)Claude側もエラー（証明書エラー・予算上限等）ならGeminiの結果を「参考情報」と明示して報告、両方失敗ならその旨を伝える→(4)出典URLを一次資料として記録する必要がある場合は、GeminiのリダイレクトURLをそのまま使わず可能な限りClaude側で実URLを確認する（GeminiのURL取得ステータスに`retrieved_url`として実URLが返っている場合はそれを使ってよい）。
+- **判断フロー**: (1)まずGemini経由を試す→(2)取得ステータスが`FAILED`、または回答が空・的外れ・情報不足ならClaude側WebSearch/WebFetchで再試行→(3)Claude側もエラー（証明書エラー・予算上限等）ならGeminiの結果を「参考情報」と明示して報告、両方失敗ならその旨を伝える→(4)出典URLを一次資料として記録する場合、自動解決された実URLはそのまま使ってよい。`(解決失敗、リダイレクトURLのまま)`と表示された場合のみClaude側WebSearch/WebFetchで実URLを確認する。
 - **モデルはコード内既定** — 両スクリプトとも`gemini-3.6-flash`を関数デフォルト引数としてハードコードしており、CLIから変更する引数は用意されていない。
 - **ツールの使い分け** — Web検索は`google_search`（Google Search grounding）、URL取得は`url_context`という別々のGemini APIツールを使う。
-- **出典URLの欠点** — Gemini側の出典URLは`vertexaisearch.cloud.google.com/grounding-api-redirect/...`という難読化されたリダイレクトURLになり、実際のページパスが読み取れない。
+- **出典URLの自動解決** — Gemini側の出典URLは元々`vertexaisearch.cloud.google.com/grounding-api-redirect/...`という難読化されたリダイレクトURLだが、`gemini_websearch.py`が`urllib`で1回追跡し実URL（`resp.geturl()`）に解決してから表示する。サイト側がリダイレクト追跡自体を403等で拒否する場合（Medium等で確認済み）のみ解決に失敗し、元のリダイレクトURLがそのまま表示される。
 - **ハルシネーションと鮮度の注意** — Geminiの回答はGoogle Search groundingによるものでも要約段階のハルシネーションリスクはClaude側と同程度にある。また、Geminiが実際にライブでページを取得したのか検索インデックス（キャッシュ）を使ったのかはツール出力からは区別できないため、更新頻度が高いページの最新性を問う場合は注意する。
 - **`.env`の秘匿情報に注意** — `.env`には他のAPIキー（Vertex AI関連・Anthropic・xAI等）も同居しているため、このSkillの実装や出力をログ・ノートに残す際にキーの値そのものを含めないこと。
 
@@ -61,7 +61,7 @@ $ cd claude-gemini-skills/web-search && uv run python tools/gemini_websearch.py 
 (Geminiによる回答本文)
 
 --- 出典 ---
-[1] Example Title - https://vertexaisearch.cloud.google.com/grounding-api-redirect/...
+[1] Example Title - https://example.com/actual-article-path
 ```
 
 ```bash

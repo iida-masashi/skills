@@ -11,7 +11,7 @@ Web検索・URL取得を行うスキル。**標準ではGemini APIを使い、�
 
 - ClaudeのWebSearchはセッション単位で回数上限があり、頻繁に使うと枯渇する（`CLAUDE_CODE_MAX_WEB_SEARCHES_PER_SESSION`で調整可能だが既定値は低い）。Geminiは別課金・別枠なのでClaude側の予算を消費しない。
 - ClaudeのWebFetchは自己署名証明書エラー等で失敗するサイトがあるが、Geminiの`url_context`ツールはGoogle側の取得経路を使うため成功することがある。
-- 逆にGemini側の欠点は、出典URLが`vertexaisearch.cloud.google.com/grounding-api-redirect/...`という難読化されたリダイレクトURLになり、実際のページパスが読み取れないこと。一次資料として正確なURLをfrontmatter等に記録したい場合はClaudeのWebFetch/WebSearchの方が有利。
+- Gemini側の欠点は、出典URLが`vertexaisearch.cloud.google.com/grounding-api-redirect/...`という難読化されたリダイレクトURLで返ってくること。`gemini_websearch.py`は既定でこのリダイレクトを1回追跡し、実URL（`resp.geturl()`）に解決してから表示する。サイト側がbot判定でリダイレクト追跡自体を拒否する場合（403等、Mediumで確認済み）は解決に失敗し、その場合のみ元のリダイレクトURLをそのまま表示する（`(解決失敗、リダイレクトURLのまま)`と明記）。`--no-resolve`で解決処理自体を無効化できる（動作確認用途）。
 
 ## 実行方法
 
@@ -25,7 +25,7 @@ Web検索・URL取得を行うスキル。**標準ではGemini APIを使い、�
 cd "C:/Users/iidam/claude-gemini-skills/web-search" && uv run python tools/gemini_websearch.py "検索クエリ"
 ```
 
-出力: Geminiによる回答本文 + `--- 出典 ---`以下に出典タイトルとリダイレクトURL一覧。
+出力: Geminiによる回答本文 + `--- 出典 ---`以下に出典タイトルと解決済み実URL一覧（解決失敗時のみリダイレクトURL）。
 
 ### URL取得（特定URLの内容を取得・要約する、WebFetch相当）
 
@@ -40,7 +40,7 @@ cd "C:/Users/iidam/claude-gemini-skills/web-search" && uv run python tools/gemin
 1. まずGemini経由（上記コマンド）を試す。
 2. 取得ステータスが`FAILED`、または回答が空・的外れ・情報不足の場合 → ClaudeネイティブのWebSearch/WebFetchツールで再試行する。
 3. Claude側もエラー（証明書エラー、予算上限到達等）になった場合 → Gemini側の結果を「参考情報」として明示した上でユーザーに報告する。両方失敗した場合は素直にその旨を伝える。
-4. 出典URLを一次資料としてノート等に記録する必要がある場合は、GeminiのリダイレクトURLをそのまま使わず、可能な限りClaude側のWebFetch/WebSearchで実URLを確認してから記録する。GeminiのURL取得ステータスで`retrieved_url`にそのままの実URLが返っている場合はそれを使ってよい。
+4. 出典URLを一次資料としてノート等に記録する場合、`gemini_websearch.py`が自動解決した実URLはそのまま使ってよい。ただし出典表示に`(解決失敗、リダイレクトURLのまま)`と付いている場合は、リダイレクトURLを一次資料として記録せず、Claude側のWebFetch/WebSearchで実URLを確認するか、そのドメイン名（タイトル欄）を手がかりに直接検索する。
 
 ## 留意点
 

@@ -15,12 +15,23 @@ APIキー/Vertex AI設定は既定で C:/Users/iidam/gemini/.env から読み込
 
 import os
 import sys
+import urllib.request
 from pathlib import Path
 
 from google import genai
 from google.genai import types
 
 ENV_PATH = Path(os.environ.get("GEMINI_SKILL_ENV_PATH", r"C:\Users\iidam\gemini\.env"))
+
+
+def resolve_redirect(url: str, timeout: float = 10.0) -> str | None:
+    """grounding-api-redirect URLを実URLに解決する。失敗時はNone。"""
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.geturl()
+    except Exception:
+        return None
 
 
 def load_env(path: Path) -> None:
@@ -37,7 +48,7 @@ def load_env(path: Path) -> None:
             os.environ[key] = value
 
 
-def search(query: str, model: str = "gemini-3.6-flash") -> None:
+def search(query: str, model: str = "gemini-3.6-flash", no_resolve: bool = False) -> None:
     load_env(ENV_PATH)
 
     api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
@@ -71,12 +82,22 @@ def search(query: str, model: str = "gemini-3.6-flash") -> None:
         print("\n--- 出典 ---")
         for i, chunk in enumerate(chunks, 1):
             web = getattr(chunk, "web", None)
-            if web:
-                print(f"[{i}] {web.title} - {web.uri}")
+            if not web:
+                continue
+            resolved = resolve_redirect(web.uri) if not no_resolve else None
+            if resolved:
+                print(f"[{i}] {web.title} - {resolved}")
+            else:
+                suffix = " (解決失敗、リダイレクトURLのまま)" if not no_resolve else ""
+                print(f"[{i}] {web.title} - {web.uri}{suffix}")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("使い方: python gemini_websearch.py \"検索クエリ\"", file=sys.stderr)
+    args = sys.argv[1:]
+    no_resolve = "--no-resolve" in args
+    if no_resolve:
+        args.remove("--no-resolve")
+    if not args:
+        print("使い方: python gemini_websearch.py \"検索クエリ\" [--no-resolve]", file=sys.stderr)
         sys.exit(1)
-    search(" ".join(sys.argv[1:]))
+    search(" ".join(args), no_resolve=no_resolve)
