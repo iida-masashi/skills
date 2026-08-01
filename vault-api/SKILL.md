@@ -1,6 +1,6 @@
 ---
 name: vault-api
-description: Obsidian Local REST API経由でObsidian Vaultを直接操作する。MCPの代替で、Bash経由のPowerShellスクリプト群（vault-search/vault-read/vault-list/vault-append/vault-move/vault-delete）。全文検索・構造化検索・読み取り・一覧・追記・見出し相対挿入・リネーム・削除をBashツールで実行可能。
+description: Obsidian Local REST API経由でObsidian Vaultを直接操作する。MCPの代替で、Bash経由のPowerShellスクリプト群（vault-search/vault-read/vault-list/vault-append/vault-move/vault-delete/vault-orphans/vault-thin-notes）。全文検索・構造化検索・読み取り・一覧・追記・見出し相対挿入・リネーム・削除・孤立ノート検出・薄ノート検出をBashツールで実行可能。
 disable-model-invocation: false
 ---
 
@@ -21,7 +21,9 @@ MCPサーバーを登録できない・使いたくない環境向けの代替�
 | `tools/vault-append.ps1` | ファイル末尾追記 |
 | `tools/vault-move.ps1` | ファイルのリネーム/移動 |
 | `tools/vault-delete.ps1` | ファイル削除 |
-| `tools/maintenance/` | Vault整備ツール群（vault-orphans/vault-links/vault-gps等19本。Local REST APIではなくファイルシステム直接操作。詳細は`tools/maintenance/README.md`） |
+| `tools/vault-orphans.ps1` | 孤立ノート（どこからもwikilinkされていないノート）検出。`-SubPath`絞り込み・`-ExcludeKeywords`・`-OutCsv`対応 |
+| `tools/vault-thin-notes.ps1` | 薄ノート（指定バイト数未満）検出。`-Folder`絞り込み・`-Threshold`・`-OutCsv`対応 |
+| `tools/maintenance/` | 個人研究Vault専用の整備ツール群（vault-links/vault-gps等。Local REST APIではなくファイルシステム直接操作、`.gitignore`対象。詳細は`tools/maintenance/README.md`） |
 
 ## 使い方（Bash経由）
 
@@ -72,6 +74,22 @@ pwsh -NoProfile -File <このスキルのtools>/vault-move.ps1 -From "旧フォ�
 ```bash
 pwsh -NoProfile -File <このスキルのtools>/vault-delete.ps1 -Path "フォルダ/note.md"
 ```
+
+### 孤立ノート検出
+
+```bash
+pwsh -NoProfile -File <このスキルのtools>/vault-orphans.ps1 -VaultRoot "<Vaultパス>" [-SubPath "フォルダ"] [-ExcludeKeywords MOC,目次] [-OutCsv path]
+```
+
+Vault配下の全 `.md` を再帰収集し（`.obsidian/`・`templates/`・`資料/`・`MEMORY.md` を除外）、他のどこからも `[[wikilink]]` されていないノートをサイズ降順で出力する。
+
+### 薄ノート検出
+
+```bash
+pwsh -NoProfile -File <このスキルのtools>/vault-thin-notes.ps1 -VaultRoot "<Vaultパス>" [-Folder "部分一致名"] [-Threshold 3000] [-OutCsv path]
+```
+
+指定フォルダ（省略時は全体）配下で指定バイト数未満の `.md` をサイズ昇順で出力する（`.obsidian/`・`templates/`・`資料/`・`_work/` は除外）。強化対象のノートを体系的に発見する用途。
 
 ## PowerShell モジュールとして直接使う
 
@@ -134,7 +152,8 @@ Invoke-ObsidianCommand -CommandId 'app:reload'
 - **大量のファイル走査が必要** → Grep/Glob
 - **frontmatter編集・追記** → Edit/Write
 - **wikilink構造を理解した検索** → `vault-search`
-- **孤立ノート検出・薄ノート検出など専用の修繕タスク** → [[vault-orphan-check]] / [[vault-thin-notes]] など専用スキルを使う（使い捨てスクリプトを量産しない）
+- **孤立ノート検出** → 本スキルの `tools/vault-orphans.ps1`
+- **薄ノート検出** → 本スキルの `tools/vault-thin-notes.ps1`
 
 ## API疎通確認
 
@@ -169,12 +188,7 @@ pwsh -NoProfile -Command "Import-Module '<このスキルのtools>/obsidian-api.
 | **全文検索が全クエリで 500 (Internal Server Error)** | 検索インデックスが**改名/移動前の旧パス**を参照したまま。`Invoke-ObsidianApi` は `ENOENT ... open '<旧パス>'` を検知すると原因パスと対処法を含めたエラーメッセージを自動的に投げる → `Invoke-ObsidianCommand -CommandId 'app:reload'` でインデックス再構築。reload後にAPIが戻らない場合はObsidianを手動起動（サンドボックスから起動不可） |
 | Bash経由のpwsh出力で日本語が文字化け | ラッパー(`vault-*.ps1`)は先頭で `[Console]::OutputEncoding = UTF8` 済み。`obsidian-api.psm1` を直接 `Import-Module` して自作スクリプトを書く場合は、そのスクリプト先頭でも同行を設定する |
 | `Get-ObsidianDirList` で `Cannot bind ... empty string` | ルート一覧は `Get-ObsidianVaultList` を使う（上記参照） |
-| `Move-ObsidianNote` 実行後に一部ノートのリンクが切れる | wikilinkはbasename参照のためフォルダ移動・拡張子維持では切れないが、**basename自体を変更した場合**は他ノートの `[[旧basename]]` 参照が残る。[[vault-orphan-check]] で確認し手動修正するか、Grepで `\[\[旧basename` を検索して一括置換する |
-
-## 関連
-
-- [[vault-orphan-check]] — 孤立ノート検出
-- [[vault-thin-notes]] — 薄ノート検出
+| `Move-ObsidianNote` 実行後に一部ノートのリンクが切れる | wikilinkはbasename参照のためフォルダ移動・拡張子維持では切れないが、**basename自体を変更した場合**は他ノートの `[[旧basename]]` 参照が残る。`tools/vault-orphans.ps1` で確認し手動修正するか、Grepで `\[\[旧basename` を検索して一括置換する |
 
 ## メモ
 

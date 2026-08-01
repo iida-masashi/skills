@@ -15,9 +15,7 @@ Claude Code と Gemini CLI の両方から共有して使う、自作エージ�
 | [`convmd`](./convmd/) | Web記事（Zenn/Qiita/note/X/Wikipedia/GitHub/Reddit/はてな/Substack/Medium等）・動画/音声・ローカルOffice/PDFファイルをObsidian向けMarkdownに変換・取り込みたいとき | convMD CLI（`<convmd-repo>`、uv管理）。機能別に`GEMINI_API_KEY`（OCR/自動リンク）、`XAI_API_KEY`（X/Twitter）、`uv sync --extra whisper`+FFmpeg（音声文字起こし）、pandoc（epub/pdf/docx変換） |
 | [`awa-publish`](./awa-publish/) | Obsidian Vault → Quartz → GitHub Pagesへの公開パイプライン（sync→build検証→commit→push）をワンステップで実行したいとき | `<vault>/_work/_sync_to_quartz.py`、Node.js/npx（`quartz build`）、Gitリポジトリ（`<quartz-repo>`）、`gh` CLI（任意） |
 | [`awa-sync`](./awa-sync/) | commit/pushせず、Vault→Quartzのローカル同期とビルド確認・プレビューだけしたいとき | awa-publishと同じ（`_sync_to_quartz.py`、npx/quartz build）。git操作は不要 |
-| [`vault-api`](./vault-api/) | Obsidian Local REST API経由でVaultを直接操作（全文検索・読み取り・一覧・追記・見出し挿入・リネーム・削除）したいとき | Obsidian本体起動中＋Local REST APIプラグイン、PowerShell 7（`pwsh`、UTF-8対応）、`_secrets/obsidian.json`にAPIキー設定 |
-| [`vault-orphan-check`](./vault-orphan-check/) | Vault内でどこからもwikilinkされていない孤立ノートを検出したいとき | PowerShell（`vault-orphan-check.ps1`）。対象Vaultパスの指定が必要 |
-| [`vault-thin-notes`](./vault-thin-notes/) | Vault内の指定バイト数未満の薄いノートを検出し、加筆対象を洗い出したいとき | PowerShell（`vault-thin-notes.ps1`）、`OBSIDIAN_VAULT_PATH`環境変数またはVaultパス指定 |
+| [`vault-api`](./vault-api/) | Obsidian Local REST API経由でVaultを直接操作（全文検索・読み取り・一覧・追記・見出し挿入・リネーム・削除）、または孤立ノート/薄ノート検出等のメンテナンスをしたいとき | Obsidian本体起動中＋Local REST APIプラグイン、PowerShell 7（`pwsh`、UTF-8対応）、`_secrets/obsidian.json`にAPIキー設定（孤立ノート/薄ノート検出等のメンテナンスツールはAPI不要、対象Vaultパスの指定が必要） |
 | [`shrine-note-template`](./shrine-note-template/) | 神社・神格の専門ノートを標準12セクション構造で新規作成したいとき | 特になし（テンプレ・ガイドラインのみ）。作成後の検証に`vault-verify-notes.ps1`（任意） |
 | [`essay-note-template`](./essay-note-template/) | 神格論・氏族論・伝承等の論考型ノートを新規作成・整備したいとき（shrine-note-templateの論考版） | 特になし。検証に`vault-verify-notes.ps1`（任意） |
 

@@ -67,5 +67,4 @@
 
 ## 関連スキル
 
-- `vault-api` — Obsidian REST API経由の検索/読取/追記
-- `vault-orphan-check` — 孤立ノート検出
+- `vault-api` — Obsidian REST API経由の検索/読取/追記＋孤立ノート/薄ノート検出

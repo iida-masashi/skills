@@ -6,7 +6,7 @@ Obsidian Local REST API（v4.1.2）経由でObsidian Vaultを直接操作する�
 |----------|---------|
 | [SKILL.md](SKILL.md) | 構成・使い方・エンドポイント一覧・トラブルシュート |
 
-> `tools/`配下のラッパー6本と共通モジュール`obsidian-api.psm1`はこのリポジトリに含まれる。APIキーを保管する`_secrets/obsidian.json`は`.gitignore`対象でリポジトリには含まれず、自分で作成する。`tools/maintenance/`（ファイルシステム直接操作のVault整備ツール群）は個人研究Vault専用の生データ・個人絶対パスを含むため、このリポジトリでは`.gitignore`で除外している。
+> `tools/`配下のラッパー8本（Local REST API経由の6本＋ファイルシステム直接操作の孤立ノート/薄ノート検出2本）と共通モジュール`obsidian-api.psm1`はこのリポジトリに含まれる。APIキーを保管する`_secrets/obsidian.json`は`.gitignore`対象でリポジトリには含まれず、自分で作成する。`tools/maintenance/`（個人研究Vault専用の詳細版整備ツール群）は個人研究Vault専用の生データ・個人絶対パスを含むため、このリポジトリでは`.gitignore`で除外している。
 
 ## Quick Start
 
@@ -46,6 +46,12 @@ pwsh -NoProfile -File <このスキルのtools>/vault-move.ps1 -From "旧フォ�
 
 # 削除
 pwsh -NoProfile -File <このスキルのtools>/vault-delete.ps1 -Path "フォルダ/note.md"
+
+# 孤立ノート検出（どこからもwikilinkされていないノート）
+pwsh -NoProfile -File <このスキルのtools>/vault-orphans.ps1 -VaultRoot "<Vaultパス>" [-SubPath "フォルダ"] [-OutCsv path]
+
+# 薄ノート検出（指定バイト数未満のノート）
+pwsh -NoProfile -File <このスキルのtools>/vault-thin-notes.ps1 -VaultRoot "<Vaultパス>" [-Folder "部分一致名"] [-Threshold 3000]
 ```
 
 `obsidian-api.psm1` を直接importして使う場合の主な関数（ラッパースクリプトが内部で呼んでいるもの）。
@@ -116,7 +122,7 @@ SKILL.mdより。
 | **vault-api（本スキル）** | Obsidian経由でwikilink解決・タグ検索が正確、Obsidian再起動不要 | Obsidianアプリ起動必須 |
 | **Read/Grep/Glob（標準）** | Obsidian起動不要、高速 | Obsidian独自機能（タグ・dataview等）不可 |
 
-使い分けの推奨（SKILL.mdより）: 全文検索でコンテキスト付き結果が欲しい→`vault-search`／大量のファイル走査が必要→Grep/Glob／frontmatter編集・追記→Edit/Write／wikilink構造を理解した検索→`vault-search`／孤立ノート・薄ノート検出など専用の修繕タスクは[`vault-orphan-check`](../vault-orphan-check/)・[`vault-thin-notes`](../vault-thin-notes/)などの専用スキルを使う。
+使い分けの推奨（SKILL.mdより）: 全文検索でコンテキスト付き結果が欲しい→`vault-search`／大量のファイル走査が必要→Grep/Glob／frontmatter編集・追記→Edit/Write／wikilink構造を理解した検索→`vault-search`／孤立ノート検出→本スキルの`tools/vault-orphans.ps1`／薄ノート検出→本スキルの`tools/vault-thin-notes.ps1`。
 
 ## セキュリティ
 

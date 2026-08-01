@@ -215,8 +215,7 @@ pwsh -NoProfile -Command "& '<vault-verify-notes.ps1のパス>' -Notes @('作成
 
 ## 関連スキル
 
-- [[vault-api]] — Obsidian REST API 経由の検索/読取/追記
-- [[vault-orphan-check]] — 孤立ノート検出スキル
+- [[vault-api]] — Obsidian REST API 経由の検索/読取/追記＋孤立ノート/薄ノート検出
 
 ## メモリ参照
 

@@ -100,6 +100,5 @@ apply後、フォルダ単位で以下を確認する。
 ## 関連スキル
 
 - [`shrine-note-template`](../shrine-note-template/) — 神社専用テンプレ（本テンプレの姉妹）
-- [`vault-thin-notes`](../vault-thin-notes/) — 薄ノート検出
-- [`vault-api`](../vault-api/) — Obsidian REST API
+- [`vault-api`](../vault-api/) — Obsidian REST API操作＋孤立ノート/薄ノート検出（`tools/vault-orphans.ps1` / `tools/vault-thin-notes.ps1`）
 - [`dispatching-parallel-agents`](../dispatching-parallel-agents/) — 並列エージェント運用
