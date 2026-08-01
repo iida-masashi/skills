@@ -13,11 +13,14 @@ Claude Code と Gemini CLI の両方から共有して使う、自作エージ�
 | スキル | 使う場面 | 前提条件 |
 |---|---|---|
 | [`convmd`](./convmd/) | Web記事（Zenn/Qiita/note/X/Wikipedia/GitHub/Reddit/はてな/Substack/Medium等）・動画/音声・ローカルOffice/PDFファイルをObsidian向けMarkdownに変換・取り込みたいとき | convMD CLI（`<convmd-repo>`、uv管理）。機能別に`GEMINI_API_KEY`（OCR/自動リンク）、`XAI_API_KEY`（X/Twitter）、`uv sync --extra whisper`+FFmpeg（音声文字起こし）、pandoc（epub/pdf/docx変換） |
-| [`awa-publish`](./awa-publish/) | Obsidian Vault → Quartz → GitHub Pagesへの公開パイプライン（sync→build検証→commit→push）をワンステップで実行したいとき | `<vault>/_work/_sync_to_quartz.py`、Node.js/npx（`quartz build`）、Gitリポジトリ（`<quartz-repo>`）、`gh` CLI（任意） |
-| [`awa-sync`](./awa-sync/) | commit/pushせず、Vault→Quartzのローカル同期とビルド確認・プレビューだけしたいとき | awa-publishと同じ（`_sync_to_quartz.py`、npx/quartz build）。git操作は不要 |
+| [`vault-publish`](./vault-publish/) | 阿波説(awa)Vault・宗教研究(religion)Vault専用に、Quartz→GitHub Pagesへの公開パイプライン（sync→build検証→commit→push）をワンステップで実行したいとき | Vault側の同期スクリプト、Node.js/npx（`quartz build`）、対象Quartzリポジトリ、`gh` CLI（任意） |
+| [`vault-sync`](./vault-sync/) | 同上のVault対象で、commit/pushせずローカル同期とビルド確認・プレビューだけしたいとき | vault-publishと同じ。git操作は不要 |
+| [`quartz-publish`](./quartz-publish/) | 特定のVault・リポジトリに紐付かない汎用形で、Vault→Quartz→GitHub Pagesの公開パイプラインを実行したいとき | 対象Vaultパス・同期スクリプト・Quartzリポジトリ・GitHub org/repoを実行時に特定（`git remote -v`等から自動特定も可） |
+| [`quartz-sync`](./quartz-sync/) | 同上の汎用形で、commit/pushせずローカル同期・プレビューだけしたいとき | quartz-publishと同じ。git操作は不要 |
 | [`vault-api`](./vault-api/) | Obsidian Local REST API経由でVaultを直接操作（全文検索・読み取り・一覧・追記・見出し挿入・リネーム・削除）、または孤立ノート/薄ノート検出等のメンテナンスをしたいとき | Obsidian本体起動中＋Local REST APIプラグイン、PowerShell 7（`pwsh`、UTF-8対応）、`_secrets/obsidian.json`にAPIキー設定（孤立ノート/薄ノート検出等のメンテナンスツールはAPI不要、対象Vaultパスの指定が必要） |
 | [`shrine-note-template`](./shrine-note-template/) | 神社・神格の専門ノートを標準12セクション構造で新規作成したいとき | 特になし（テンプレ・ガイドラインのみ）。作成後の検証に`vault-verify-notes.ps1`（任意） |
 | [`essay-note-template`](./essay-note-template/) | 神格論・氏族論・伝承等の論考型ノートを新規作成・整備したいとき（shrine-note-templateの論考版） | 特になし。検証に`vault-verify-notes.ps1`（任意） |
+| [`religion-research`](./religion-research/) | 天理教・その分派異端運動（ほんみち、ほんぶしん等）を調査し、宗教研究Vault（`religion-garden`）に構造化ノートを構築・維持したいとき | 特になし（指示書のみ、スクリプトは持たない） |
 
 ### 業務分析・データ処理系
 
@@ -35,6 +38,8 @@ Claude Code と Gemini CLI の両方から共有して使う、自作エージ�
 | [`deliverable-review`](./deliverable-review/) | クライアント提出前のPowerPoint/Word/PDFを自己点検（情報漏洩・AI生成痕跡・数値整合性・コンサルスタイル・戦略の質）したいとき | Python（`python-pptx`/`python-docx`/`pdfplumber`/`pypdf`等をrequirements.txtからインストール）。Gemini定性レビュー利用時のみ`GOOGLE_API_KEY` |
 | [`python-safe-coding`](./python-safe-coding/) | Pythonコードを安全にリファクタリングし、厳格な型チェック・統一品質ゲート（`psc`）を通したいとき | `psc` CLI、Ruff、MyPy、pytest+coverage、uv、Bandit。Polars必須（pandas禁止方針） |
 | [`context-compression-skill`](./context-compression-skill/) | シェルコマンド・検索・ファイル読み込みの出力をコンテキストに入れる前に圧縮・フィルタしたいとき（常時適用の作法スキル） | なし |
+| [`galaxy-orchestrator`](./galaxy-orchestrator/) | Gemini 3系列（3.1 Pro/3.6 Flash/3.5 Flash-Lite）の呼び出しを一本化し、動的モデル選択・リトライ・フォールバック・MCP経由のツール呼び出しを行いたいとき | `pip install -r requirements.txt`、`.env`に`GOOGLE_API_KEY`（or `GEMINI_API_KEY`）、MCPサーバー起動用にNode.js（npx）・`uv`（uvx） |
+| [`web-search`](./web-search/) | Web検索・URL取得を行いたいとき（標準でGemini API優先、失敗時はClaudeネイティブのWebSearch/WebFetchにフォールバック） | `<gemini-scripts-dir>`に`gemini_websearch.py`/`gemini_webfetch.py`と`.env`、`convMD` uvプロジェクトが別途必要 |
 
 ## 両ツールから使う仕組み
 
