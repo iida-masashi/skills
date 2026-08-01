@@ -12,8 +12,8 @@ description: Sync an Obsidian Vault (awa-garden or religion-garden) to its Quart
 
 | ターゲット | Vault | Syncスクリプト | Quartzリポジトリ |
 |---|---|---|---|
-| **awa**（既定） | `D:\Vault` | `D:\Vault\_work\_sync_to_quartz.py` | `C:\Users\iidam\quartz` |
-| **religion** | `D:\religion` | `D:\religion\_work\_sync_to_quartz_religion.py` | `C:\Users\iidam\quartz-religion` |
+| **awa**（既定） | `D:\Vault\awa` | `D:\Vault\awa\_work\_sync_to_quartz.py` | `C:\Users\iidam\quartz` |
+| **religion** | `D:\Vault\religion` | `D:\Vault\religion\_work\_sync_to_quartz_religion.py` | `C:\Users\iidam\quartz-religion` |
 
 以降、選択したターゲットの行を `<vault>` `<sync-script>` `<quartz-repo>` として読み替える。ターゲットの決め方は`vault-publish`と共通（曖昧なら確認する。黙って awa を既定にしない）。
 
@@ -40,12 +40,12 @@ git/push 操作は一切行わない。
 
 awaターゲット:
 ```bash
-cd "D:/Vault/_work" && uv run python _sync_to_quartz.py
+cd "D:/Vault/awa/_work" && uv run python _sync_to_quartz.py
 ```
 
 religionターゲット:
 ```bash
-cd "D:/religion/_work" && uv run python _sync_to_quartz_religion.py
+cd "D:/Vault/religion/_work" && uv run python _sync_to_quartz_religion.py
 ```
 
 失敗時(exit non-zero)は **halt して stderr を表示**。

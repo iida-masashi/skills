@@ -31,7 +31,7 @@ promo-forecast-skill/
 │   ├── step4_export_html_report.py # 静的HTMLレポート出力
 │   └── step5_taipy_dashboard.py    # Taipyダッシュボード（代替UI）
 ├── tests/
-│   └── test_pipeline.py   # パイプライン整合性テスト（26件）
+│   └── test_pipeline.py   # パイプライン整合性テスト（42件）
 ├── promo_poc_data/        # 生成・加工済みCSV
 └── docs/                  # 要件定義・技術仕様ドキュメント
 ```

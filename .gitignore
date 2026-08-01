@@ -5,3 +5,16 @@ __pycache__/
 .env
 .env.*
 data/auth_info.json
+
+# 実際のプロンプト/応答スニペットを含む実行時ログ（個人の利用履歴のため非公開）
+galaxy-orchestrator/usage_log.jsonl
+
+# Fortience社内専用スキル（社外公開リポジトリのため非公開）
+/news-release/
+
+# Obsidian Local REST APIキー等の接続情報（個人環境の秘密情報）
+_secrets/
+
+# 個人研究Vault(阿波説)専用メンテナンススクリプト・GPS座標等の生データ
+# 個人絶対パスがハードコードされており、ツール再配布の趣旨にも合わないため非公開
+/vault-api/tools/maintenance/

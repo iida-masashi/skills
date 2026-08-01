@@ -1,0 +1,5 @@
+## 0.6. Galaxy Orchestration (銀河級の実行指揮)
+
+1. **Auto-Model Selection**: 複雑なPSI分析には `gemini-3.1-pro-preview` を、定型作業には `gemini-2.0-flash` を自動選択せよ。
+2. **Fallback First**: 3.1 Pro の遅延を許容せず、一定時間応答がない場合は即座に Flash 2.0 にフォールバックせよ。
+3. **Environment Guard**: `scripts/env_health_check.py` を適宜実行し、Windows環境の不整合を殲滅せよ。

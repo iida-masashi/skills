@@ -1,12 +1,12 @@
 ---
 name: shrine-note-template
-description: 阿波説Vault（D:\Vault）で神社・神格の専門ノートを作成する際の標準12セクション構造テンプレートとガイドライン。神社名・所在地・主要論点を受け取り、frontmatter + 命題構造 + 由緒 + 阿波説的意義 + 留保の統一フォーマットでノート生成を支援する。
+description: 阿波説Vault（D:\Vault\awa）で神社・神格の専門ノートを作成する際の標準12セクション構造テンプレートとガイドライン。神社名・所在地・主要論点を受け取り、frontmatter + 命題構造 + 由緒 + 阿波説的意義 + 留保の統一フォーマットでノート生成を支援する。
 disable-model-invocation: false
 ---
 
 # shrine-note-template
 
-阿波説 Vault `D:\Vault` で **神社・神格専門ノート** を作成する際の標準テンプレートとガイドライン。
+阿波説 Vault `D:\Vault\awa` で **神社・神格専門ノート** を作成する際の標準テンプレートとガイドライン。
 
 ## 適用範囲
 
@@ -24,12 +24,15 @@ disable-model-invocation: false
 ---
 aliases: [読み, 異表記1, 異表記2, ...]
 tags: [氏族/X, 神/Y, 旧国名, 旧郡名, 元宮論, 関連テーマ]
-分類: 式内社 / 式外社 / 神格 / 理論・研究
+分類: 式内社 / 式外社 / 神格 / 理論・研究 / 拠点
 社格: 名神大 / 大 / 小 / 旧県社 / etc.
 旧国: 阿波国 / 安房国 / etc.
 旧郡: 〇〇郡
 地域: 〇〇国
-location: [〒, 住所]  # or [緯度, 経度]
+location: [〒, 住所]
+coordinates: [34.XXXX, 135.XXXX]  # Google Maps実測緯度経度座標
+google_maps_url: "https://www.google.com/maps/place/..." # Google MapsスポットURL
+official_website: "http://www.example.org/" # 教団公式サイトURL
 deities: ["[[主祭神1]]", "[[主祭神2]]"]
 clans: ["[[関連氏族1]]", "[[関連氏族2]]"]
 evidence_type: primary_source_based / shrine_origin / blog_hypothesis / fringe_hypothesis
@@ -108,8 +111,12 @@ confidence: 1-5（5が最高）
 
 ---
 
-## 8. 現地情報
-（住所・アクセス・主要祭事）
+## 8. 現地情報・Google Maps地理情報
+- **住所**: 〒XXX-XXXX 〇〇県〇〇市...
+- **Google Maps実測座標**: 北緯 34.XXXXXX, 東経 135.XXXXXX
+- **Google MapsスポットURL**: `https://www.google.com/maps/place/...`
+- **アクセス（電車・バス・車）**: 最寄り駅からの徒歩分・路線バス・高速IC
+- **ストリートビュー・施設構造観察**: 外観・鳥居・拝殿・周囲の遮蔽防壁・看板有無等の空間分析情報
 
 ---
 
@@ -214,5 +221,5 @@ pwsh -NoProfile -Command "& '<vault-verify-notes.ps1のパス>' -Notes @('作成
 ## メモリ参照
 
 - [[feedback_obsidian_wikilink]] — wikilink basename ルール
-- [[project_vault_location]] — Vault所在地 D:\Vault
+- [[project_vault_location]] — Vault所在地 D:\Vault\awa
 - [[feedback_engishiki_za]] — 延喜式の「座」は祭神単位

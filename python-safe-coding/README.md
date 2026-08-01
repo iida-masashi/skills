@@ -1,7 +1,7 @@
 # Python Safe Coding Skill
 
 **"The Guardian of Quality"** — a unified `psc` CLI bundling Ruff (lint/
-format/security/complexity), MyPy (strict), a Polars-First AST policy, and
+security/complexity), MyPy (strict), a Polars-First AST policy, and
 pytest with coverage enforcement. Optional Gemini self-healer.
 
 | Document | Purpose |
@@ -51,10 +51,10 @@ psc prepush  [--target .]
   legacy repos can adopt without fixing everything up front. Stale entries
   are flagged so the baseline shrinks over time.
 - **Parallel + cached AST scans** — `--cache-dir` opts in to a per-file
-  cache keyed by `(path, mtime, size, _CHECKER_VERSION)`. Bumping the
+  cache keyed by `(path, mtime_ns, size, _CHECKER_VERSION)`. Bumping the
   checker version invalidates everything automatically.
 - **Healer is optional** — install `[heal]` extras only when you want the
-  Gemini-driven repair loop. Base install does not pull the Vertex AI SDK.
+  Gemini-driven repair loop. Base install does not pull the Google Gen AI SDK.
 - **Exit codes are a contract** — `0/1/2/3` for pass/violation/internal/
   config; CI alert routing can branch on them.
 
@@ -79,7 +79,6 @@ psc gate --target . --baseline .psc-baseline.json
 Output:
 ```
 [OK] Code Quality (Ruff) Passed
-[OK] AST Policy Passed
 [OK] Type Checker (MyPy) Passed
 [OK] Unit Tests (Pytest) Passed
 [OK] Quality gate passed.

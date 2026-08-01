@@ -34,7 +34,7 @@
 - 競合ポジショニングマップ
 - 自動競合企業探索
 
-#### 4. **ERP PMO Galaxy Dashboard** (`st_erp_pmo_dashboard.py`)
+#### 4. **ERP PMO Galaxy Dashboard** (`app_backlog.py`)
 Backlog API と Gemini AI を連携した ERP 導入プロジェクト向けインタラクティブ PMO ダッシュボード：
 
 ```bash
@@ -92,9 +92,9 @@ python scripts/fetch_finance_data.py --ticker 5988.T --trends
 ### 1. インストール
 
 ```bash
-# リポジトリをクローン
-git clone https://github.com/your-org/consultant-toolkit.git
-cd consultant-toolkit
+# リポジトリをクローン（consultant-toolkit はモノレポ内のサブフォルダ）
+git clone https://github.com/iida-masashi/skills.git
+cd skills/consultant-toolkit
 
 # 依存パッケージをインストール（editable mode）
 pip install -e .
@@ -209,7 +209,7 @@ consultant-toolkit/
 
 ### 企業設定の追加
 
-`scripts/config/app_config.yaml` を編集：
+`libs/consultant_toolkit/config/app_config.yaml` を編集：
 
 ```yaml
 companies:
@@ -225,7 +225,7 @@ financial:
 
 ### 企業検索データベース
 
-`scripts/utils/company_search.py` に **829社以上**の企業名→Tickerマッピングを収録：
+`libs/consultant_toolkit/company_search.py` に **829社以上**の企業名→Tickerマッピングを収録：
 - 日本企業（東証プライム）: 自動車・電機・半導体商社・金融・通信・医薬・建設など全業種
 - 米国企業（NYSE/NASDAQ）: S&P500 主要銘柄 / Big Tech / ETF など
 - 欧州・アジア企業も収録
@@ -234,7 +234,7 @@ financial:
 
 ### 業界別競合マッピング
 
-`scripts/config/industry_peers.json` を編集：
+`libs/consultant_toolkit/config/industry_peers.json` を編集：
 
 ```json
 {
@@ -308,7 +308,7 @@ black scripts/
 
 ## 📝 ライセンス
 
-MIT License - 詳細は [LICENSE](LICENSE) を参照
+MIT License - 詳細は [LICENSE](../LICENSE) を参照
 
 ---
 
@@ -324,8 +324,8 @@ MIT License - 詳細は [LICENSE](LICENSE) を参照
 ## 📞 サポート
 
 問題や質問がある場合:
-- [Issues](https://github.com/your-org/consultant-toolkit/issues) で報告
-- [Discussions](https://github.com/your-org/consultant-toolkit/discussions) で質問
+- [Issues](https://github.com/iida-masashi/skills/issues) で報告
+- [Discussions](https://github.com/iida-masashi/skills/discussions) で質問
 
 ---
 

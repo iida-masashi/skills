@@ -1,11 +1,11 @@
 ---
 name: essay-note-template
-description: 阿波説 Vault D:\Vault で神格・氏族・論考型の専門ノート（神社ではない）を近代化／作成する際の汎用テンプレート。shrine-note-template の論考版。
+description: 阿波説 Vault D:\Vault\awa で神格・氏族・論考型の専門ノート（神社ではない）を近代化／作成する際の汎用テンプレート。shrine-note-template の論考版。
 ---
 
 # essay-note-template（汎用論考テンプレ）
 
-阿波説 Vault `D:\Vault` で **神格・氏族・天皇伝承・渡来人・地政学などの論考型ノート** を
+阿波説 Vault `D:\Vault\awa` で **神格・氏族・天皇伝承・渡来人・地政学などの論考型ノート** を
 近代化（旧フォーマット→統一形式）または新規作成する際の標準テンプレート。
 
 [[shrine-note-template]] が「神社」専用なのに対し、本テンプレは **神社以外**（祭神そのものの
@@ -190,7 +190,7 @@ pwsh -NoProfile -Command "& '<vault-verify-notes.ps1のパス>' -Notes @('basena
 
 ## メモリ参照
 
-- [[project_vault_location]] — Vault所在地 D:\Vault
+- [[project_vault_location]] — Vault所在地 D:\Vault\awa
 - [[feedback_obsidian_wikilink]] — wikilink basename ルール
 - [[feedback_backlog_self_gating]] — 保留層（俗説）はテンプレ化せず pending 維持
 - [[feedback_parallel_agent_ops]] — 並列エージェントの作法

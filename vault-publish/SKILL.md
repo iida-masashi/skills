@@ -11,8 +11,8 @@ Vault → Quartz → GitHub Pages の公開フロー全体をワンステップ�
 
 | ターゲット | Vault | Syncスクリプト | Quartzリポジトリ | GitHub repo | 公開URL |
 |---|---|---|---|---|---|
-| **awa**（既定） | `D:\Vault` | `D:\Vault\_work\_sync_to_quartz.py` | `C:\Users\iidam\quartz` | `iida-masashi/awa-garden` | `https://iida-masashi.github.io/awa-garden/` |
-| **religion** | `D:\religion` | `D:\religion\_work\_sync_to_quartz_religion.py` | `C:\Users\iidam\quartz-religion` | `iida-masashi/religion-garden` | `https://iida-masashi.github.io/religion-garden/` |
+| **awa**（既定） | `D:\Vault\awa` | `D:\Vault\awa\_work\_sync_to_quartz.py` | `C:\Users\iidam\quartz` | `iida-masashi/awa-garden` | `https://iida-masashi.github.io/awa-garden/` |
+| **religion** | `D:\Vault\religion` | `D:\Vault\religion\_work\_sync_to_quartz_religion.py` | `C:\Users\iidam\quartz-religion` | `iida-masashi/religion-garden` | `https://iida-masashi.github.io/religion-garden/` |
 
 以降、選択したターゲットの行を `<vault>` `<sync-script>` `<quartz-repo>` `<gh-repo>` `<pages-url>` として読み替える。
 
@@ -25,8 +25,8 @@ Vault → Quartz → GitHub Pages の公開フロー全体をワンステップ�
 
 ### ターゲットの決め方
 
-1. ユーザーが `religion`／`宗教`／`religion-garden` 等を明示、または直前の会話が `D:\religion` 配下のVault操作なら **religion**。
-2. ユーザーが `阿波`／`awa`／`awa-garden` 等を明示、または直前の会話が `D:\Vault` 配下のVault操作なら **awa**。
+1. ユーザーが `religion`／`宗教`／`religion-garden` 等を明示、または直前の会話が `D:\Vault\religion` 配下のVault操作なら **religion**。
+2. ユーザーが `阿波`／`awa`／`awa-garden` 等を明示、または直前の会話が `D:\Vault\awa` 配下のVault操作なら **awa**。
 3. どちらとも判断できない場合は、明示的にユーザーへ確認する（黙って awa を既定にしない — 誤ったリポジトリへ push する事故を防ぐため）。
 
 ## Pipeline (in order)
@@ -56,12 +56,12 @@ Vault → Quartz → GitHub Pages の公開フロー全体をワンステップ�
 
 awaターゲット:
 ```bash
-cd "D:/Vault/_work" && uv run python _sync_to_quartz.py
+cd "D:/Vault/awa/_work" && uv run python _sync_to_quartz.py
 ```
 
 religionターゲット:
 ```bash
-cd "D:/religion/_work" && uv run python _sync_to_quartz_religion.py
+cd "D:/Vault/religion/_work" && uv run python _sync_to_quartz_religion.py
 ```
 
 スクリプトの最後のサマリ(8行程度)を保持して commit message 生成に使う。失敗時(exit non-zero)は **halt して stderr を表示**。
@@ -142,7 +142,7 @@ cd <quartz-repo> && git config http.postBuffer 524288000 && git push 2>&1
 
 - 同期スクリプトは idempotent(何度実行しても同じ結果)
 - Vault と content の同期は size + mtime 比較。Vault でのタイムスタンプだけ更新したファイルでも copy が走るが、内容は同じなので git diff には現れない
-- awa: `D:\Vault\_work\QUARTZ_SYNC_README.md` に運用ドキュメント完備
+- awa: `D:\Vault\awa\_work\QUARTZ_SYNC_README.md` に運用ドキュメント完備
 - **ターゲットを取り違えると誤ったリポジトリに無関係な内容をpushする事故になる。** 曖昧な指示（単に「公開して」）の場合は必ずどちらのVaultを指すか確認してから実行する。
 
 ## Troubleshooting

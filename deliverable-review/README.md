@@ -69,7 +69,8 @@ gcloud config set project trim-opus-407712
 gcloud services enable \
   artifactregistry.googleapis.com \
   run.googleapis.com \
-  iamcredentials.googleapis.com
+  iamcredentials.googleapis.com \
+  secretmanager.googleapis.com
 
 # 3. Artifact Registry リポジトリ作成
 gcloud artifacts repositories create apps \
@@ -103,6 +104,8 @@ gcloud iam service-accounts keys create gcp-key.json \
 
 cat gcp-key.json   # ← この JSON をまるごとコピー
 ```
+
+Gemini 3.1 Pro 定性レビュー（Web UI）を使う場合は Secret Manager に `GOOGLE_API_KEY` の設定が別途必要。手順は [DEPLOYMENT.md](DEPLOYMENT.md) の「Secret Manager (Gemini APIキー)」を参照。
 
 ### GitHub リポジトリ設定
 
@@ -146,7 +149,7 @@ GitHub > Actions > "Deploy to Cloud Run" > **Run workflow** ボタン
 - [ ] **VPC内限定化**: 社内VPNからのみアクセス可能に
 - [ ] **容量制限**: Cloud Run のリクエスト上限 32MB を超えるファイルへの対応（Cloud Storage 経由のアップロード等）
 - [ ] **OCR対応**: 画像化スライド（テキスト抽出不可）の Tesseract / Vision API 経由チェック
-- [ ] **AIチェック 自動実行**: Claude API 統合（現在は JSON を Claude Code に渡す運用）
+- [ ] **AIチェック 自動実行**: Claude API 統合（現在は Claude Code が JSON を読んで自分でレビューする運用。Web UI には Gemini 3.1 Pro 経由の定性レビューあり・既定OFF）
 - [ ] **URLの秘匿運用**: 現在は完全公開のため、URLを公開しないように注意喚起する仕組み（デプロイ後にURLをSlack等に自動投稿しない等）
 
 ---
@@ -158,6 +161,7 @@ GitHub > Actions > "Deploy to Cloud Run" > **Run workflow** ボタン
 - アップロードファイルは Cloud Run インスタンスのメモリ上で処理され、Cloud Storage 等へは保存されない（`tempfile` 経由、プロセス終了時に破棄）
 - コンテナが再起動すると一時ファイルは消える（永続化なし）
 - サービスアカウントキー `gcp-key.json` は**絶対に git に commit しない**（`.gitignore` で除外済み）
+- Web UI の「Gemini 3.1 Pro 定性レビュー」を有効にした場合のみ、スライド本文が Google Gemini API に送信される（Cloud Run には Secret Manager 経由で `GOOGLE_API_KEY` が設定済みのため機能自体は常に呼び出し可能。既定は OFF）。機密資料では OFF のまま使用すること
 
 ---
 
@@ -187,8 +191,12 @@ deliverable-review/
 │   ├── internal_content.py
 │   ├── style_checks.py
 │   ├── layout_checks.py
+│   ├── strategy_checks.py
 │   ├── ai_check_extract.py
+│   ├── llm_review.py
 │   └── markers.py
-└── webui/
-    └── app.py           # Streamlit UI
+├── webui/
+│   └── app.py           # Streamlit UI
+└── tests/
+    └── test_smoke.py    # pytest スモーク
 ```
