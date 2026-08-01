@@ -12,11 +12,10 @@ Obsidian Local REST API（v4.1.2）経由でObsidian Vaultを直接操作する�
 
 前提: Obsidian本体が起動中で、Local REST APIプラグインが有効になっていること。PowerShell 7（`pwsh`）が必要（Windows PowerShell 5.1はUTF-8をCP932と誤読するため不可）。
 
-`obsidian-api.psm1`の設定ファイルパス（`$script:configPath`）と、各`vault-*.ps1`の`Import-Module`行は、クローン先の絶対パスをハードコードしている。クローン先が異なる場合はこの2箇所を実際のパスに書き換える必要がある。
+`obsidian-api.psm1`の設定ファイルパス（`$script:configPath`）は`Join-Path $PSScriptRoot '..\_secrets\obsidian.json'`、各`vault-*.ps1`の`Import-Module`行は`Join-Path $PSScriptRoot 'obsidian-api.psm1'`で、いずれもスクリプト自身の位置からの相対パス解決になっている。クローン先を変えてもパスの書き換えは不要。
 
-1. 必要であれば`tools/obsidian-api.psm1`の`$script:configPath`と各`tools/vault-*.ps1`の`Import-Module '...\obsidian-api.psm1'`行を、自分のクローン先の絶対パスに書き換える。
-2. `vault-api/_secrets/obsidian.json`を作成し、API Key・接続情報（`scheme`/`host`/`port`/`apiKey`）を設定する。
-3. 疎通確認。
+1. `vault-api/_secrets/obsidian.json`を作成し、API Key・接続情報（`scheme`/`host`/`port`/`apiKey`）を設定する。
+2. 疎通確認。
 
 ```bash
 pwsh -NoProfile -Command "Import-Module '<このスキルのtools>/obsidian-api.psm1'; Test-ObsidianApi | Format-List"

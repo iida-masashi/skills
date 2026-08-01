@@ -21,6 +21,7 @@ MCPサーバーを登録できない・使いたくない環境向けの代替�
 | `tools/vault-append.ps1` | ファイル末尾追記 |
 | `tools/vault-move.ps1` | ファイルのリネーム/移動 |
 | `tools/vault-delete.ps1` | ファイル削除 |
+| `tools/maintenance/` | Vault整備ツール群（vault-orphans/vault-links/vault-gps等19本。Local REST APIではなくファイルシステム直接操作。詳細は`tools/maintenance/README.md`） |
 
 ## 使い方（Bash経由）
 
