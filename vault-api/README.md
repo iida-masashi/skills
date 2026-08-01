@@ -87,7 +87,7 @@ Invoke-ObsidianCommand -CommandId 'app:reload'                        # コマ�
 
 ## 実行例（出力フォーマット）
 
-`_secrets/obsidian.json`未設定のため実行結果は未検証。以下は各スクリプトの`Write-Output`呼び出しから確認できる出力フォーマット（プレースホルダ値）。
+Obsidian Local REST API経由のラッパー（`vault-search.ps1`等）は`_secrets/obsidian.json`未設定のため実行結果は未検証。`vault-orphans.ps1`/`vault-thin-notes.ps1`（ファイルシステム直接操作、API不要）はテストVaultでの動作確認済み。以下は各スクリプトの`Write-Output`呼び出しから確認できる出力フォーマット（プレースホルダ値）。
 
 `vault-search.ps1`:
 ```
@@ -111,6 +111,34 @@ Invoke-ObsidianCommand -CommandId 'app:reload'                        # コマ�
 ```
 移動完了: 旧パス.md -> 新パス.md (N 文字)
 注意: wikilinkはbasename参照のため、拡張子のみ変更やフォルダ移動ではリンクは切れない。basename自体を変えた場合は他ノートの参照を手動で確認すること。
+```
+
+`vault-orphans.ps1`:
+```
+Scanning... SubPath=(全体)
+総ノート数（資料系除外）: N
+孤立ノート数: N
+
+=== 孤立ノート一覧（サイズ降順） ===
+      32B : orphan.md
+      22B : note1.md
+```
+
+`vault-thin-notes.ps1`:
+```
+検索対象: <Vaultパス> 全体
+対象総数: N
+閾値: NB
+
+- 500B未満: N 件
+- 1000B未満: N 件
+- 2000B未満: N 件
+- 3000B未満: N 件
+
+=== 薄ノート一覧（サイズ昇順） ===
+      14B : folder\note2.md
+
+合計: N 件
 ```
 
 ## 既存ツールとの比較
