@@ -6,21 +6,20 @@ Obsidian Local REST API（v4.1.2）経由でObsidian Vaultを直接操作する�
 |----------|---------|
 | [SKILL.md](SKILL.md) | 構成・使い方・エンドポイント一覧・トラブルシュート |
 
-> このフォルダ（GitHub公開ミラー）に含まれるのは `SKILL.md` のみ。実際に実行する `tools/*.ps1` ・ `tools/obsidian-api.psm1` ・APIキーを保管する `_secrets/obsidian.json` はローカル環境側の任意のディレクトリ（以下`<tools>`）に配置する。
+> `tools/`配下のラッパー6本と共通モジュール`obsidian-api.psm1`はこのリポジトリに含まれる。APIキーを保管する`_secrets/obsidian.json`は`.gitignore`対象でリポジトリには含まれず、自分で作成する。`tools/maintenance/`（ファイルシステム直接操作のVault整備ツール群）は個人研究Vault専用の生データ・個人絶対パスを含むため、このリポジトリでは`.gitignore`で除外している。
 
 ## Quick Start
 
 前提: Obsidian本体が起動中で、Local REST APIプラグインが有効になっていること。PowerShell 7（`pwsh`）が必要（Windows PowerShell 5.1はUTF-8をCP932と誤読するため不可）。
 
-`obsidian-api.psm1`は設定ファイルのパス（`$script:configPath`）を、各`vault-*.ps1`は`obsidian-api.psm1`のパス（`Import-Module`行）をそれぞれ絶対パスでハードコードしている。自分の配置先に合わせてこの2箇所を編集する必要がある。
+`obsidian-api.psm1`の設定ファイルパス（`$script:configPath`）と、各`vault-*.ps1`の`Import-Module`行は、クローン先の絶対パスをハードコードしている。クローン先が異なる場合はこの2箇所を実際のパスに書き換える必要がある。
 
-1. `tools/obsidian-api.psm1`冒頭の`$script:configPath`を、自分が配置する`_secrets/obsidian.json`の絶対パスに書き換える。
-2. `_secrets/obsidian.json`にAPI Key・接続情報（`scheme`/`host`/`port`/`apiKey`）を設定する。
-3. 各`tools/vault-*.ps1`冒頭の`Import-Module '...\obsidian-api.psm1'`行を、自分が配置した`obsidian-api.psm1`の絶対パスに書き換える。
-4. 疎通確認。
+1. 必要であれば`tools/obsidian-api.psm1`の`$script:configPath`と各`tools/vault-*.ps1`の`Import-Module '...\obsidian-api.psm1'`行を、自分のクローン先の絶対パスに書き換える。
+2. `vault-api/_secrets/obsidian.json`を作成し、API Key・接続情報（`scheme`/`host`/`port`/`apiKey`）を設定する。
+3. 疎通確認。
 
 ```bash
-pwsh -NoProfile -Command "Import-Module '<tools>/obsidian-api.psm1'; Test-ObsidianApi | Format-List"
+pwsh -NoProfile -Command "Import-Module '<このスキルのtools>/obsidian-api.psm1'; Test-ObsidianApi | Format-List"
 ```
 
 正常時: `Status: OK`、`Authenticated: True`
@@ -31,29 +30,29 @@ Bash経由で呼び出すラッパースクリプト（`tools/`配下）。
 
 ```bash
 # 全文検索（コンテキスト付き）
-pwsh -NoProfile -File <tools>/vault-search.ps1 -Query "検索語" [-Limit 20] [-ContextLength 100]
+pwsh -NoProfile -File <このスキルのtools>/vault-search.ps1 -Query "検索語" [-Limit 20] [-ContextLength 100]
 
 # ファイル読み取り
-pwsh -NoProfile -File <tools>/vault-read.ps1 -Path "フォルダ/note.md" [-Lines N]
+pwsh -NoProfile -File <このスキルのtools>/vault-read.ps1 -Path "フォルダ/note.md" [-Lines N]
 
 # ディレクトリ一覧（-Path省略でルート）
-pwsh -NoProfile -File <tools>/vault-list.ps1 [-Path "フォルダ/"]
+pwsh -NoProfile -File <このスキルのtools>/vault-list.ps1 [-Path "フォルダ/"]
 
 # ファイル末尾追記（Content文字列指定 or ファイルから読み込み）
-pwsh -NoProfile -File <tools>/vault-append.ps1 -Path "フォルダ/note.md" -Content "追記内容"
-pwsh -NoProfile -File <tools>/vault-append.ps1 -Path "フォルダ/note.md" -ContentFile "追記内容ファイルパス"
+pwsh -NoProfile -File <このスキルのtools>/vault-append.ps1 -Path "フォルダ/note.md" -Content "追記内容"
+pwsh -NoProfile -File <このスキルのtools>/vault-append.ps1 -Path "フォルダ/note.md" -ContentFile "追記内容ファイルパス"
 
 # リネーム/移動（内部的には新パス書き込み→旧パス削除の合成）
-pwsh -NoProfile -File <tools>/vault-move.ps1 -From "旧フォルダ/note.md" -To "新フォルダ/note.md"
+pwsh -NoProfile -File <このスキルのtools>/vault-move.ps1 -From "旧フォルダ/note.md" -To "新フォルダ/note.md"
 
 # 削除
-pwsh -NoProfile -File <tools>/vault-delete.ps1 -Path "フォルダ/note.md"
+pwsh -NoProfile -File <このスキルのtools>/vault-delete.ps1 -Path "フォルダ/note.md"
 ```
 
 `obsidian-api.psm1` を直接importして使う場合の主な関数（ラッパースクリプトが内部で呼んでいるもの）。
 
 ```powershell
-Import-Module '<tools>/obsidian-api.psm1'
+Import-Module '<このスキルのtools>/obsidian-api.psm1'
 
 Test-ObsidianApi                                                     # 疎通テスト
 Search-ObsidianVault -Query '検索語' -ContextLength 100 [-Limit N]    # 全文検索
