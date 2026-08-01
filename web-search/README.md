@@ -6,24 +6,30 @@ Web検索とURL取得を行うSkill。**標準ではGemini APIを使い、失敗
 |----------|---------|
 | [SKILL.md](SKILL.md) | 判断フロー（Gemini優先→フォールバック）と留意点 |
 
-このフォルダ自体にはコードは含まれない。実体は`<gemini-scripts-dir>`（作者環境では`C:\Users\iidam\gemini`、SKILL.mdにハードコード）にある `gemini_websearch.py` / `gemini_webfetch.py` の2スクリプトで、`uv run --project convMD` 経由で実行する。すなわちこのSkillを動かすには、`<gemini-scripts-dir>`に2スクリプトと`.env`、および`convMD`というuvプロジェクトが別途存在している必要がある。
+実体はこのフォルダ配下の `tools/gemini_websearch.py` / `tools/gemini_webfetch.py` の2スクリプトで、このフォルダ自身が独立した軽量uvプロジェクト（`pyproject.toml`、依存は`google-genai`のみ）になっている。APIキー等の認証情報だけは秘密情報のため、既定で`C:\Users\iidam\gemini\.env`（作者環境のGemini作業ディレクトリ）を参照する。別環境に持ち込む場合は環境変数`GEMINI_SKILL_ENV_PATH`で`.env`の場所を上書きできる。
 
 ## Quick Start
 
-APIキー/認証は `<gemini-scripts-dir>/.env` から自動読み込みされる（スクリプト実行前の環境変数設定は不要）。両スクリプトとも起動時に以下の順で認証情報を解決する。
+初回のみ依存解決:
+
+```bash
+cd claude-gemini-skills/web-search && uv sync
+```
+
+APIキー/認証は既定で `C:\Users\iidam\gemini\.env` から自動読み込みされる（`GEMINI_SKILL_ENV_PATH`で上書き可）。両スクリプトとも起動時に以下の順で認証情報を解決する。
 
 1. `GEMINI_API_KEY` または `GOOGLE_API_KEY`（`.env`にあれば） → APIキー認証（`vertexai=False`）
 2. 上記が無く `GOOGLE_GENAI_USE_VERTEXAI=true` → Vertex AI（ADC認証、`GOOGLE_CLOUD_PROJECT`・`GOOGLE_CLOUD_LOCATION`は既定`us-central1`）
 3. どちらもなければ標準エラーにメッセージを出して終了（exit 1）
 
-`.env`は各スクリプトと同じディレクトリから読み込まれ、すでにOS環境変数に同名キーが設定されている場合はそれを上書きしない。
+すでにOS環境変数に同名キーが設定されている場合は`.env`の値で上書きしない。
 
 ## 主要コマンド
 
 ### Web検索
 
 ```bash
-cd "<gemini-scripts-dir>" && uv run --project convMD python gemini_websearch.py "検索クエリ"
+cd claude-gemini-skills/web-search && uv run python tools/gemini_websearch.py "検索クエリ"
 ```
 
 出力: Geminiの回答本文 + `--- 出典 ---` 以下に `[番号] タイトル - URL` 形式の出典一覧（`grounding_chunks`由来）。
@@ -31,7 +37,7 @@ cd "<gemini-scripts-dir>" && uv run --project convMD python gemini_websearch.py 
 ### URL取得（WebFetch相当）
 
 ```bash
-cd "<gemini-scripts-dir>" && uv run --project convMD python gemini_webfetch.py "<URL>" ["追加の指示（省略可）"]
+cd claude-gemini-skills/web-search && uv run python tools/gemini_webfetch.py "<URL>" ["追加の指示（省略可）"]
 ```
 
 追加の指示を省略した場合のデフォルトは「このページの内容を詳しく要約して」。
@@ -51,7 +57,7 @@ cd "<gemini-scripts-dir>" && uv run --project convMD python gemini_webfetch.py "
 ## 実行例
 
 ```bash
-$ cd "<gemini-scripts-dir>" && uv run --project convMD python gemini_websearch.py "Gemini 3.6 Flash リリース日"
+$ cd claude-gemini-skills/web-search && uv run python tools/gemini_websearch.py "Gemini 3.6 Flash リリース日"
 (Geminiによる回答本文)
 
 --- 出典 ---
@@ -59,7 +65,7 @@ $ cd "<gemini-scripts-dir>" && uv run --project convMD python gemini_websearch.p
 ```
 
 ```bash
-$ cd "<gemini-scripts-dir>" && uv run --project convMD python gemini_webfetch.py "https://example.com/article"
+$ cd claude-gemini-skills/web-search && uv run python tools/gemini_webfetch.py "https://example.com/article"
 (このページの内容を詳しく要約して、の回答本文)
 
 --- 取得ステータス ---

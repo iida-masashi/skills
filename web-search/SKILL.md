@@ -1,6 +1,6 @@
 ---
 name: web-search
-description: Search the web or fetch a specific URL's content. Use whenever the user asks to search/検索して/調べて the web, look something up online, or fetch/取得して the contents of a URL. Defaults to Gemini API (gemini_websearch.py / gemini_webfetch.py at C:\Users\iidam\gemini), falling back to Claude's native WebSearch/WebFetch tools when Gemini fails or its output is insufficient.
+description: Search the web or fetch a specific URL's content. Use whenever the user asks to search/検索して/調べて the web, look something up online, or fetch/取得して the contents of a URL. Defaults to Gemini API (tools/gemini_websearch.py / tools/gemini_webfetch.py in this skill directory), falling back to Claude's native WebSearch/WebFetch tools when Gemini fails or its output is insufficient.
 ---
 
 # web-search
@@ -15,12 +15,14 @@ Web検索・URL取得を行うスキル。**標準ではGemini APIを使い、�
 
 ## 実行方法
 
-両スクリプトは `C:\Users\iidam\gemini\.env` からAPIキーを自動読み込みする。環境変数の設定は不要。
+このスキルディレクトリ自体が独立したuvプロジェクト（依存は`google-genai`のみ）。初回のみ `cd` して `uv sync` で依存解決する。
+
+両スクリプトはAPIキー/Vertex AI設定を既定で `C:\Users\iidam\gemini\.env` から自動読み込みする（環境変数`GEMINI_SKILL_ENV_PATH`でパスを上書き可能）。
 
 ### Web検索（検索クエリを投げて要約と出典を得る）
 
 ```bash
-cd "C:/Users/iidam/gemini" && uv run --project convMD python gemini_websearch.py "検索クエリ"
+cd "C:/Users/iidam/claude-gemini-skills/web-search" && uv run python tools/gemini_websearch.py "検索クエリ"
 ```
 
 出力: Geminiによる回答本文 + `--- 出典 ---`以下に出典タイトルとリダイレクトURL一覧。
@@ -28,7 +30,7 @@ cd "C:/Users/iidam/gemini" && uv run --project convMD python gemini_websearch.py
 ### URL取得（特定URLの内容を取得・要約する、WebFetch相当）
 
 ```bash
-cd "C:/Users/iidam/gemini" && uv run --project convMD python gemini_webfetch.py "<URL>" ["追加の指示（省略可、既定は要約）"]
+cd "C:/Users/iidam/claude-gemini-skills/web-search" && uv run python tools/gemini_webfetch.py "<URL>" ["追加の指示（省略可、既定は要約）"]
 ```
 
 出力: Geminiによる回答本文 + `--- 取得ステータス ---`以下に`URL_RETRIEVAL_STATUS_SUCCESS`または`FAILED`と実際に取得できたURL。
