@@ -1,10 +1,15 @@
 # vault-orphan-check.ps1
-# D:\Vault の孤立ノート（wikilink されていない .md）を検出
-# 出力: C:\Users\iidam\gemini\_work\_orphan_list.txt
+# 指定したObsidian Vaultの孤立ノート（wikilink されていない .md）を検出
+# 使い方: pwsh -File vault-orphan-check.ps1 -VaultRoot "<Vaultパス>" [-OutputFile "<出力先>"]
+
+param(
+    [Parameter(Mandatory)][string]$VaultRoot,
+    [string]$OutputFile = (Join-Path $PWD '_orphan_list.txt')
+)
 
 $ErrorActionPreference = 'SilentlyContinue'
-$root = 'D:\Vault'
-$outputFile = 'C:\Users\iidam\gemini\_work\_orphan_list.txt'
+$root = $VaultRoot
+$outputFile = $OutputFile
 
 # 出力ディレクトリ確認
 $outputDir = Split-Path -Parent $outputFile

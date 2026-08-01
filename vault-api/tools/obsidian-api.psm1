@@ -1,8 +1,8 @@
 # obsidian-api.psm1
 # Obsidian Local REST API 共通モジュール
-# 使い方: Import-Module 'C:\Users\iidam\claude-gemini-skills\vault-api\tools\obsidian-api.psm1'
+# 使い方: Import-Module '<vault-api>/tools/obsidian-api.psm1'
 
-$script:configPath = 'C:\Users\iidam\claude-gemini-skills\vault-api\_secrets\obsidian.json'
+$script:configPath = Join-Path $PSScriptRoot '..\_secrets\obsidian.json'
 
 function Get-ObsidianConfig {
     if (-not (Test-Path $script:configPath)) {

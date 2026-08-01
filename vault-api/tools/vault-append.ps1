@@ -11,7 +11,7 @@ param(
     [string]$ContentFile = ''
 )
 
-Import-Module 'C:\Users\iidam\claude-gemini-skills\vault-api\tools\obsidian-api.psm1' -Force -WarningAction SilentlyContinue
+Import-Module (Join-Path $PSScriptRoot 'obsidian-api.psm1') -Force -WarningAction SilentlyContinue
 
 if ($ContentFile) {
     if (-not (Test-Path -LiteralPath $ContentFile)) {

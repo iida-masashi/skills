@@ -10,7 +10,7 @@ param(
 # UTF-8 出力（Bash経由のpwsh呼び出しで日本語が文字化けするのを防ぐ）
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-Import-Module 'C:\Users\iidam\claude-gemini-skills\vault-api\tools\obsidian-api.psm1' -Force -WarningAction SilentlyContinue
+Import-Module (Join-Path $PSScriptRoot 'obsidian-api.psm1') -Force -WarningAction SilentlyContinue
 
 $result = Move-ObsidianNote -FromPath $From -ToPath $To
 Write-Output ("移動完了: " + $result.From + " -> " + $result.To + " (" + $result.Bytes + " 文字)")

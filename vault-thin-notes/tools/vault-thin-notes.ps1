@@ -1,14 +1,15 @@
 # vault-thin-notes.ps1
-# D:\Vault の薄ノートを検出
-# 使い方: pwsh -NoProfile -File vault-thin-notes.ps1 [-folder <部分一致名>] [-threshold <バイト数>]
+# 指定したObsidian Vaultの薄ノートを検出
+# 使い方: pwsh -NoProfile -File vault-thin-notes.ps1 -VaultRoot "<Vaultパス>" [-folder <部分一致名>] [-threshold <バイト数>]
 
 param(
+    [Parameter(Mandatory)][string]$VaultRoot,
     [string]$folder = '',
     [int]$threshold = 3000
 )
 
 $ErrorActionPreference = 'SilentlyContinue'
-$root = 'D:\Vault'
+$root = $VaultRoot
 
 # 検索パス決定
 if ($folder) {
@@ -25,7 +26,7 @@ if ($folder) {
     }
 } else {
     $searchPath = $root
-    Write-Output "検索対象: D:\Vault 全体"
+    Write-Output ("検索対象: " + $root + " 全体")
 }
 
 Write-Output ("閾値: " + $threshold + "B")
