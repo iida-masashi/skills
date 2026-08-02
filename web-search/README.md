@@ -34,6 +34,11 @@ cd claude-gemini-skills/web-search && uv run python tools/gemini_websearch.py "�
 
 出力: Geminiの回答本文 + `--- 出典 ---` 以下に `[番号] タイトル - URL` 形式の出典一覧（`grounding_chunks`由来）。URLはリダイレクトを自動追跡した解決済みの実URL（解決失敗時のみ元のリダイレクトURL＋`(解決失敗、リダイレクトURLのまま)`）。`--no-resolve`を渡すと解決処理自体を無効化できる。
 
+追加フラグ:
+- `--json` — 回答・出典を`{text, sources: [{title, url, resolved}]}`のJSONで出力する。Agent側で出典を反復処理したい場合に使う。
+- `--verify-claim` — 回答本文の主張が各出典ページに実在するかを、出典を1件ずつ`gemini_webfetch`で取得し直してクロスチェックする。出典ごとに「裏付けあり/裏付けなし/不明」の判定と根拠を返す。出典数+1回のAPI呼び出しが発生する。
+- `--refute` — クエリを「この主張を否定・反証する情報がないか」という反証志向のプロンプトに自動変換してから検索する。「AとBに関係がある」のような一文の真偽を疑うときに使う。
+
 ### URL取得（WebFetch相当）
 
 ```bash
@@ -52,6 +57,7 @@ cd claude-gemini-skills/web-search && uv run python tools/gemini_webfetch.py "<U
 - **ツールの使い分け** — Web検索は`google_search`（Google Search grounding）、URL取得は`url_context`という別々のGemini APIツールを使う。
 - **出典URLの自動解決** — Gemini側の出典URLは元々`vertexaisearch.cloud.google.com/grounding-api-redirect/...`という難読化されたリダイレクトURLだが、`gemini_websearch.py`が`urllib`で1回追跡し実URL（`resp.geturl()`）に解決してから表示する。サイト側がリダイレクト追跡自体を403等で拒否する場合（Medium等で確認済み）のみ解決に失敗し、元のリダイレクトURLがそのまま表示される。
 - **ハルシネーションと鮮度の注意** — Geminiの回答はGoogle Search groundingによるものでも要約段階のハルシネーションリスクはClaude側と同程度にある。また、Geminiが実際にライブでページを取得したのか検索インデックス（キャッシュ）を使ったのかはツール出力からは区別できないため、更新頻度が高いページの最新性を問う場合は注意する。Geminiが提示した「主出典」を実際にWebFetchで開き該当記述の有無を確認するだけで、他事例との混同等の誤情報を検出できることがある（2026-08-02、宗教研究Vaultの検証作業で実例あり）。
+- **前提そのものがハルシネーションのことがある** — 個別事実（日付・数値等）だけでなく、「AとBに関係がある」「Xという施設・法人格が実在する」という**関係性・実在性の主張自体**が誤りであるケースが複数回確認された（2026-08-02、アレフ×生長の家の関係、玄米レストランの系列誤認等）。こうした主張は`--verify-claim`（出典との裏付けクロスチェック）または`--refute`（反証志向の再検索）で積極的に疑う。
 - **法人番号検索は個別URLが有効** — gBizINFO・国税庁法人番号公表サイトは法人"名"検索がJS駆動でWebFetch・Gemini `url_context`とも失敗しやすいが、法人番号が判明していれば `https://info.gbiz.go.jp/hojin/ichiran?hojinBango=<13桁>` の個別URLはWebFetchで直接取得できる。法人番号不明時はまずGemini websearchで番号と実URLを特定してから切り替える。
 - **`.env`の秘匿情報に注意** — `.env`には他のAPIキー（Vertex AI関連・Anthropic・xAI等）も同居しているため、このSkillの実装や出力をログ・ノートに残す際にキーの値そのものを含めないこと。
 
@@ -71,4 +77,19 @@ $ cd claude-gemini-skills/web-search && uv run python tools/gemini_webfetch.py "
 
 --- 取得ステータス ---
 URL_RETRIEVAL_STATUS_SUCCESS  https://example.com/article
+```
+
+```bash
+$ cd claude-gemini-skills/web-search && uv run python tools/gemini_websearch.py "A社の創業者はB教団の信者である" --refute
+(反証志向のプロンプトに変換されて実行される。肯定情報より否定・矛盾する情報を優先的に探し、
+ 混同の背景〈似た名前の別事例、社名の連想等〉まで報告する)
+```
+
+```bash
+$ cd claude-gemini-skills/web-search && uv run python tools/gemini_websearch.py "崇教真光の本部所在地" --verify-claim
+(回答本文の後に、出典ごとの裏付け判定が付く)
+
+--- 出典の裏付けチェック（--verify-claim） ---
+[1] 裏付けあり  sukyomahikari.or.jp - https://sukyomahikari.or.jp/infofaci/index.html
+    裏付けあり: 住所・電話番号がページ下部に明記されている...
 ```

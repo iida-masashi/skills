@@ -27,6 +27,11 @@ cd "C:/Users/iidam/claude-gemini-skills/web-search" && uv run python tools/gemin
 
 出力: Geminiによる回答本文 + `--- 出典 ---`以下に出典タイトルと解決済み実URL一覧（解決失敗時のみリダイレクトURL）。
 
+追加フラグ:
+- `--json`: 回答・出典を`{text, sources: [{title, url, resolved}]}`のJSONで出力する。後続処理（Agent側での自動反復）に使う場合はこちらを使う。
+- `--verify-claim`: 回答本文の主張が各出典ページに実在するかを、`gemini_webfetch.py`で出典を1件ずつ取得し直してクロスチェックする。「関係性がある」「実在する」等の主張を検証したいときに使う。出典が多いとAPI呼び出し回数が増える点に注意（出典数+1回のリクエストになる）。
+- `--refute`: クエリを「この主張を否定・反証する情報がないか」という反証志向のプロンプトに自動変換してから検索する。verify-firstの手動プロンプト設計を省略できる。「AとBに関係がある」のような一文の真偽を疑うときに使う。
+
 ### URL取得（特定URLの内容を取得・要約する、WebFetch相当）
 
 ```bash
@@ -41,6 +46,7 @@ cd "C:/Users/iidam/claude-gemini-skills/web-search" && uv run python tools/gemin
 2. 取得ステータスが`FAILED`、または回答が空・的外れ・情報不足の場合 → ClaudeネイティブのWebSearch/WebFetchツールで再試行する。
 3. Claude側もエラー（証明書エラー、予算上限到達等）になった場合 → Gemini側の結果を「参考情報」として明示した上でユーザーに報告する。両方失敗した場合は素直にその旨を伝える。
 4. 出典URLを一次資料としてノート等に記録する場合、`gemini_websearch.py`が自動解決した実URLはそのまま使ってよい。ただし出典表示に`(解決失敗、リダイレクトURLのまま)`と付いている場合は、リダイレクトURLを一次資料として記録せず、Claude側のWebFetch/WebSearchで実URLを確認するか、そのドメイン名（タイトル欄）を手がかりに直接検索する。
+5. 検索結果が「AとBに関係がある」「Xという施設・法人格が実在する」といった**関係性・実在性の主張**を含む場合は、その主張自体を疑う（2026-08-02に複数回実例あり）。`--verify-claim`または`--refute`を使って裏取りしてから、ノート等に反映する。
 
 ## 留意点
 

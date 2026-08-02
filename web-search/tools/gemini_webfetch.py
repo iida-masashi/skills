@@ -44,23 +44,27 @@ def load_env(path: Path) -> None:
             os.environ[key] = value
 
 
-def fetch(url: str, instruction: str = DEFAULT_INSTRUCTION, model: str = "gemini-3.6-flash") -> None:
+def make_client() -> genai.Client:
     load_env(ENV_PATH)
 
     api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     use_vertex = os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "").lower() == "true"
 
     if api_key:
-        client = genai.Client(api_key=api_key, vertexai=False)
-    elif use_vertex:
-        client = genai.Client(
+        return genai.Client(api_key=api_key, vertexai=False)
+    if use_vertex:
+        return genai.Client(
             vertexai=True,
             project=os.environ.get("GOOGLE_CLOUD_PROJECT"),
             location=os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1"),
         )
-    else:
-        print("ERROR: GEMINI_API_KEY / GOOGLE_API_KEY か Vertex AI設定が見つかりません。", file=sys.stderr)
-        sys.exit(1)
+    print("ERROR: GEMINI_API_KEY / GOOGLE_API_KEY か Vertex AI設定が見つかりません。", file=sys.stderr)
+    sys.exit(1)
+
+
+def fetch_raw(url: str, instruction: str = DEFAULT_INSTRUCTION, model: str = "gemini-3.6-flash", client: genai.Client | None = None) -> dict:
+    """URLを取得しGeminiの回答本文・取得ステータスを辞書で返す（他スクリプトからの再利用向け）。"""
+    client = client or make_client()
 
     response = client.models.generate_content(
         model=model,
@@ -70,14 +74,25 @@ def fetch(url: str, instruction: str = DEFAULT_INSTRUCTION, model: str = "gemini
         ),
     )
 
-    print(response.text)
-
     metadata = response.candidates[0].url_context_metadata if response.candidates else None
     url_metas = getattr(metadata, "url_metadata", None) if metadata else None
+    statuses = []
     if url_metas:
-        print("\n--- 取得ステータス ---")
         for m in url_metas:
-            print(f"{m.url_retrieval_status.name}  {m.retrieved_url}")
+            statuses.append({"status": m.url_retrieval_status.name, "retrieved_url": m.retrieved_url})
+
+    return {"text": response.text, "statuses": statuses}
+
+
+def fetch(url: str, instruction: str = DEFAULT_INSTRUCTION, model: str = "gemini-3.6-flash") -> None:
+    result = fetch_raw(url, instruction, model)
+
+    print(result["text"])
+
+    if result["statuses"]:
+        print("\n--- 取得ステータス ---")
+        for s in result["statuses"]:
+            print(f"{s['status']}  {s['retrieved_url']}")
 
 
 if __name__ == "__main__":
