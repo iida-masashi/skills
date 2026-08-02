@@ -44,6 +44,7 @@ cd "C:/Users/iidam/claude-gemini-skills/web-search" && uv run python tools/gemin
 
 ## 留意点
 
-- Geminiの回答はGoogle Search groundingによるものであり、要約段階でのハルシネーションのリスクはClaude側と同程度にある。確度が必要な情報（法人番号、日付、固有名詞等）は、可能であれば一次資料URLへの直接アクセスで裏取りする。
+- Geminiの回答はGoogle Search groundingによるものであり、要約段階でのハルシネーションのリスクはClaude側と同程度にある。確度が必要な情報（法人番号、日付、固有名詞等）は、可能であれば一次資料URLへの直接アクセスで裏取りする。Geminiの回答が提示した「主出典」を実際にWebFetchで開いて該当記述の有無を確認するだけで、Gemini側の誤情報（他事例との混同等）を検出できることがある。
 - Geminiが実際にライブでページを取得したのか、Google側の検索インデックス（キャッシュ）から情報を引いているのかは、ツールの出力からは区別できない。更新頻度が高いページの最新性を問う場合は注意する。
+- gBizINFO・国税庁法人番号公表サイト等の法人検索は、法人"名"での検索（JS駆動の検索UI）はWebFetch・Gemini `url_context`のいずれでも失敗しやすい。法人番号が判明している場合は `https://info.gbiz.go.jp/hojin/ichiran?hojinBango=<13桁>` の個別URLを直接WebFetchすれば取得できる。法人番号が不明なら、まずGemini websearchで「法人番号 + gBizINFO」を検索しGemini回答内の実URLを抽出してから、この直接アクセスに切り替える。
 - `.env`には他のAPIキー（Vertex AI関連、Anthropic、xAI等）も同居しているため、このスキルの実装や出力をログ・ノートに残す際にキーの値そのものを含めないこと。

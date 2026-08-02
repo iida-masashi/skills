@@ -51,7 +51,8 @@ cd claude-gemini-skills/web-search && uv run python tools/gemini_webfetch.py "<U
 - **モデルはコード内既定** — 両スクリプトとも`gemini-3.6-flash`を関数デフォルト引数としてハードコードしており、CLIから変更する引数は用意されていない。
 - **ツールの使い分け** — Web検索は`google_search`（Google Search grounding）、URL取得は`url_context`という別々のGemini APIツールを使う。
 - **出典URLの自動解決** — Gemini側の出典URLは元々`vertexaisearch.cloud.google.com/grounding-api-redirect/...`という難読化されたリダイレクトURLだが、`gemini_websearch.py`が`urllib`で1回追跡し実URL（`resp.geturl()`）に解決してから表示する。サイト側がリダイレクト追跡自体を403等で拒否する場合（Medium等で確認済み）のみ解決に失敗し、元のリダイレクトURLがそのまま表示される。
-- **ハルシネーションと鮮度の注意** — Geminiの回答はGoogle Search groundingによるものでも要約段階のハルシネーションリスクはClaude側と同程度にある。また、Geminiが実際にライブでページを取得したのか検索インデックス（キャッシュ）を使ったのかはツール出力からは区別できないため、更新頻度が高いページの最新性を問う場合は注意する。
+- **ハルシネーションと鮮度の注意** — Geminiの回答はGoogle Search groundingによるものでも要約段階のハルシネーションリスクはClaude側と同程度にある。また、Geminiが実際にライブでページを取得したのか検索インデックス（キャッシュ）を使ったのかはツール出力からは区別できないため、更新頻度が高いページの最新性を問う場合は注意する。Geminiが提示した「主出典」を実際にWebFetchで開き該当記述の有無を確認するだけで、他事例との混同等の誤情報を検出できることがある（2026-08-02、宗教研究Vaultの検証作業で実例あり）。
+- **法人番号検索は個別URLが有効** — gBizINFO・国税庁法人番号公表サイトは法人"名"検索がJS駆動でWebFetch・Gemini `url_context`とも失敗しやすいが、法人番号が判明していれば `https://info.gbiz.go.jp/hojin/ichiran?hojinBango=<13桁>` の個別URLはWebFetchで直接取得できる。法人番号不明時はまずGemini websearchで番号と実URLを特定してから切り替える。
 - **`.env`の秘匿情報に注意** — `.env`には他のAPIキー（Vertex AI関連・Anthropic・xAI等）も同居しているため、このSkillの実装や出力をログ・ノートに残す際にキーの値そのものを含めないこと。
 
 ## 実行例
