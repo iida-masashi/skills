@@ -35,8 +35,8 @@ cd claude-gemini-skills/web-search && uv run python tools/gemini_websearch.py "�
 出力: Geminiの回答本文 + `--- 出典 ---` 以下に `[番号] タイトル - URL` 形式の出典一覧（`grounding_chunks`由来）。URLはリダイレクトを自動追跡した解決済みの実URL（解決失敗時のみ元のリダイレクトURL＋`(解決失敗、リダイレクトURLのまま)`）。`--no-resolve`を渡すと解決処理自体を無効化できる。
 
 追加フラグ:
-- `--json` — 回答・出典を`{text, sources: [{title, url, resolved}]}`のJSONで出力する。Agent側で出典を反復処理したい場合に使う。
-- `--verify-claim` — 回答本文の主張が各出典ページに実在するかを、出典を1件ずつ`gemini_webfetch`で取得し直してクロスチェックする。出典ごとに「裏付けあり/裏付けなし/不明」の判定と根拠を返す。出典数+1回のAPI呼び出しが発生する。
+- `--json` — 回答・出典を`{text, sources: [{title, url, resolved}]}`のJSONで出力する（`--verify-claim`併用時は`claim_checks`キーが追加される）。Agent側で出典を反復処理したい場合に使う。
+- `--verify-claim` — 回答本文の主張を**事実の最小単位ごとに箇条書きへ分解**し、各出典ページで裏付けられるかを項目単位でクロスチェックする（内部的には`gemini_webfetch.check_claim_raw`を全出典に対し並列実行）。判定は各出典・各項目ごとに「裏付けあり/裏付けなし/不明」＋根拠。並列実行（最大4並列）のため、出典が複数あっても待ち時間は概ね1回分で収まる。
 - `--refute` — クエリを「この主張を否定・反証する情報がないか」という反証志向のプロンプトに自動変換してから検索する。「AとBに関係がある」のような一文の真偽を疑うときに使う。
 
 ### URL取得（WebFetch相当）
@@ -49,6 +49,10 @@ cd claude-gemini-skills/web-search && uv run python tools/gemini_webfetch.py "<U
 
 出力: Geminiの回答本文 + `--- 取得ステータス ---` 以下に `URL_RETRIEVAL_STATUS_SUCCESS` / `FAILED` 等のステータスと実際に取得したURL（`retrieved_url`）。
 
+追加フラグ:
+- `--check "<主張>"` — 要約の代わりに、この1URLの内容が指定した主張を裏付けるかを検証する。主張は項目単位に分解された上で判定される。特定の1ページに対して単発で「本当にそう書いてあるか」を確認したいときに使う（`gemini_websearch.py --verify-claim`は複数出典を横断する場合向け）。自由記述の追加指示とは同時指定不可。
+- `--json` — `--check`使用時、結果を`{url, items: [{claim, verdict, detail}], statuses}`のJSONで出力する。
+
 ## Highlights
 
 - **Gemini API優先＋Claude WebSearch/WebFetchフォールバック** — ClaudeのWebSearchはセッション単位の回数上限があり枯渇しやすいが、Geminiは別課金枠で消費しない。ClaudeのWebFetchは証明書エラー等で失敗するサイトがあるが、Geminiの`url_context`ツールはGoogle側の取得経路を使うため成功する場合がある。
@@ -56,8 +60,9 @@ cd claude-gemini-skills/web-search && uv run python tools/gemini_webfetch.py "<U
 - **モデルはコード内既定** — 両スクリプトとも`gemini-3.6-flash`を関数デフォルト引数としてハードコードしており、CLIから変更する引数は用意されていない。
 - **ツールの使い分け** — Web検索は`google_search`（Google Search grounding）、URL取得は`url_context`という別々のGemini APIツールを使う。
 - **出典URLの自動解決** — Gemini側の出典URLは元々`vertexaisearch.cloud.google.com/grounding-api-redirect/...`という難読化されたリダイレクトURLだが、`gemini_websearch.py`が`urllib`で1回追跡し実URL（`resp.geturl()`）に解決してから表示する。サイト側がリダイレクト追跡自体を403等で拒否する場合（Medium等で確認済み）のみ解決に失敗し、元のリダイレクトURLがそのまま表示される。
-- **ハルシネーションと鮮度の注意** — Geminiの回答はGoogle Search groundingによるものでも要約段階のハルシネーションリスクはClaude側と同程度にある。また、Geminiが実際にライブでページを取得したのか検索インデックス（キャッシュ）を使ったのかはツール出力からは区別できないため、更新頻度が高いページの最新性を問う場合は注意する。Geminiが提示した「主出典」を実際にWebFetchで開き該当記述の有無を確認するだけで、他事例との混同等の誤情報を検出できることがある（2026-08-02、宗教研究Vaultの検証作業で実例あり）。
-- **前提そのものがハルシネーションのことがある** — 個別事実（日付・数値等）だけでなく、「AとBに関係がある」「Xという施設・法人格が実在する」という**関係性・実在性の主張自体**が誤りであるケースが複数回確認された（2026-08-02、アレフ×生長の家の関係、玄米レストランの系列誤認等）。こうした主張は`--verify-claim`（出典との裏付けクロスチェック）または`--refute`（反証志向の再検索）で積極的に疑う。
+- **ハルシネーションと鮮度の注意** — Geminiの回答はGoogle Search groundingによるものでも要約段階のハルシネーションリスクはClaude側と同程度にある。また、Geminiが実際にライブでページを取得したのか検索インデックス（キャッシュ）を使ったのかはツール出力からは区別できないため、更新頻度が高いページの最新性を問う場合は注意する。Geminiが提示した「主出典」を実際にWebFetchで開き該当記述の有無を確認するだけで、他事例との混同等の誤情報を検出できることがある。
+- **前提そのものがハルシネーションのことがある** — 個別事実（日付・数値等）だけでなく、「AとBに関係がある」「Xという施設・法人格が実在する」という**関係性・実在性の主張自体**が誤りであるケースが複数回確認されている（似た名称の別法人・別企業との混同、風評の取り違え等）。こうした主張は`--verify-claim`（出典との裏付けクロスチェック）または`--refute`（反証志向の再検索）で積極的に疑う。
+- **裏付けチェックは項目単位・並列実行** — `--verify-claim`（websearch）・`--check`（webfetch）はいずれも、主張をそのまま1文で問い合わせるのではなく「否定できない事実の最小単位」に分解してから各出典に判定させる。複数の事実が混ざった複合的な主張（例:「住所＋電話番号＋関連施設名」）を一括りに検証すると、一部だけ裏付けられない場合に全体が「不明」判定になりがちなため、項目分解によって「どの部分が裏付けられ、どの部分が裏付けられないか」を明確にする。`--verify-claim`は複数出典への問い合わせを`ThreadPoolExecutor`で並列実行（最大4並列）するため、出典が増えても待ち時間は概ね1回分で収まる。
 - **法人番号検索は個別URLが有効** — gBizINFO・国税庁法人番号公表サイトは法人"名"検索がJS駆動でWebFetch・Gemini `url_context`とも失敗しやすいが、法人番号が判明していれば `https://info.gbiz.go.jp/hojin/ichiran?hojinBango=<13桁>` の個別URLはWebFetchで直接取得できる。法人番号不明時はまずGemini websearchで番号と実URLを特定してから切り替える。
 - **`.env`の秘匿情報に注意** — `.env`には他のAPIキー（Vertex AI関連・Anthropic・xAI等）も同居しているため、このSkillの実装や出力をログ・ノートに残す際にキーの値そのものを含めないこと。
 
@@ -80,16 +85,29 @@ URL_RETRIEVAL_STATUS_SUCCESS  https://example.com/article
 ```
 
 ```bash
-$ cd claude-gemini-skills/web-search && uv run python tools/gemini_websearch.py "A社の創業者はB教団の信者である" --refute
+$ cd claude-gemini-skills/web-search && uv run python tools/gemini_websearch.py "A社の創業者はB財団の理事を務めている" --refute
 (反証志向のプロンプトに変換されて実行される。肯定情報より否定・矛盾する情報を優先的に探し、
- 混同の背景〈似た名前の別事例、社名の連想等〉まで報告する)
+ 混同の背景〈似た名前の別法人、社名の連想等〉まで報告する)
 ```
 
 ```bash
-$ cd claude-gemini-skills/web-search && uv run python tools/gemini_websearch.py "崇教真光の本部所在地" --verify-claim
-(回答本文の後に、出典ごとの裏付け判定が付く)
+$ cd claude-gemini-skills/web-search && uv run python tools/gemini_websearch.py "架空商事株式会社の本社所在地" --verify-claim
+(回答本文の後に、出典・項目単位の裏付け判定が付く。全出典への問い合わせは並列実行される)
 
---- 出典の裏付けチェック（--verify-claim） ---
-[1] 裏付けあり  sukyomahikari.or.jp - https://sukyomahikari.or.jp/infofaci/index.html
-    裏付けあり: 住所・電話番号がページ下部に明記されている...
+--- 出典の裏付けチェック（--verify-claim、主張を項目単位に分解して判定） ---
+[1] example.co.jp - https://example.co.jp/company/access.html
+    裏付けあり  架空商事株式会社の本社住所は〒100-0001 東京都千代田区千代田1-1である。
+      ページ下部に住所・電話番号が明記されている。
+    不明  架空商事株式会社の最寄り駅は東京駅である。
+      ページ内に最寄り駅の記載がないため確認できない。
+```
+
+```bash
+$ cd claude-gemini-skills/web-search && uv run python tools/gemini_webfetch.py "https://ja.wikipedia.org/wiki/架空商事" --check "架空商事の本社は東京都千代田区にある"
+(1URL単発での主張検証。項目単位に分解して判定される)
+
+[1] 裏付けあり  架空商事の本社は東京都にある
+    記事冒頭やインフォボックスに本社の所在地が東京都であると記載されているため。
+[2] 裏付けあり  架空商事の本社は千代田区にある
+    記事冒頭やインフォボックスに本社の所在地が千代田区であると記載されているため。
 ```

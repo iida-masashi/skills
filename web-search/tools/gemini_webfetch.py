@@ -19,7 +19,10 @@ APIキー/Vertex AI設定は既定で C:/Users/iidam/gemini/.env から読み込
     Geminiの回答本文と、URL取得ステータス(成功/失敗)。
 """
 
+import argparse
+import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -28,6 +31,26 @@ from google.genai import types
 
 ENV_PATH = Path(os.environ.get("GEMINI_SKILL_ENV_PATH", r"C:\Users\iidam\gemini\.env"))
 DEFAULT_INSTRUCTION = "このページの内容を詳しく要約して"
+
+CHECK_INSTRUCTION_TEMPLATE = """次の主張を、否定できない事実の最小単位ごとに箇条書きに分解し、
+このページの内容が各項目を裏付けるか判定して。判定は「裏付けあり」「裏付けなし」「不明」の
+いずれか一言。厳密に次のJSON形式のみで出力すること（前後に説明文・コードフェンスは付けない）。
+
+{{"items": [{{"claim": "分解した項目の文", "verdict": "裏付けあり|裏付けなし|不明", "detail": "根拠を1文で"}}]}}
+
+主張: {claim}"""
+
+
+def _parse_check_json(text: str) -> list[dict] | None:
+    """--checkの応答からJSON部分を抽出してパースする。失敗時はNone。"""
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if not match:
+        return None
+    try:
+        parsed = json.loads(match.group(0))
+        return parsed.get("items")
+    except (json.JSONDecodeError, AttributeError):
+        return None
 
 
 def load_env(path: Path) -> None:
@@ -84,6 +107,17 @@ def fetch_raw(url: str, instruction: str = DEFAULT_INSTRUCTION, model: str = "ge
     return {"text": response.text, "statuses": statuses}
 
 
+def check_claim_raw(url: str, claim: str, model: str = "gemini-3.6-flash", client: genai.Client | None = None) -> dict:
+    """主張を項目単位に分解し、URLの内容が各項目を裏付けるか判定する（他スクリプトからの再利用向け）。"""
+    instruction = CHECK_INSTRUCTION_TEMPLATE.format(claim=claim)
+    result = fetch_raw(url, instruction=instruction, model=model, client=client)
+    items = _parse_check_json(result["text"])
+    if items is None:
+        # JSON化に失敗した場合はraw textを1項目として扱う（完全なフォールバック）
+        items = [{"claim": claim, "verdict": "不明", "detail": result["text"][:300]}]
+    return {"url": url, "items": items, "statuses": result["statuses"]}
+
+
 def fetch(url: str, instruction: str = DEFAULT_INSTRUCTION, model: str = "gemini-3.6-flash") -> None:
     result = fetch_raw(url, instruction, model)
 
@@ -95,10 +129,50 @@ def fetch(url: str, instruction: str = DEFAULT_INSTRUCTION, model: str = "gemini
             print(f"{s['status']}  {s['retrieved_url']}")
 
 
+def check(url: str, claim: str, model: str = "gemini-3.6-flash", as_json: bool = False) -> None:
+    result = check_claim_raw(url, claim, model=model)
+
+    if as_json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return
+
+    print(f"URL: {url}")
+    print(f"主張: {claim}\n")
+    for i, item in enumerate(result["items"], 1):
+        print(f"[{i}] {item['verdict']}  {item['claim']}")
+        print(f"    {item['detail']}")
+
+    if result["statuses"]:
+        print("\n--- 取得ステータス ---")
+        for s in result["statuses"]:
+            print(f"{s['status']}  {s['retrieved_url']}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        prog="gemini_webfetch.py",
+        description="指定URLの内容をGemini経由で取得・要約、または特定の主張がURL内に実在するか検証する。",
+    )
+    parser.add_argument("url", help="取得対象のURL")
+    parser.add_argument(
+        "instruction", nargs="*",
+        help="追加の指示（省略時は既定の要約指示）。--checkと同時指定は不可",
+    )
+    parser.add_argument(
+        "--check", metavar="CLAIM",
+        help="要約の代わりに、この主張がURLの内容で裏付けられるか項目単位で検証する",
+    )
+    parser.add_argument("--json", action="store_true", help="結果をJSONで出力する")
+    args = parser.parse_args()
+
+    if args.check:
+        if args.instruction:
+            parser.error("--check と追加の指示（自由記述）は同時に指定できません")
+        check(args.url, args.check, as_json=args.json)
+    else:
+        instruction = " ".join(args.instruction) if args.instruction else DEFAULT_INSTRUCTION
+        fetch(args.url, instruction)
+
+
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print('使い方: python gemini_webfetch.py <URL> ["追加の指示"]', file=sys.stderr)
-        sys.exit(1)
-    target_url = sys.argv[1]
-    extra_instruction = " ".join(sys.argv[2:]) if len(sys.argv) > 2 else DEFAULT_INSTRUCTION
-    fetch(target_url, extra_instruction)
+    main()

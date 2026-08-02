@@ -13,17 +13,19 @@ APIキー/Vertex AI設定は既定で C:/Users/iidam/gemini/.env から読み込
     Geminiが生成した回答本文と、根拠にした情報源URL一覧(grounding citations)。
 """
 
+import argparse
 import json
 import os
 import sys
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from google import genai
 from google.genai import types
 
 sys.path.insert(0, str(Path(__file__).parent))
-from gemini_webfetch import fetch_raw, make_client  # noqa: E402
+from gemini_webfetch import check_claim_raw, make_client  # noqa: E402
 
 ENV_PATH = Path(os.environ.get("GEMINI_SKILL_ENV_PATH", r"C:\Users\iidam\gemini\.env"))
 
@@ -31,6 +33,8 @@ REFUTE_TEMPLATE = (
     "次の主張について、これを否定・反証する情報や、矛盾する独立の情報源がないか重点的に調べて報告して。"
     "肯定的な情報がある場合も併記してよいが、まず反証の可能性を優先して探すこと。主張: {claim}"
 )
+
+MAX_VERIFY_WORKERS = 4
 
 
 def resolve_redirect(url: str, timeout: float = 10.0) -> str | None:
@@ -88,31 +92,24 @@ def search_raw(query: str, model: str = "gemini-3.6-flash", no_resolve: bool = F
 
 
 def verify_claim(text: str, sources: list, client: genai.Client) -> list:
-    """回答本文の主張が各出典ページに実在するかを、gemini_webfetchで個別にクロスチェックする。"""
-    checks = []
-    instruction = (
-        "次の主張がこのページの内容に実在するか確認して。"
-        "ページ内に主張を裏付ける記述があれば「裏付けあり」、なければ「裏付けなし」、"
-        "判断できなければ「不明」を先頭に一言で示してから、根拠を簡潔に述べて。"
-        f"主張: {text[:500]}"
-    )
-    for src in sources:
-        result = fetch_raw(src["url"], instruction=instruction, client=client)
-        verdict_text = result["text"].strip()
-        if verdict_text.startswith("裏付けあり"):
-            verdict = "裏付けあり"
-        elif verdict_text.startswith("裏付けなし"):
-            verdict = "裏付けなし"
-        else:
-            verdict = "不明"
-        checks.append({
+    """回答本文の主張を項目単位に分解し、各出典ページで裏付けられるかを並列にクロスチェックする。
+
+    出典ごとのcheck_claim_raw呼び出しは互いに独立しているため、
+    ThreadPoolExecutorで並列実行し待ち時間を「出典数×1回」から「1回」に短縮する。
+    """
+    claim = text[:500]
+
+    def _check_one(src: dict) -> dict:
+        result = check_claim_raw(src["url"], claim, client=client)
+        return {
             "title": src["title"],
             "url": src["url"],
-            "verdict": verdict,
-            "detail": verdict_text,
+            "items": result["items"],
             "fetch_status": result["statuses"],
-        })
-    return checks
+        }
+
+    with ThreadPoolExecutor(max_workers=min(MAX_VERIFY_WORKERS, len(sources))) as pool:
+        return list(pool.map(_check_one, sources))
 
 
 def search(query: str, model: str = "gemini-3.6-flash", no_resolve: bool = False,
@@ -145,30 +142,40 @@ def search(query: str, model: str = "gemini-3.6-flash", no_resolve: bool = False
             print(f"[{i}] {src['title']} - {src['url']}{suffix}")
 
     if checks is not None:
-        print("\n--- 出典の裏付けチェック（--verify-claim） ---")
+        print("\n--- 出典の裏付けチェック（--verify-claim、主張を項目単位に分解して判定） ---")
         for i, c in enumerate(checks, 1):
-            print(f"[{i}] {c['verdict']}  {c['title']} - {c['url']}")
-            print(f"    {c['detail'][:200]}")
+            print(f"[{i}] {c['title']} - {c['url']}")
+            for item in c["items"]:
+                print(f"    {item['verdict']}  {item['claim']}")
+                print(f"      {item['detail']}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        prog="gemini_websearch.py",
+        description="Gemini API (Google Search grounding) を使ったWeb検索。回答本文の主張の裏取り・反証も行える。",
+    )
+    parser.add_argument("query", nargs="+", help="検索クエリ")
+    parser.add_argument("--no-resolve", action="store_true", help="出典URLのリダイレクト解決を無効化する")
+    parser.add_argument("--json", action="store_true", help="結果をJSONで出力する")
+    parser.add_argument(
+        "--verify-claim", action="store_true",
+        help="回答本文の主張を項目単位に分解し、各出典ページで裏付けられるか並列でクロスチェックする",
+    )
+    parser.add_argument(
+        "--refute", action="store_true",
+        help="クエリを反証志向のプロンプトに変換してから検索する（否定・矛盾情報を優先的に探す）",
+    )
+    args = parser.parse_args()
+
+    search(
+        " ".join(args.query),
+        no_resolve=args.no_resolve,
+        as_json=args.json,
+        do_verify=args.verify_claim,
+        do_refute=args.refute,
+    )
 
 
 if __name__ == "__main__":
-    args = sys.argv[1:]
-    no_resolve = "--no-resolve" in args
-    if no_resolve:
-        args.remove("--no-resolve")
-    as_json = "--json" in args
-    if as_json:
-        args.remove("--json")
-    do_verify = "--verify-claim" in args
-    if do_verify:
-        args.remove("--verify-claim")
-    do_refute = "--refute" in args
-    if do_refute:
-        args.remove("--refute")
-    if not args:
-        print(
-            "使い方: python gemini_websearch.py \"検索クエリ\" [--no-resolve] [--json] [--verify-claim] [--refute]",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    search(" ".join(args), no_resolve=no_resolve, as_json=as_json, do_verify=do_verify, do_refute=do_refute)
+    main()

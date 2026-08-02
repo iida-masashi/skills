@@ -28,8 +28,8 @@ cd "C:/Users/iidam/claude-gemini-skills/web-search" && uv run python tools/gemin
 出力: Geminiによる回答本文 + `--- 出典 ---`以下に出典タイトルと解決済み実URL一覧（解決失敗時のみリダイレクトURL）。
 
 追加フラグ:
-- `--json`: 回答・出典を`{text, sources: [{title, url, resolved}]}`のJSONで出力する。後続処理（Agent側での自動反復）に使う場合はこちらを使う。
-- `--verify-claim`: 回答本文の主張が各出典ページに実在するかを、`gemini_webfetch.py`で出典を1件ずつ取得し直してクロスチェックする。「関係性がある」「実在する」等の主張を検証したいときに使う。出典が多いとAPI呼び出し回数が増える点に注意（出典数+1回のリクエストになる）。
+- `--json`: 回答・出典を`{text, sources: [{title, url, resolved}]}`のJSONで出力する（`--verify-claim`併用時は`claim_checks`キーも追加される）。後続処理（Agent側での自動反復）に使う場合はこちらを使う。
+- `--verify-claim`: 回答本文の主張を**否定できない事実の最小単位ごとに箇条書きへ分解**し、各出典ページで裏付けられるかを`gemini_webfetch.py`の`--check`相当のロジックで項目単位に判定する。判定は各出典・各項目ごとに「裏付けあり／裏付けなし／不明」。全出典への問い合わせは並列実行（最大4並列）するため、出典数が増えても待ち時間は概ね1回分で収まる。「関係性がある」「実在する」等の複合的な主張を検証したいときに使う。
 - `--refute`: クエリを「この主張を否定・反証する情報がないか」という反証志向のプロンプトに自動変換してから検索する。verify-firstの手動プロンプト設計を省略できる。「AとBに関係がある」のような一文の真偽を疑うときに使う。
 
 ### URL取得（特定URLの内容を取得・要約する、WebFetch相当）
@@ -39,6 +39,10 @@ cd "C:/Users/iidam/claude-gemini-skills/web-search" && uv run python tools/gemin
 ```
 
 出力: Geminiによる回答本文 + `--- 取得ステータス ---`以下に`URL_RETRIEVAL_STATUS_SUCCESS`または`FAILED`と実際に取得できたURL。
+
+追加フラグ:
+- `--check "<主張>"`: 要約の代わりに、特定の主張1件がこのURLの内容で裏付けられるかを検証する。主張は項目単位に分解された上で判定される。「この公式サイトに、言われている通りのことが本当に書かれているか」を単発で確認したいときに使う（`gemini_websearch.py --verify-claim`は複数出典を横断する場合向け、こちらは1URL単発の確認向け）。`--check`と自由記述の追加指示は同時指定できない。
+- `--json`: `--check`使用時、結果を`{url, items: [{claim, verdict, detail}], statuses}`のJSONで出力する。
 
 ## 判断フロー
 
