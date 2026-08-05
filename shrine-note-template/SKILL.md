@@ -35,10 +35,17 @@ google_maps_url: "https://www.google.com/maps/place/..." # Google Mapsスポッ�
 official_website: "http://www.example.org/" # 教団公式サイトURL
 deities: ["[[主祭神1]]", "[[主祭神2]]"]
 clans: ["[[関連氏族1]]", "[[関連氏族2]]"]
-evidence_type: primary_source_based / shrine_origin / blog_hypothesis / fringe_hypothesis
+evidence_type: primary_source_based / shrine_origin / archaeological_evidence / blog_hypothesis / fringe_hypothesis
 confidence: 1-5（5が最高）
 ---
 ```
+
+`evidence_type` の選択（[[essay-note-template]] と共通）：
+- `primary_source_based` — 記紀・延喜式・風土記等の一次史料で骨格が裏付く
+- `shrine_origin` — 社伝・縁起が主たる典拠
+- `archaeological_evidence` — 発掘・出土・編年など考古学的物証が骨格。阿波説接続は別途留保
+- `blog_hypothesis` — 阿波説ブログ・note記事が主たる論証元
+- `fringe_hypothesis` — 俗説・神代文字系（原則テンプレ化せず保留）
 
 ## 標準12セクション構造
 
@@ -75,6 +82,9 @@ confidence: 1-5（5が最高）
 
 ## 3. 祭神と社伝
 （祭神の系譜・神話的背景、社伝の主要な物語）
+
+**社伝が天皇・人物の実在論拠を兼ねる場合の注意**：
+社伝を天皇（or人物）実在の傍証として引く一方で、その天皇の実在を前提に社伝の由緒を権威づける、という循環参照になっていないか確認する。循環がある場合は明示的に注記する（例：「本社伝は〇〇天皇の当地滞在を根拠とするが、天皇の当地比定自体が本社伝を主論拠の一つとしており、独立した裏付けではない」）。
 
 ---
 
@@ -118,6 +128,13 @@ confidence: 1-5（5が最高）
 - **アクセス（電車・バス・車）**: 最寄り駅からの徒歩分・路線バス・高速IC
 - **ストリートビュー・施設構造観察**: 外観・鳥居・拝殿・周囲の遮蔽防壁・看板有無等の空間分析情報
 
+**比定地が広域／未確定の場合**（欠史八代の宮・陵比定など、ピン留め可能な1点座標が存在しない対象）：
+実測座標・GoogleMapsURLは省略し、代わりに以下を書く。
+- **比定範囲**: 〇〇郡〇〇周辺（市町村〜大字レベルの広域地名）
+- **比定根拠**: 地名対応／伝承地／考古遺跡の近接、のいずれに基づくかを明記
+- **確定度**: 未特定 / 複数説あり（併記） / 有力説1点、のいずれかを明記
+- 複数の比定説が併存する場合は表で併記し、優劣を断定しない
+
 ---
 
 ## 9. 参照ブログ・Web資料
@@ -130,6 +147,11 @@ confidence: 1-5（5が最高）
 
 ### awa-otoko系
 - [[YYYY-MM-DD-X]]
+
+### 欠史八代系（koraku・笹田学説・古代史塾等）
+- [[koraku記事X]]
+- [[笹田先生YouTube-X]]
+- [[古代史塾-X]]
 
 ---
 

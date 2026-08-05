@@ -41,10 +41,15 @@ tags: [神/X or 氏族/Y, 関連テーマ, 阿波説]
 旧国: 阿波国 / ...   # 論点に地理がある場合のみ
 deities: ["[[当該神格や中心人物]]"]   # 神格ノートの場合
 clans: ["[[関連氏族]]"]                # 氏族ノートの場合
-evidence_type: primary_source_based / shrine_origin / blog_hypothesis / fringe_hypothesis
+evidence_type: primary_source_based / shrine_origin / archaeological_evidence / blog_hypothesis / fringe_hypothesis
 confidence: 1-5（5が最高）
+reign_number: 第N代   # 天皇ノートの場合のみ
+palace: "[[宮の比定地]]"    # 天皇ノートの場合のみ。未確定なら地名文字列のまま
+mausoleum: "[[陵の比定地]]" # 天皇ノートの場合のみ。未確定なら地名文字列のまま
 ---
 ```
+
+`reign_number`/`palace`/`mausoleum` は天皇・伝承ノートに限り使用する。比定地が確定していない場合は wikilink 化せず地名文字列のまま書き、確定した場合のみ `[[basename]]` にする。歴代天皇_MOC等での一覧生成・比定地の一括参照を目的とする。
 
 `evidence_type` の選択：
 - `primary_source_based` — 記紀・延喜式・風土記等の一次史料で骨格が裏付く
@@ -88,6 +93,14 @@ confidence: 1-5（5が最高）
 
 ### 2-1. 〇〇
 ### 2-2. 〇〇
+
+---
+
+## 2α. 事績欠如の説明（欠史八代等、事績記載が乏しい天皇の場合のみ）
+
+（「記紀に事績記載が乏しい＝実在否定」という通説側の主要論拠を、留保セクションとは切り離してここで論じる。
+ 阿波説側の反論〔8世紀編集時の畿内中心編纂で地方伝承が切り捨てられた等〕と、
+ 通説側の解釈〔欠史八代は後世の系譜的創作〕を併記し、断定しない）
 
 ---
 

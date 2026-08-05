@@ -12,6 +12,17 @@
 $script:secretsDir = Join-Path $PSScriptRoot '..\_secrets'
 $script:defaultVault = 'religion'
 
+# コンソール出力エンコーディングをUTF-8に統一する。
+# 未設定のままだと、Obsidian未起動時の接続エラー等 .NET が投げる例外メッセージが
+# 環境既定のコードページ（Windowsでは概ねCP932）で解釈され、日本語メッセージが文字化けする。
+# vault-*.ps1 側でも同様に設定しているが、本モジュールを直接 Import-Module して使う
+# 自作スクリプトではその設定が無いため、モジュール読み込み時点でここでも設定する。
+try {
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+} catch {
+    # 非対話環境等でコンソールが無い場合は無視
+}
+
 function Set-ObsidianVault {
     <#
     .SYNOPSIS
@@ -368,6 +379,92 @@ function Edit-ObsidianNoteSection {
     return Invoke-ObsidianApi -Method PATCH -Path "/vault/$encoded" -Body $instruction -ContentType 'application/json' -Vault $Vault
 }
 
+function Add-ObsidianTableRow {
+    <#
+    .SYNOPSIS
+    Markdownテーブルの最終行の直後に新しい行を安全に追加する。
+    .DESCRIPTION
+    Edit-ObsidianNoteSection の heading+append はセクション「末尾」への追記であり、
+    テーブルの最終行の内側（テーブル構造の一部）に挿入する機能ではない。
+    これをテーブル行追加に使うと、テーブル外に孤立した1行が挿入されMarkdown構造が壊れる
+    （検証済みの既知の失敗パターン）。
+    本関数は対象テーブルの最終行文字列を目印に、その直後へ改行区切りで新しい行を挿入する
+    安全な代替手段（全文取得→文字列置換→全文上書き）を提供する。
+    .PARAMETER FilePath
+    Vault相対パス
+    .PARAMETER AnchorRowText
+    挿入位置の目印にする、テーブルの既存最終行の内容（`| ... | ... |`形式の完全一致文字列）。
+    このテーブル内で一意になる文字列を指定すること。
+    .PARAMETER NewRow
+    追加する新しい行（`| ... | ... |`形式。呼び出し側で組み立てること）。
+    .PARAMETER Vault
+    'awa' | 'religion' 等。省略時は $env:OBSIDIAN_VAULT または既定Vault
+    .EXAMPLE
+    Add-ObsidianTableRow -FilePath '...' -AnchorRowText '| 後裔 | 和珥氏ほか | 長国造 |' -NewRow '| 宮の異説 | 大和 | 阿波 |' -Vault awa
+    #>
+    param(
+        [Parameter(Mandatory)][string]$FilePath,
+        [Parameter(Mandatory)][string]$AnchorRowText,
+        [Parameter(Mandatory)][string]$NewRow,
+        [string]$Vault
+    )
+    $content = Get-ObsidianNote -FilePath $FilePath -Vault $Vault
+    $occurrences = ([regex]::Matches($content, [regex]::Escape($AnchorRowText))).Count
+    if ($occurrences -eq 0) {
+        throw "AnchorRowText がファイル内に見つかりません。既存テーブルの最終行と完全一致する文字列を指定してください。"
+    }
+    if ($occurrences -gt 1) {
+        throw "AnchorRowText がファイル内に $occurrences 箇所ヒットし一意に特定できません。より長い（前後を含む）文字列を指定してください。"
+    }
+    $replacement = "$AnchorRowText`n$NewRow"
+    $fixed = $content.Replace($AnchorRowText, $replacement)
+    Write-ObsidianNote -FilePath $FilePath -Content $fixed -Vault $Vault | Out-Null
+    return [PSCustomObject]@{ FilePath = $FilePath; InsertedRow = $NewRow }
+}
+
+function Add-ObsidianCalloutLine {
+    <#
+    .SYNOPSIS
+    blockquote/callout（`> [!warning]`等）内の最終行の直後に新しい行を安全に追加する。
+    .DESCRIPTION
+    Edit-ObsidianNoteSection の heading+append はセクション「末尾」への追記であり、
+    blockquote（`>`始まりの行が連続するブロック）の内側に挿入する機能ではない。
+    これをcallout内の箇条書き追加に使うと、blockquote外に孤立した平文行が挿入され
+    Markdown構造が壊れる（検証済みの既知の失敗パターン）。
+    本関数は対象blockquoteの最終行文字列を目印に、その直後へ `>` プレフィックス付きの
+    新しい行を挿入する安全な代替手段（全文取得→文字列置換→全文上書き）を提供する。
+    .PARAMETER FilePath
+    Vault相対パス
+    .PARAMETER AnchorLineText
+    挿入位置の目印にする、blockquoteの既存最終行の内容（`>`プレフィックスを含む完全一致文字列）。
+    ファイル内で一意になる文字列を指定すること。
+    .PARAMETER NewLineContent
+    追加する行の内容（`>`プレフィックスは付けない。本関数が `> ` を自動付与する）。
+    .PARAMETER Vault
+    'awa' | 'religion' 等。省略時は $env:OBSIDIAN_VAULT または既定Vault
+    .EXAMPLE
+    Add-ObsidianCalloutLine -FilePath '...' -AnchorLineText '> - 本ノートの evidence_type は "blog_hypothesis"、confidence は 2。' -NewLineContent '- 追加の留保事項' -Vault awa
+    #>
+    param(
+        [Parameter(Mandatory)][string]$FilePath,
+        [Parameter(Mandatory)][string]$AnchorLineText,
+        [Parameter(Mandatory)][string]$NewLineContent,
+        [string]$Vault
+    )
+    $content = Get-ObsidianNote -FilePath $FilePath -Vault $Vault
+    $occurrences = ([regex]::Matches($content, [regex]::Escape($AnchorLineText))).Count
+    if ($occurrences -eq 0) {
+        throw "AnchorLineText がファイル内に見つかりません。既存blockquoteの最終行と完全一致する文字列（'>'込み）を指定してください。"
+    }
+    if ($occurrences -gt 1) {
+        throw "AnchorLineText がファイル内に $occurrences 箇所ヒットし一意に特定できません。より長い（前後を含む）文字列を指定してください。"
+    }
+    $replacement = "$AnchorLineText`n> $NewLineContent"
+    $fixed = $content.Replace($AnchorLineText, $replacement)
+    Write-ObsidianNote -FilePath $FilePath -Content $fixed -Vault $Vault | Out-Null
+    return [PSCustomObject]@{ FilePath = $FilePath; InsertedLine = $NewLineContent }
+}
+
 function Get-ObsidianActiveNote {
     <#
     .SYNOPSIS
@@ -417,4 +514,4 @@ function Test-ObsidianApi {
     return Invoke-ObsidianApi -Method GET -Path '/' -Vault $Vault
 }
 
-Export-ModuleMember -Function Get-ObsidianConfig, Get-ObsidianConfigPath, Set-ObsidianVault, Get-ObsidianBaseUri, Get-ObsidianHeaders, Invoke-ObsidianApi, Get-ObsidianVaultList, Get-ObsidianDirList, Get-ObsidianNote, Search-ObsidianVault, Search-ObsidianVaultAdvanced, Append-ObsidianNote, Write-ObsidianNote, New-ObsidianFolder, Remove-ObsidianNote, Move-ObsidianNote, Edit-ObsidianNoteSection, Get-ObsidianActiveNote, Get-ObsidianCommandList, Invoke-ObsidianCommand, Test-ObsidianApi
+Export-ModuleMember -Function Get-ObsidianConfig, Get-ObsidianConfigPath, Set-ObsidianVault, Get-ObsidianBaseUri, Get-ObsidianHeaders, Invoke-ObsidianApi, Get-ObsidianVaultList, Get-ObsidianDirList, Get-ObsidianNote, Search-ObsidianVault, Search-ObsidianVaultAdvanced, Append-ObsidianNote, Write-ObsidianNote, New-ObsidianFolder, Remove-ObsidianNote, Move-ObsidianNote, Edit-ObsidianNoteSection, Add-ObsidianTableRow, Add-ObsidianCalloutLine, Get-ObsidianActiveNote, Get-ObsidianCommandList, Invoke-ObsidianCommand, Test-ObsidianApi

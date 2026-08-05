@@ -69,7 +69,7 @@ pwsh -NoProfile -Command "& '<このスキルのtools>/vault-batch-summary.ps1' 
 pwsh -NoProfile -File <このスキルのtools>/vault-batch-summary.ps1 -PathsFile paths.txt -Lines 5 [-Vault <vault名>]
 ```
 
-各ファイルのfrontmatterと本文冒頭N行（既定5行）だけを返す。分類・棚卸し・増補対象の下調べなど「対象N件の現状をざっと把握したい」場面で、1件ずつ`vault-read`するより出力トークンを大幅に削減できる。**Bash経由で`-Paths`に配列を渡す場合はカンマ区切り文字列ではなく`pwsh -Command`+PowerShell配列リテラル`@(...)`を使うこと**（`-File`経由でカンマ区切り文字列を渡すと1要素として扱われ404になる）。件数が多い場合は`-PathsFile`で改行区切りのパス一覧ファイルを渡す方が安全。
+各ファイルのfrontmatterと本文冒頭N行（既定5行）だけを返す。分類・棚卸し・増補対象の下調べなど「対象N件の現状をざっと把握したい」場面で、1件ずつ`vault-read`するより出力トークンを大幅に削減できる。**Bash経由で`-Paths`に配列を渡す場合はカンマ区切り文字列ではなく`pwsh -Command`+PowerShell配列リテラル`@(...)`を使うこと**（`-File`経由でカンマ区切り文字列を渡すと1要素として扱われ404になる）。件数が多い場合は`-PathsFile`で改行区切りのパス一覧ファイルを渡す方が安全。**`-PathsFile`にBashのheredoc（`/dev/stdin`）は使えない**（`Get-Content -LiteralPath`が`/proc/self/fd/0`を解決できずエラーになる。PowerShellはWindowsプロセスとしてheredocのfd経由読み込みに対応していないため）。一時ファイルに書き出してから渡すか、件数が少なければ`-Paths`配列リテラルを使うこと。
 
 ### フォルダ新規作成
 
@@ -173,6 +173,22 @@ Move-ObsidianNote -FromPath '旧パス.md' -ToPath '新パス.md' -Vault <vault�
 Edit-ObsidianNoteSection -FilePath '...' -TargetType heading -Target @('タイトル', '参考文献') -Operation append -Content '- 追加の参考文献' -Vault <vault名>
 # frontmatterの値を更新する場合は -Content ではなく -Value を使う（型付きJSON値）
 Edit-ObsidianNoteSection -FilePath '...' -TargetType frontmatter -Target 'status' -Operation replace -Value 'reviewed' -Vault <vault名>
+```
+
+> **注意：`heading`+`append`はセクション「末尾」への追記であり、テーブルの最終行やblockquote（`> [!warning]`等）の内側に挿入する機能ではない。** テーブルの行として追加したい／blockquoteの箇条書きとして追加したいのにこれを使うと、セクション末尾に「テーブル外の孤立した1行」「blockquote外の孤立した箇条書き」が挿入され、Markdown構造が壊れる（実際に発生・要Write再修正）。**テーブル内の行追加は`Add-ObsidianTableRow`、blockquote内の追記は`Add-ObsidianCalloutLine`を使うこと**（下記）。
+
+```powershell
+# テーブルの最終行の直後に新しい行を安全に追加（全文取得→既存最終行を目印に文字列置換→上書き、を内部で実行）
+Add-ObsidianTableRow -FilePath '...' -AnchorRowText '| 既存の最終行 | ... | ... |' -NewRow '| 新しい行 | ... | ... |' -Vault <vault名>
+
+# blockquote/callout（> [!warning] 等）の最終行の直後に新しい箇条書きを安全に追加
+# NewLineContentには '>' プレフィックスを付けない（自動で '> ' が付与される）
+Add-ObsidianCalloutLine -FilePath '...' -AnchorLineText '> - 既存の最終行' -NewLineContent '追加する箇条書き' -Vault <vault名>
+```
+
+いずれも `AnchorRowText`/`AnchorLineText` はファイル内で一意な文字列である必要があり、0件または複数件ヒットした場合はエラーで停止する（サイレントな誤挿入を防ぐ安全策）。
+
+```powershell
 
 # タグ・frontmatterなどJsonLogic条件での構造化検索
 Search-ObsidianVaultAdvanced -Query @{ 'in' = @('検索語', @{'var'='tags'}) } -Vault <vault名>
@@ -222,7 +238,7 @@ pwsh -NoProfile -Command "Import-Module '<このスキルのtools>/obsidian-api.
 | GET | `/vault/<file>` | ファイル内容取得 | `Get-ObsidianNote` |
 | PUT | `/vault/<file>` | ファイル作成/上書き | `Write-ObsidianNote` |
 | POST | `/vault/<file>` | ファイル末尾追記 | `Append-ObsidianNote` |
-| PATCH | `/vault/<file>` | 見出し・ブロック・frontmatterへの相対挿入 | `Edit-ObsidianNoteSection` |
+| PATCH | `/vault/<file>` | 見出し・ブロック・frontmatterへの相対挿入 | `Edit-ObsidianNoteSection`（テーブル行・blockquote行の追加は`Add-ObsidianTableRow`/`Add-ObsidianCalloutLine`＝GET+PUTの合成を使うこと） |
 | DELETE | `/vault/<file>` | ファイル削除 | `Remove-ObsidianNote`（`Move-ObsidianNote`は書き込み+削除の合成） |
 | POST | `/search/simple/?query=X` | 全文検索 | `Search-ObsidianVault` |
 | POST | `/search/` | JsonLogic検索（タグ・frontmatter条件） | `Search-ObsidianVaultAdvanced` |
