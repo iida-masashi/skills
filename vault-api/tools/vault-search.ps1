@@ -14,14 +14,15 @@ param(
 
 Import-Module (Join-Path $PSScriptRoot 'obsidian-api.psm1') -Force -WarningAction SilentlyContinue
 
-$results = Search-ObsidianVault -Query $Query -ContextLength $ContextLength -Vault $Vault
-$totalCount = $results.Count
+$rawResults = Search-ObsidianVault -Query $Query -ContextLength $ContextLength -Vault $Vault
+$totalCount = $rawResults.Count
 
 Write-Output ("検索: '" + $Query + "'")
 Write-Output ("ヒット数: " + $totalCount)
 Write-Output ""
 
-$shown = if ($Limit -gt 0) { $results | Select-Object -First $Limit } else { $results }
+# APIレスポンス取得直後にLimitで切り詰め、以降の文字列整形をLimit件数分だけに抑える
+$shown = if ($Limit -gt 0) { $rawResults | Select-Object -First $Limit } else { $rawResults }
 foreach ($r in $shown) {
     Write-Output ("── " + $r.filename)
     foreach ($match in $r.matches) {

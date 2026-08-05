@@ -6,7 +6,7 @@ Obsidian Local REST API（v4.1.2）経由でObsidian Vaultを直接操作する�
 |----------|---------|
 | [SKILL.md](SKILL.md) | 構成・使い方・エンドポイント一覧・トラブルシュート |
 
-> `tools/`配下のラッパー8本（Local REST API経由の6本＋ファイルシステム直接操作の孤立ノート/薄ノート検出2本）と共通モジュール`obsidian-api.psm1`はこのリポジトリに含まれる。APIキーを保管する`_secrets/obsidian.<vault>.json`（例: `obsidian.awa.json`, `obsidian.religion.json`）は`.gitignore`対象でリポジトリには含まれず、自分で作成する。`tools/maintenance/`（個人研究Vault専用の詳細版整備ツール群）は個人研究Vault専用の生データ・個人絶対パスを含むため、このリポジトリでは`.gitignore`で除外している。
+> `tools/`配下のラッパー9本（Local REST API経由の7本＋ファイルシステム直接操作の孤立ノート/薄ノート検出2本）と共通モジュール`obsidian-api.psm1`はこのリポジトリに含まれる。APIキーを保管する`_secrets/obsidian.<vault>.json`（例: `obsidian.awa.json`, `obsidian.religion.json`）は`.gitignore`対象でリポジトリには含まれず、自分で作成する。`tools/maintenance/`（個人研究Vault専用の詳細版整備ツール群）は個人研究Vault専用の生データ・個人絶対パスを含むため、このリポジトリでは`.gitignore`で除外している。
 
 ## 複数Vault対応
 
@@ -51,6 +51,10 @@ pwsh -NoProfile -File <このスキルのtools>/vault-search.ps1 -Query "検索�
 # ファイル読み取り
 pwsh -NoProfile -File <このスキルのtools>/vault-read.ps1 -Path "フォルダ/note.md" [-Lines N] [-Vault awa|religion]
 
+# 複数ファイルの一括サマリ（frontmatter+冒頭N行のみ、トークン節約用）
+pwsh -NoProfile -Command "& '<このスキルのtools>/vault-batch-summary.ps1' -Paths @('フォルダ/a.md','フォルダ/b.md') -Vault religion"
+pwsh -NoProfile -File <このスキルのtools>/vault-batch-summary.ps1 -PathsFile paths.txt [-Lines 5] [-Vault awa|religion]
+
 # ディレクトリ一覧（-Path省略でルート）
 pwsh -NoProfile -File <このスキルのtools>/vault-list.ps1 [-Path "フォルダ/"] [-Vault awa|religion]
 
@@ -65,10 +69,11 @@ pwsh -NoProfile -File <このスキルのtools>/vault-move.ps1 -From "旧フォ�
 pwsh -NoProfile -File <このスキルのtools>/vault-delete.ps1 -Path "フォルダ/note.md" [-Vault awa|religion]
 
 # 孤立ノート検出（どこからもwikilinkされていないノート、ファイルシステム直接操作のため-Vault不要・-VaultRootで直接指定）
-pwsh -NoProfile -File <このスキルのtools>/vault-orphans.ps1 -VaultRoot "<Vaultパス>" [-SubPath "フォルダ"] [-OutCsv path]
+# -Summaryでフォルダ別集計+サイズ上位N件のみ返す（生の全件一覧を出さずトークン節約。全件必要なら-OutCsv）
+pwsh -NoProfile -File <このスキルのtools>/vault-orphans.ps1 -VaultRoot "<Vaultパス>" [-SubPath "フォルダ"] [-OutCsv path] [-Summary [-Top 10]]
 
 # 薄ノート検出（指定バイト数未満のノート、ファイルシステム直接操作のため-Vault不要・-VaultRootで直接指定）
-pwsh -NoProfile -File <このスキルのtools>/vault-thin-notes.ps1 -VaultRoot "<Vaultパス>" [-Folder "部分一致名"] [-Threshold 3000]
+pwsh -NoProfile -File <このスキルのtools>/vault-thin-notes.ps1 -VaultRoot "<Vaultパス>" [-Folder "部分一致名"] [-Threshold 3000] [-Summary [-Top 10]]
 ```
 
 `obsidian-api.psm1` を直接importして使う場合の主な関数（ラッパースクリプトが内部で呼んでいるもの）。全て`-Vault awa|religion`を受け付ける。
@@ -103,26 +108,33 @@ Invoke-ObsidianCommand -CommandId 'app:reload' [-Vault awa|religion]  # コマ�
 - **UTF-8対策はラッパーによって差がある** — `vault-search.ps1`/`vault-read.ps1`/`vault-list.ps1`/`vault-move.ps1`/`vault-delete.ps1`は先頭で`[Console]::OutputEncoding`をUTF-8に設定しているが、`vault-append.ps1`にはこの設定がない。`obsidian-api.psm1`を直接importして自作スクリプトを書く場合も、スクリプト側で同様の設定が必要。
 - **接続はローカル限定** — 接続先は`127.0.0.1:27124`のみ。HTTPS自己署名証明書のため`-SkipCertificateCheck`を使用。Obsidian起動時のみAPIが動作する。
 
-## 実行例（出力フォーマット）
-
-Obsidian Local REST API経由のラッパー（`vault-search.ps1`等）は`_secrets/obsidian.json`未設定のため実行結果は未検証。`vault-orphans.ps1`/`vault-thin-notes.ps1`（ファイルシステム直接操作、API不要）はテストVaultでの動作確認済み。以下は各スクリプトの`Write-Output`呼び出しから確認できる出力フォーマット（プレースホルダ値）。
+## 実行例（出力フォーマット、religion Vaultで実測）
 
 `vault-search.ps1`:
 ```
-検索: '検索語'
-ヒット数: N
+検索: '教団'
+ヒット数: 280
 
-── ファイル名.md
-    （コンテキスト文字列、200文字超は...で切り詰め）
+── 01_宗派・異端研究/sources/src_wikipedia_kurozumikyo.md
+    ipedia「黒住教」記事要約 ## 創始者・立教年 黒住宗忠が1814年...
 
-... 残り N 件は省略
+... 残り 277 件は省略
 ```
 
-`vault-read.ps1`（`-Lines`指定時）:
+`vault-batch-summary.ps1`（frontmatter+冒頭N行のみ、`vault-read`のフル取得より出力が小さい）:
 ```
-（先頭N行の内容）
+対象: 2 件
 
---- N / M 行表示 ---
+── 01_宗派・異端研究/12_その他/GLA.md
+    [frontmatter]
+      aliases: [GLA, God Light Association, ...]
+      分類: 新宗教 / 霊道・八正道・魂の学系
+      ...
+    [本文冒頭]
+      # GLA 専門構造分析ノート
+      > [!summary] 要旨
+      ...
+    (全188行 / 6932文字)
 ```
 
 `vault-move.ps1`:
@@ -131,32 +143,45 @@ Obsidian Local REST API経由のラッパー（`vault-search.ps1`等）は`_secr
 注意: wikilinkはbasename参照のため、拡張子のみ変更やフォルダ移動ではリンクは切れない。basename自体を変えた場合は他ノートの参照を手動で確認すること。
 ```
 
-`vault-orphans.ps1`:
+`vault-orphans.ps1`（`-Summary -Top 5`）:
 ```
 Scanning... SubPath=(全体)
-総ノート数（資料系除外）: N
-孤立ノート数: N
+総ノート数（資料系除外）: 383
+孤立ノート数: 114
 
-=== 孤立ノート一覧（サイズ降順） ===
-      32B : orphan.md
-      22B : note1.md
+=== フォルダ別集計 ===
+    87件 : note_ichinomoto185
+    14件 : 01_宗派・異端研究\sources
+     ...
+
+=== 上位 5 件（サイズ降順） ===
+  994968B : 01_宗派・異端研究\sources\src_bunkacho_shukyo_nenkan_r03.md
+   ...
+  ... 残り 109 件は省略（-OutCsv で全件出力可）
 ```
 
-`vault-thin-notes.ps1`:
+`vault-thin-notes.ps1`（`-Summary -Top 5`）:
 ```
-検索対象: <Vaultパス> 全体
-対象総数: N
-閾値: NB
+検索対象: D:/Vault/religion 全体
+対象総数: 383
+閾値: 3000B
 
-- 500B未満: N 件
-- 1000B未満: N 件
-- 2000B未満: N 件
-- 3000B未満: N 件
+- 500B未満: 29 件
+- 1000B未満: 31 件
+- 2000B未満: 57 件
+- 3000B未満: 75 件
 
-=== 薄ノート一覧（サイズ昇順） ===
-      14B : folder\note2.md
+=== フォルダ別集計 ===
+    37件 : 01_宗派・異端研究\sources
+    35件 : note_ichinomoto185
+     ...
 
-合計: N 件
+=== 最小サイズ上位 5 件 ===
+     355B : note_ichinomoto185\2022-08-31-中山みき研究ノート 資料18.md
+     ...
+  ... 残り 70 件は省略（-OutCsv で全件出力可）
+
+合計: 75 件
 ```
 
 ## 既存ツールとの比較
@@ -168,7 +193,7 @@ SKILL.mdより。
 | **vault-api（本スキル）** | Obsidian経由でwikilink解決・タグ検索が正確、Obsidian再起動不要 | Obsidianアプリ起動必須 |
 | **Read/Grep/Glob（標準）** | Obsidian起動不要、高速 | Obsidian独自機能（タグ・dataview等）不可 |
 
-使い分けの推奨（SKILL.mdより）: 全文検索でコンテキスト付き結果が欲しい→`vault-search`／大量のファイル走査が必要→Grep/Glob／frontmatter編集・追記→Edit/Write／wikilink構造を理解した検索→`vault-search`／孤立ノート検出→本スキルの`tools/vault-orphans.ps1`／薄ノート検出→本スキルの`tools/vault-thin-notes.ps1`。
+使い分けの推奨（SKILL.mdより）: 全文検索でコンテキスト付き結果が欲しい→`vault-search`／大量のファイル走査が必要→Grep/Glob／frontmatter編集・追記→Edit/Write／wikilink構造を理解した検索→`vault-search`／孤立ノート検出→本スキルの`tools/vault-orphans.ps1`／薄ノート検出→本スキルの`tools/vault-thin-notes.ps1`／複数ファイルの現状をざっと下調べ→1件ずつ`vault-read`せず`tools/vault-batch-summary.ps1`でfrontmatter+冒頭だけ一括取得。
 
 ## セキュリティ
 

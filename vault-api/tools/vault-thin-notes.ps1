@@ -6,7 +6,9 @@ param(
     [Parameter(Mandatory)][string]$VaultRoot,
     [string]$Folder = '',
     [int]$Threshold = 3000,
-    [string]$OutCsv = ''
+    [string]$OutCsv = '',
+    [switch]$Summary,
+    [int]$Top = 10
 )
 
 # UTF-8 出力（Bash経由のpwsh呼び出しで日本語が文字化けするのを防ぐ）
@@ -46,11 +48,30 @@ Write-Output ('- 1000B未満: ' + @($allMd | Where-Object { $_.Length -lt 1000 }
 Write-Output ('- 2000B未満: ' + @($allMd | Where-Object { $_.Length -lt 2000 }).Count + ' 件')
 Write-Output ('- 3000B未満: ' + @($allMd | Where-Object { $_.Length -lt 3000 }).Count + ' 件')
 Write-Output ''
-Write-Output '=== 薄ノート一覧（サイズ昇順） ==='
-
-foreach ($f in $thin) {
-    $rel = $f.FullName.Substring($searchPath.Length).TrimStart('\')
-    Write-Output ("  {0,6}B : {1}" -f $f.Length, $rel)
+if ($Summary) {
+    # フォルダ別集計 + 上位N件のみ表示（生一覧を出さずトークンを節約）
+    Write-Output '=== フォルダ別集計 ==='
+    $byFolder = $thin | Group-Object { Split-Path ($_.FullName.Substring($searchPath.Length).TrimStart('\')) -Parent } |
+        Sort-Object Count -Descending
+    foreach ($g in $byFolder) {
+        $label = if ($g.Name) { $g.Name } else { '(ルート)' }
+        Write-Output ("  {0,4}件 : {1}" -f $g.Count, $label)
+    }
+    Write-Output ''
+    Write-Output ("=== 最小サイズ上位 $Top 件 ===")
+    foreach ($f in ($thin | Select-Object -First $Top)) {
+        $rel = $f.FullName.Substring($searchPath.Length).TrimStart('\')
+        Write-Output ("  {0,6}B : {1}" -f $f.Length, $rel)
+    }
+    if ($thin.Count -gt $Top) {
+        Write-Output ("  ... 残り " + ($thin.Count - $Top) + " 件は省略（-OutCsv で全件出力可）")
+    }
+} else {
+    Write-Output '=== 薄ノート一覧（サイズ昇順） ==='
+    foreach ($f in $thin) {
+        $rel = $f.FullName.Substring($searchPath.Length).TrimStart('\')
+        Write-Output ("  {0,6}B : {1}" -f $f.Length, $rel)
+    }
 }
 
 Write-Output ''

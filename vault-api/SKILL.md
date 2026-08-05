@@ -1,6 +1,6 @@
 ---
 name: vault-api
-description: Obsidian Local REST API経由でObsidian Vaultを直接操作する。MCPの代替で、Bash経由のPowerShellスクリプト群（vault-search/vault-read/vault-list/vault-append/vault-move/vault-delete/vault-orphans/vault-thin-notes）。全文検索・構造化検索・読み取り・一覧・追記・見出し相対挿入・リネーム・削除・孤立ノート検出・薄ノート検出をBashツールで実行可能。
+description: Obsidian Local REST API経由でObsidian Vaultを直接操作する。MCPの代替で、Bash経由のPowerShellスクリプト群（vault-search/vault-read/vault-batch-summary/vault-list/vault-append/vault-move/vault-delete/vault-orphans/vault-thin-notes）。全文検索・構造化検索・読み取り・複数ファイル一括サマリ・一覧・追記・見出し相対挿入・リネーム・削除・孤立ノート検出・薄ノート検出をBashツールで実行可能。
 disable-model-invocation: false
 ---
 
@@ -31,6 +31,7 @@ Vaultを切り替える際は、**Obsidianアプリ側でも対象Vaultを開い
 | `tools/obsidian-api.psm1` | 共通モジュール（関数群） |
 | `tools/vault-search.ps1` | Vault全文検索 |
 | `tools/vault-read.ps1` | ファイル読み取り |
+| `tools/vault-batch-summary.ps1` | 複数ファイルのfrontmatter+先頭数行だけを一括取得（分類・下調べフェーズのトークン節約用） |
 | `tools/vault-list.ps1` | ディレクトリ一覧 |
 | `tools/vault-append.ps1` | ファイル末尾追記 |
 | `tools/vault-move.ps1` | ファイルのリネーム/移動 |
@@ -58,6 +59,16 @@ pwsh -NoProfile -File <このスキルのtools>/vault-read.ps1 -Path "フォル�
 ```
 
 オプション `-Lines N` で先頭N行のみ取得。
+
+### 複数ファイル一括サマリ（トークン節約）
+
+```bash
+pwsh -NoProfile -Command "& '<このスキルのtools>/vault-batch-summary.ps1' -Paths @('フォルダ/a.md','フォルダ/b.md') -Vault religion"
+# または大量件数はファイル経由で
+pwsh -NoProfile -File <このスキルのtools>/vault-batch-summary.ps1 -PathsFile paths.txt -Lines 5 [-Vault awa|religion]
+```
+
+各ファイルのfrontmatterと本文冒頭N行（既定5行）だけを返す。分類・棚卸し・増補対象の下調べなど「対象N件の現状をざっと把握したい」場面で、1件ずつ`vault-read`するより出力トークンを大幅に削減できる。**Bash経由で`-Paths`に配列を渡す場合はカンマ区切り文字列ではなく`pwsh -Command`+PowerShell配列リテラル`@(...)`を使うこと**（`-File`経由でカンマ区切り文字列を渡すと1要素として扱われ404になる）。件数が多い場合は`-PathsFile`で改行区切りのパス一覧ファイルを渡す方が安全。
 
 ### ディレクトリ一覧
 
@@ -94,18 +105,18 @@ pwsh -NoProfile -File <このスキルのtools>/vault-delete.ps1 -Path "フォ�
 ### 孤立ノート検出
 
 ```bash
-pwsh -NoProfile -File <このスキルのtools>/vault-orphans.ps1 -VaultRoot "<Vaultパス>" [-SubPath "フォルダ"] [-ExcludeKeywords MOC,目次] [-OutCsv path]
+pwsh -NoProfile -File <このスキルのtools>/vault-orphans.ps1 -VaultRoot "<Vaultパス>" [-SubPath "フォルダ"] [-ExcludeKeywords MOC,目次] [-OutCsv path] [-Summary [-Top 10]]
 ```
 
-Vault配下の全 `.md` を再帰収集し（`.obsidian/`・`templates/`・`資料/`・`MEMORY.md` を除外）、他のどこからも `[[wikilink]]` されていないノートをサイズ降順で出力する。
+Vault配下の全 `.md` を再帰収集し（`.obsidian/`・`templates/`・`資料/`・`MEMORY.md` を除外）、他のどこからも `[[wikilink]]` されていないノートをサイズ降順で出力する。件数が多いVaultでは`-Summary`を付けるとフォルダ別集計+サイズ上位N件のみを返し、生の全件一覧を出力しないためトークンを節約できる（全件が必要な場合は`-OutCsv`でファイル出力）。
 
 ### 薄ノート検出
 
 ```bash
-pwsh -NoProfile -File <このスキルのtools>/vault-thin-notes.ps1 -VaultRoot "<Vaultパス>" [-Folder "部分一致名"] [-Threshold 3000] [-OutCsv path]
+pwsh -NoProfile -File <このスキルのtools>/vault-thin-notes.ps1 -VaultRoot "<Vaultパス>" [-Folder "部分一致名"] [-Threshold 3000] [-OutCsv path] [-Summary [-Top 10]]
 ```
 
-指定フォルダ（省略時は全体）配下で指定バイト数未満の `.md` をサイズ昇順で出力する（`.obsidian/`・`templates/`・`資料/`・`_work/` は除外）。強化対象のノートを体系的に発見する用途。
+指定フォルダ（省略時は全体）配下で指定バイト数未満の `.md` をサイズ昇順で出力する（`.obsidian/`・`templates/`・`資料/`・`_work/` は除外）。強化対象のノートを体系的に発見する用途。`-Summary`はフォルダ別集計+最小サイズ上位N件のみ返す（`vault-orphans`と同様）。
 
 ## PowerShell モジュールとして直接使う
 
@@ -179,6 +190,7 @@ Invoke-ObsidianCommand -CommandId 'app:reload' -Vault religion
 - **wikilink構造を理解した検索** → `vault-search`
 - **孤立ノート検出** → 本スキルの `tools/vault-orphans.ps1`
 - **薄ノート検出** → 本スキルの `tools/vault-thin-notes.ps1`
+- **複数ファイルの現状をざっと下調べしたい** → 1件ずつ`vault-read`せず `tools/vault-batch-summary.ps1` でfrontmatter+冒頭だけ一括取得
 
 ## API疎通確認
 

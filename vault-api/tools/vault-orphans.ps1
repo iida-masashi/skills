@@ -6,7 +6,9 @@ param(
     [Parameter(Mandatory)][string]$VaultRoot,
     [string]$SubPath = '',
     [string[]]$ExcludeKeywords = @(),
-    [string]$OutCsv = ''
+    [string]$OutCsv = '',
+    [switch]$Summary,
+    [int]$Top = 10
 )
 
 # UTF-8 出力（Bash経由のpwsh呼び出しで日本語が文字化けするのを防ぐ）
@@ -67,12 +69,33 @@ Write-Output ('Scanning... SubPath=' + $subPathLabel)
 Write-Output ('総ノート数（資料系除外）: ' + $allMd.Count)
 Write-Output ('孤立ノート数: ' + $orphans.Count)
 Write-Output ''
-Write-Output '=== 孤立ノート一覧（サイズ降順） ==='
 
 $orphanItems = $orphans | Sort-Object Length -Descending
-foreach ($item in $orphanItems) {
-    $rel = $item.FullName.Substring($root.Length).TrimStart('\')
-    Write-Output ("  {0,6}B : {1}" -f $item.Length, $rel)
+
+if ($Summary) {
+    # フォルダ別集計 + 上位N件のみ表示（生一覧を出さずトークンを節約）
+    Write-Output '=== フォルダ別集計 ==='
+    $byFolder = $orphanItems | Group-Object { Split-Path ($_.FullName.Substring($root.Length).TrimStart('\')) -Parent } |
+        Sort-Object Count -Descending
+    foreach ($g in $byFolder) {
+        $label = if ($g.Name) { $g.Name } else { '(ルート)' }
+        Write-Output ("  {0,4}件 : {1}" -f $g.Count, $label)
+    }
+    Write-Output ''
+    Write-Output ("=== 上位 $Top 件（サイズ降順） ===")
+    foreach ($item in ($orphanItems | Select-Object -First $Top)) {
+        $rel = $item.FullName.Substring($root.Length).TrimStart('\')
+        Write-Output ("  {0,6}B : {1}" -f $item.Length, $rel)
+    }
+    if ($orphanItems.Count -gt $Top) {
+        Write-Output ("  ... 残り " + ($orphanItems.Count - $Top) + " 件は省略（-OutCsv で全件出力可）")
+    }
+} else {
+    Write-Output '=== 孤立ノート一覧（サイズ降順） ==='
+    foreach ($item in $orphanItems) {
+        $rel = $item.FullName.Substring($root.Length).TrimStart('\')
+        Write-Output ("  {0,6}B : {1}" -f $item.Length, $rel)
+    }
 }
 
 if ($OutCsv) {
