@@ -54,6 +54,8 @@ Vault → Quartz → GitHub Pages の公開フロー全体をワンステップ�
 
 ### 2. Run sync
 
+ユーザーが `--skip-sync` を渡した場合はこのステップを飛ばす（直前に `vault-sync` 等で同じターゲットのsyncが成功済みの場合に使う）。commit message 用のサマリがない場合は「(sync skipped — 直前の実行結果を使用)」とだけ記録する。
+
 awaターゲット:
 ```bash
 cd "D:/Vault/awa/_work" && uv run python _sync_to_quartz.py
@@ -126,6 +128,7 @@ cd <quartz-repo> && git config http.postBuffer 524288000 && git push 2>&1
 | Flag | Effect |
 |---|---|
 | `awa` / `religion` | 対象ターゲットを明示指定（位置引数、例: `/vault-publish religion`） |
+| `--skip-sync` | Step 2 (sync) をスキップ。直前に `vault-sync` 等で同じターゲットのsyncが成功済みの場合に、sync出力の再実行・再表示を避ける |
 | `--skip-build` | Step 3 (build verify) をスキップ。push 速度優先 |
 | `--message "..."` | commit message を上書き |
 | `--dry-run` | sync スクリプトを `--dry-run` 付きで実行し、何も commit/push しない |

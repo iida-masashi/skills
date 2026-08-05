@@ -103,5 +103,5 @@ cd <quartz-repo> && npx quartz build --serve
 
 - `vault-publish` との違い: **push しない**だけ。それ以外は同じ
 - ファイル変更内容を確認したい場合は、このスキル実行後に `cd <quartz-repo> && git diff --stat` で確認可能
-- 問題なければそのまま `cd <quartz-repo> && git add -A && git commit -m "..." && git push` か、より楽に `/vault-publish <target> --skip-build`(build は既に検証済みなのでスキップ可)
+- 問題なければそのまま `cd <quartz-repo> && git add -A && git commit -m "..." && git push` か、より楽に `/vault-publish <target> --skip-sync --skip-build`(sync/build は既に検証済みなので再実行せずスキップ可)
 - ターゲットを取り違えると無関係なVaultの内容でbuildしてしまう。曖昧な指示の場合は必ず確認してから実行する。

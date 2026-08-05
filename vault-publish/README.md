@@ -49,7 +49,7 @@ Obsidian Vault（阿波説デジタルガーデン awa-garden / 宗教研究デ�
 
 ## Highlights
 
-- **対象固定・設定探索なし** — 汎用版の `quartz-publish` と異なり、Vaultパス・スクリプト・リポジトリを毎回探索/確認する必要がない。awa/religionの2ターゲットのみをSKILL.md内の表で直接解決する。
+- **対象固定・設定探索なし** — Vaultパス・スクリプト・リポジトリを毎回探索/確認する必要がない。awa/religionの2ターゲットのみをSKILL.md内の表で直接解決する。
 - **ターゲット取り違え防止を最優先** — 曖昧な指示では既定値に倒さず必ず確認する運用をSKILL.md内で複数回明記。誤ったリポジトリへのpushは取り消しにくいため。
 - **build失敗はVault側の責任として halt** — YAMLエラー等が出たら自動修復せず、ユーザーがVaultを直すよう詳細を表示して停止する。
 - **Mermaid `%%` の罠を既知のトラブルシューティングとして記録** — Quartzの OFM transformer が `%%…%%` をObsidianブロックコメントとして間を全削除するため、mermaidフェンス内の `%%` は全廃が必要（build成功はクライアント側描画の保証にならない）。sync時に `_check_mermaid_comments.py` で warn-only 検出するが、これは awa のみ対応（religion側の対応は未確認、とSKILL.mdに明記）。
@@ -62,8 +62,5 @@ Obsidian Vault（阿波説デジタルガーデン awa-garden / 宗教研究デ�
 |---|---|---|---|
 | **vault-publish**（本スキル） | する | awa/religion固定 | 変更を実際に公開する |
 | [vault-sync](../vault-sync/SKILL.md) | しない | awa/religion固定 | push前のローカル確認・プレビュー専用。sync→build（→任意でserve）まで |
-| [quartz-publish](../quartz-publish/SKILL.md) | する | 汎用（Vault/リポジトリ非固定） | awa/religion以外のQuartzサイトを公開する場合。実行毎（または初回）にVaultパス・同期スクリプト・Quartzリポジトリ・公開URLをユーザーへの確認や慣例的な場所の探索で特定する必要がある |
 
-vault-sync との関係: vault-publish から git commit/push を除いたものが vault-sync。ローカルで先に見たい・pushせず反映したいときは vault-sync、フル公開したいときは vault-publish、という使い分けがSKILL.md双方に明記されている。vault-sync実行後にbuildまで成功していれば、`/vault-publish <target> --skip-build`（build検証済みのためスキップ可）で公開する運用が vault-sync 側のSKILL.mdに明記されている。
-
-quartz-publish との関係: quartz-publish はVault/リポジトリの情報を持たない汎用スキルで、「0. 設定の特定」ステップが必須。加えて、push直前に一度確認を取る旨がSKILL.md内に明記されている（vault-publishには同等の明記はない）。対象がawa-gardenまたはreligion-gardenであれば vault-publish を使い、それ以外の未知のQuartzサイトを公開する場合は quartz-publish を使う。
+vault-sync との関係: vault-publish から git commit/push を除いたものが vault-sync。ローカルで先に見たい・pushせず反映したいときは vault-sync、フル公開したいときは vault-publish、という使い分けがSKILL.md双方に明記されている。直前に vault-sync でsync/buildが成功済みなら、`/vault-publish <target> --skip-sync --skip-build`（後述の「Arguments」参照）で再実行せずcommit/pushだけ行う運用ができる。
