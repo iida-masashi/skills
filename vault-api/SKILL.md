@@ -1,6 +1,6 @@
 ---
 name: vault-api
-description: Obsidian Local REST API経由でObsidian Vaultを直接操作する。MCPの代替で、Bash経由のPowerShellスクリプト群（vault-search/vault-read/vault-batch-summary/vault-list/vault-append/vault-move/vault-delete/vault-orphans/vault-thin-notes）。全文検索・構造化検索・読み取り・複数ファイル一括サマリ・一覧・追記・見出し相対挿入・リネーム・削除・孤立ノート検出・薄ノート検出をBashツールで実行可能。
+description: Obsidian Local REST API経由でObsidian Vaultを直接操作する。MCPの代替で、Bash経由のPowerShellスクリプト群（vault-search/vault-read/vault-batch-summary/vault-list/vault-append/vault-mkdir/vault-move/vault-delete/vault-orphans/vault-thin-notes）。全文検索・構造化検索・読み取り・複数ファイル一括サマリ・一覧・追記・フォルダ新規作成・見出し相対挿入・リネーム・削除・孤立ノート検出・薄ノート検出をBashツールで実行可能。
 disable-model-invocation: false
 ---
 
@@ -34,6 +34,7 @@ Vaultを切り替える際は、**Obsidianアプリ側でも対象Vaultを開い
 | `tools/vault-batch-summary.ps1` | 複数ファイルのfrontmatter+先頭数行だけを一括取得（分類・下調べフェーズのトークン節約用） |
 | `tools/vault-list.ps1` | ディレクトリ一覧 |
 | `tools/vault-append.ps1` | ファイル末尾追記 |
+| `tools/vault-mkdir.ps1` | フォルダ新規作成（マーカーファイル書き込みによる合成操作） |
 | `tools/vault-move.ps1` | ファイルのリネーム/移動 |
 | `tools/vault-delete.ps1` | ファイル削除 |
 | `tools/vault-orphans.ps1` | 孤立ノート（どこからもwikilinkされていないノート）検出。`-SubPath`絞り込み・`-ExcludeKeywords`・`-OutCsv`対応 |
@@ -69,6 +70,14 @@ pwsh -NoProfile -File <このスキルのtools>/vault-batch-summary.ps1 -PathsFi
 ```
 
 各ファイルのfrontmatterと本文冒頭N行（既定5行）だけを返す。分類・棚卸し・増補対象の下調べなど「対象N件の現状をざっと把握したい」場面で、1件ずつ`vault-read`するより出力トークンを大幅に削減できる。**Bash経由で`-Paths`に配列を渡す場合はカンマ区切り文字列ではなく`pwsh -Command`+PowerShell配列リテラル`@(...)`を使うこと**（`-File`経由でカンマ区切り文字列を渡すと1要素として扱われ404になる）。件数が多い場合は`-PathsFile`で改行区切りのパス一覧ファイルを渡す方が安全。
+
+### フォルダ新規作成
+
+```bash
+pwsh -NoProfile -File <このスキルのtools>/vault-mkdir.ps1 -Path "新フォルダ/サブフォルダ" [-Vault <vault名>]
+```
+
+Local REST APIに専用のmkdirエンドポイントはなく、Vaultはファイルシステムのミラーでフォルダはファイルの存在に付随して作られる。そのため`_placeholder.md`というマーカーファイルを対象フォルダ配下に書き込むことでフォルダ自体を先に作成する（ドットファイル`.gitkeep`はObsidian側で隠しファイル扱いとなり取得・削除ができないため使わない — 検証済み）。フォルダに実ノートを追加したら、このマーカーファイルは`vault-delete.ps1`で削除してよい（残しても支障はない）。
 
 ### ディレクトリ一覧
 
@@ -148,6 +157,9 @@ Append-ObsidianNote -FilePath '...' -Content '追記内容' -Vault <vault名>
 
 # 完全上書き
 Write-ObsidianNote -FilePath '...' -Content '新内容' -Vault <vault名>
+
+# フォルダ新規作成（マーカーファイル書き込みによる合成操作）
+New-ObsidianFolder -FolderPath '新フォルダ/サブフォルダ' -Vault <vault名>
 
 # 削除
 Remove-ObsidianNote -FilePath '...' -Vault <vault名>

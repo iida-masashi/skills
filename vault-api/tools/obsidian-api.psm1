@@ -239,6 +239,30 @@ function Write-ObsidianNote {
     return Invoke-ObsidianApi -Method PUT -Path "/vault/$encoded" -Body $Content -ContentType 'text/markdown' -Vault $Vault
 }
 
+function New-ObsidianFolder {
+    <#
+    .SYNOPSIS
+    フォルダを新規作成する（Local REST APIに専用のmkdirエンドポイントがないため、マーカーファイル書き込みでフォルダの実体を作る合成操作）
+    .DESCRIPTION
+    Obsidian Vaultはファイルシステムのミラーであり、フォルダはファイルの存在に付随して作られる。
+    空フォルダを作りたい場合、このフォルダ配下にマーカーファイル（`_placeholder.md`）を書き込むことでフォルダ自体を先に作成できる。
+    ドットファイル（`.gitkeep`等）はObsidian側で隠しファイル扱いとなり、Local REST API経由での取得・削除ができないため使わない（検証済み）。
+    そのフォルダに実ノートを書き込んだ後は、このマーカーファイルを`Remove-ObsidianNote`で削除してよい（残しても支障はない）。
+    .PARAMETER FolderPath
+    作成するフォルダのVault相対パス（末尾の`/`は付けても付けなくても良い）
+    .PARAMETER Vault
+    'awa' | 'religion' 等。省略時は $env:OBSIDIAN_VAULT または既定Vault
+    #>
+    param(
+        [Parameter(Mandatory)][string]$FolderPath,
+        [string]$Vault
+    )
+    $normalized = $FolderPath.TrimEnd('/')
+    $keepPath = "$normalized/_placeholder.md"
+    Write-ObsidianNote -FilePath $keepPath -Content "このフォルダを作成するためのプレースホルダーファイル。実ノートを追加したら削除してよい。`n" -Vault $Vault | Out-Null
+    return [PSCustomObject]@{ Folder = $normalized; MarkerFile = $keepPath }
+}
+
 function Remove-ObsidianNote {
     <#
     .SYNOPSIS
@@ -393,4 +417,4 @@ function Test-ObsidianApi {
     return Invoke-ObsidianApi -Method GET -Path '/' -Vault $Vault
 }
 
-Export-ModuleMember -Function Get-ObsidianConfig, Get-ObsidianConfigPath, Set-ObsidianVault, Get-ObsidianBaseUri, Get-ObsidianHeaders, Invoke-ObsidianApi, Get-ObsidianVaultList, Get-ObsidianDirList, Get-ObsidianNote, Search-ObsidianVault, Search-ObsidianVaultAdvanced, Append-ObsidianNote, Write-ObsidianNote, Remove-ObsidianNote, Move-ObsidianNote, Edit-ObsidianNoteSection, Get-ObsidianActiveNote, Get-ObsidianCommandList, Invoke-ObsidianCommand, Test-ObsidianApi
+Export-ModuleMember -Function Get-ObsidianConfig, Get-ObsidianConfigPath, Set-ObsidianVault, Get-ObsidianBaseUri, Get-ObsidianHeaders, Invoke-ObsidianApi, Get-ObsidianVaultList, Get-ObsidianDirList, Get-ObsidianNote, Search-ObsidianVault, Search-ObsidianVaultAdvanced, Append-ObsidianNote, Write-ObsidianNote, New-ObsidianFolder, Remove-ObsidianNote, Move-ObsidianNote, Edit-ObsidianNoteSection, Get-ObsidianActiveNote, Get-ObsidianCommandList, Invoke-ObsidianCommand, Test-ObsidianApi

@@ -6,7 +6,7 @@ Obsidian Local REST API（v4.1.2）経由でObsidian Vaultを直接操作する�
 |----------|---------|
 | [SKILL.md](SKILL.md) | 構成・使い方・エンドポイント一覧・トラブルシュート |
 
-> `tools/`配下のラッパー9本（Local REST API経由の7本＋ファイルシステム直接操作の孤立ノート/薄ノート検出2本）と共通モジュール`obsidian-api.psm1`はこのリポジトリに含まれる。APIキーを保管する`_secrets/obsidian.<vault名>.json`は`.gitignore`対象でリポジトリには含まれず、自分で作成する。`tools/maintenance/`（個人研究Vault専用の詳細版整備ツール群）は個人研究Vault専用の生データ・個人絶対パスを含むため、このリポジトリでは`.gitignore`で除外している。
+> `tools/`配下のラッパー10本（Local REST API経由の8本＋ファイルシステム直接操作の孤立ノート/薄ノート検出2本）と共通モジュール`obsidian-api.psm1`はこのリポジトリに含まれる。APIキーを保管する`_secrets/obsidian.<vault名>.json`は`.gitignore`対象でリポジトリには含まれず、自分で作成する。`tools/maintenance/`（個人研究Vault専用の詳細版整備ツール群）は個人研究Vault専用の生データ・個人絶対パスを含むため、このリポジトリでは`.gitignore`で除外している。
 
 ## 複数Vault対応
 
@@ -55,6 +55,9 @@ pwsh -NoProfile -File <このスキルのtools>/vault-read.ps1 -Path "フォル�
 pwsh -NoProfile -Command "& '<このスキルのtools>/vault-batch-summary.ps1' -Paths @('フォルダ/a.md','フォルダ/b.md') -Vault <vault名>"
 pwsh -NoProfile -File <このスキルのtools>/vault-batch-summary.ps1 -PathsFile paths.txt [-Lines 5] [-Vault <vault名>]
 
+# フォルダ新規作成（マーカーファイル書き込みによる合成操作。Local REST APIに専用のmkdirエンドポイントがないため）
+pwsh -NoProfile -File <このスキルのtools>/vault-mkdir.ps1 -Path "新フォルダ/サブフォルダ" [-Vault <vault名>]
+
 # ディレクトリ一覧（-Path省略でルート）
 pwsh -NoProfile -File <このスキルのtools>/vault-list.ps1 [-Path "フォルダ/"] [-Vault <vault名>]
 
@@ -102,6 +105,7 @@ Invoke-ObsidianCommand -CommandId 'app:reload' [-Vault <vault名>]  # コマン�
 
 - **MCPサーバーを登録できない/使いたくない環境向けの代替** — Local REST APIを直接叩くPowerShellラッパーとして実装。
 - **`Move`はAPIの合成操作** — Local REST APIに専用のrename/moveエンドポイントは無いため、`Move-ObsidianNote`は「新パスへ書き込み→旧パス削除」を内部で行う。
+- **フォルダ作成もAPIの合成操作** — Local REST APIに専用のmkdirエンドポイントは無いため、`New-ObsidianFolder`は対象フォルダ配下に`_placeholder.md`マーカーファイルを書き込むことでフォルダの実体を作る。ドットファイル（`.gitkeep`等）はObsidian側で隠しファイル扱いとなり取得・削除ができないため使わない（検証済み）。
 - **ルート一覧とサブフォルダ一覧は別関数** — `Get-ObsidianDirList -DirPath ''`（空文字）はエラーになるため、ルートには`Get-ObsidianVaultList`を使う必要がある。
 - **wikilinkはbasename参照** — フォルダ移動や拡張子維持のリネームではリンクは切れないが、basename自体を変更すると他ノートの`[[旧basename]]`参照は手動修正が必要（`vault-move.ps1`は実行後にその旨を注意メッセージとして表示する）。
 - **検索全滅は旧パス参照が原因** — 全文検索が全クエリで500エラーになる場合、検索インデックスが改名/移動前の旧パスを参照している。`Invoke-ObsidianApi`は`ENOENT ... open '<旧パス>'`を検知すると原因と対処法（`Invoke-ObsidianCommand -CommandId 'app:reload'`）を含めたエラーメッセージを自動生成する。
