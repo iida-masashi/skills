@@ -1,14 +1,15 @@
 # vault-append.ps1
 # Obsidian Vault ファイル末尾追記（Local REST API経由）
 # 使い方:
-#   pwsh -NoProfile -File vault-append.ps1 -Path "<Vault相対パス>" -Content "<追記内容>"
+#   pwsh -NoProfile -File vault-append.ps1 -Path "<Vault相対パス>" -Content "<追記内容>" [-Vault awa|religion]
 #   または
-#   pwsh -NoProfile -File vault-append.ps1 -Path "<Vault相対パス>" -ContentFile "<追記内容ファイルパス>"
+#   pwsh -NoProfile -File vault-append.ps1 -Path "<Vault相対パス>" -ContentFile "<追記内容ファイルパス>" [-Vault awa|religion]
 
 param(
     [Parameter(Mandatory)][string]$Path,
     [string]$Content = '',
-    [string]$ContentFile = ''
+    [string]$ContentFile = '',
+    [string]$Vault
 )
 
 Import-Module (Join-Path $PSScriptRoot 'obsidian-api.psm1') -Force -WarningAction SilentlyContinue
@@ -24,5 +25,5 @@ if (-not $Content) {
     throw "Content または ContentFile を指定してください"
 }
 
-$null = Append-ObsidianNote -FilePath $Path -Content $Content
+$null = Append-ObsidianNote -FilePath $Path -Content $Content -Vault $Vault
 Write-Output ("✅ 追記完了: " + $Path + " (" + $Content.Length + " 文字)")

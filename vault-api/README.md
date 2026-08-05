@@ -6,73 +6,91 @@ Obsidian Local REST API（v4.1.2）経由でObsidian Vaultを直接操作する�
 |----------|---------|
 | [SKILL.md](SKILL.md) | 構成・使い方・エンドポイント一覧・トラブルシュート |
 
-> `tools/`配下のラッパー8本（Local REST API経由の6本＋ファイルシステム直接操作の孤立ノート/薄ノート検出2本）と共通モジュール`obsidian-api.psm1`はこのリポジトリに含まれる。APIキーを保管する`_secrets/obsidian.json`は`.gitignore`対象でリポジトリには含まれず、自分で作成する。`tools/maintenance/`（個人研究Vault専用の詳細版整備ツール群）は個人研究Vault専用の生データ・個人絶対パスを含むため、このリポジトリでは`.gitignore`で除外している。
+> `tools/`配下のラッパー8本（Local REST API経由の6本＋ファイルシステム直接操作の孤立ノート/薄ノート検出2本）と共通モジュール`obsidian-api.psm1`はこのリポジトリに含まれる。APIキーを保管する`_secrets/obsidian.<vault>.json`（例: `obsidian.awa.json`, `obsidian.religion.json`）は`.gitignore`対象でリポジトリには含まれず、自分で作成する。`tools/maintenance/`（個人研究Vault専用の詳細版整備ツール群）は個人研究Vault専用の生データ・個人絶対パスを含むため、このリポジトリでは`.gitignore`で除外している。
+
+## 複数Vault対応
+
+このスキルは複数のObsidian Vault（例: `awa`と`religion`）をそれぞれ別のAPIキーで管理できる。設定ファイルは`_secrets/obsidian.<vault名>.json`という命名規則で、Vaultごとに1ファイル作成する。
+
+Obsidian Local REST APIはアプリで現在開いているVaultに対してのみ応答するため、**同時に扱えるのは常にObsidianで実際に開いているVaultのみ**。複数Vaultを並行運用するというより、「今どのVaultを開いているか」に応じて対応するAPIキーへ切り替える仕組みである。
+
+切り替え方法は2つ：
+
+1. **`-Vault`パラメータ**（推奨、単発実行向け）: 各ツールスクリプト・関数に`-Vault awa`または`-Vault religion`を渡す。省略時は`$env:OBSIDIAN_VAULT`、それも未設定なら既定Vault（`obsidian-api.psm1`内の`$script:defaultVault`、既定値`religion`）を使う。
+2. **`Set-ObsidianVault`**（同一セッション内で繰り返し使う場合向け）: `Set-ObsidianVault -Vault 'awa'`を一度呼ぶと、以降そのPowerShellプロセス内では`-Vault`省略時にawa用キーが使われる（`$env:OBSIDIAN_VAULT`をセットするだけの薄いラッパー）。
+
+後方互換: `_secrets/obsidian.json`（Vault名なしの旧命名）のみが存在する環境では、`-Vault`指定に関わらずそのファイルが使われる。
+
+**注意**: 設定ファイルを切り替えても、Obsidianアプリ側で実際に開いているVaultと一致しなければ`40101 Authorization required`エラーになる（APIキーはVaultごとに固有）。Vaultを切り替える場合は、Obsidianアプリ側でも対象Vaultを開いてから該当する`-Vault`を指定すること。
 
 ## Quick Start
 
 前提: Obsidian本体が起動中で、Local REST APIプラグインが有効になっていること。PowerShell 7（`pwsh`）が必要（Windows PowerShell 5.1はUTF-8をCP932と誤読するため不可）。
 
-`obsidian-api.psm1`の設定ファイルパス（`$script:configPath`）は`Join-Path $PSScriptRoot '..\_secrets\obsidian.json'`、各`vault-*.ps1`の`Import-Module`行は`Join-Path $PSScriptRoot 'obsidian-api.psm1'`で、いずれもスクリプト自身の位置からの相対パス解決になっている。クローン先を変えてもパスの書き換えは不要。
+`obsidian-api.psm1`の設定ファイルディレクトリ（`$script:secretsDir`）は`Join-Path $PSScriptRoot '..\_secrets'`、各`vault-*.ps1`の`Import-Module`行は`Join-Path $PSScriptRoot 'obsidian-api.psm1'`で、いずれもスクリプト自身の位置からの相対パス解決になっている。クローン先を変えてもパスの書き換えは不要。
 
-1. `vault-api/_secrets/obsidian.json`を作成し、API Key・接続情報（`scheme`/`host`/`port`/`apiKey`）を設定する。
-2. 疎通確認。
+1. Vaultごとに`vault-api/_secrets/obsidian.<vault名>.json`を作成し、API Key・接続情報（`scheme`/`host`/`port`/`apiKey`）を設定する（例: `obsidian.awa.json`, `obsidian.religion.json`）。
+2. Obsidianアプリで対象Vaultを開き、疎通確認する。
 
 ```bash
-pwsh -NoProfile -Command "Import-Module '<このスキルのtools>/obsidian-api.psm1'; Test-ObsidianApi | Format-List"
+pwsh -NoProfile -Command "Import-Module '<このスキルのtools>/obsidian-api.psm1'; Test-ObsidianApi -Vault religion | Format-List"
 ```
 
-正常時: `Status: OK`、`Authenticated: True`
+正常時: `status: OK`、`authenticated: True`
 
 ## Commands
 
 Bash経由で呼び出すラッパースクリプト（`tools/`配下）。
 
+全ラッパーは`-Vault awa|religion`を受け付ける（省略時は`$env:OBSIDIAN_VAULT`または既定Vault）。
+
 ```bash
 # 全文検索（コンテキスト付き）
-pwsh -NoProfile -File <このスキルのtools>/vault-search.ps1 -Query "検索語" [-Limit 20] [-ContextLength 100]
+pwsh -NoProfile -File <このスキルのtools>/vault-search.ps1 -Query "検索語" [-Limit 20] [-ContextLength 100] [-Vault awa|religion]
 
 # ファイル読み取り
-pwsh -NoProfile -File <このスキルのtools>/vault-read.ps1 -Path "フォルダ/note.md" [-Lines N]
+pwsh -NoProfile -File <このスキルのtools>/vault-read.ps1 -Path "フォルダ/note.md" [-Lines N] [-Vault awa|religion]
 
 # ディレクトリ一覧（-Path省略でルート）
-pwsh -NoProfile -File <このスキルのtools>/vault-list.ps1 [-Path "フォルダ/"]
+pwsh -NoProfile -File <このスキルのtools>/vault-list.ps1 [-Path "フォルダ/"] [-Vault awa|religion]
 
 # ファイル末尾追記（Content文字列指定 or ファイルから読み込み）
-pwsh -NoProfile -File <このスキルのtools>/vault-append.ps1 -Path "フォルダ/note.md" -Content "追記内容"
-pwsh -NoProfile -File <このスキルのtools>/vault-append.ps1 -Path "フォルダ/note.md" -ContentFile "追記内容ファイルパス"
+pwsh -NoProfile -File <このスキルのtools>/vault-append.ps1 -Path "フォルダ/note.md" -Content "追記内容" [-Vault awa|religion]
+pwsh -NoProfile -File <このスキルのtools>/vault-append.ps1 -Path "フォルダ/note.md" -ContentFile "追記内容ファイルパス" [-Vault awa|religion]
 
 # リネーム/移動（内部的には新パス書き込み→旧パス削除の合成）
-pwsh -NoProfile -File <このスキルのtools>/vault-move.ps1 -From "旧フォルダ/note.md" -To "新フォルダ/note.md"
+pwsh -NoProfile -File <このスキルのtools>/vault-move.ps1 -From "旧フォルダ/note.md" -To "新フォルダ/note.md" [-Vault awa|religion]
 
 # 削除
-pwsh -NoProfile -File <このスキルのtools>/vault-delete.ps1 -Path "フォルダ/note.md"
+pwsh -NoProfile -File <このスキルのtools>/vault-delete.ps1 -Path "フォルダ/note.md" [-Vault awa|religion]
 
-# 孤立ノート検出（どこからもwikilinkされていないノート）
+# 孤立ノート検出（どこからもwikilinkされていないノート、ファイルシステム直接操作のため-Vault不要・-VaultRootで直接指定）
 pwsh -NoProfile -File <このスキルのtools>/vault-orphans.ps1 -VaultRoot "<Vaultパス>" [-SubPath "フォルダ"] [-OutCsv path]
 
-# 薄ノート検出（指定バイト数未満のノート）
+# 薄ノート検出（指定バイト数未満のノート、ファイルシステム直接操作のため-Vault不要・-VaultRootで直接指定）
 pwsh -NoProfile -File <このスキルのtools>/vault-thin-notes.ps1 -VaultRoot "<Vaultパス>" [-Folder "部分一致名"] [-Threshold 3000]
 ```
 
-`obsidian-api.psm1` を直接importして使う場合の主な関数（ラッパースクリプトが内部で呼んでいるもの）。
+`obsidian-api.psm1` を直接importして使う場合の主な関数（ラッパースクリプトが内部で呼んでいるもの）。全て`-Vault awa|religion`を受け付ける。
 
 ```powershell
 Import-Module '<このスキルのtools>/obsidian-api.psm1'
 
-Test-ObsidianApi                                                     # 疎通テスト
-Search-ObsidianVault -Query '検索語' -ContextLength 100 [-Limit N]    # 全文検索
-Search-ObsidianVaultAdvanced -Query @{ 'in' = @('検索語', @{'var'='tags'}) }  # JsonLogic構造化検索
-Get-ObsidianNote -FilePath 'フォルダ/note.md'                         # 読み取り
-Get-ObsidianVaultList                                                 # ルート一覧
-Get-ObsidianDirList -DirPath 'フォルダ/'                              # サブフォルダ一覧
-Append-ObsidianNote -FilePath '...' -Content '追記内容'               # 末尾追記
-Write-ObsidianNote -FilePath '...' -Content '新内容'                  # 完全上書き/新規作成
-Remove-ObsidianNote -FilePath '...'                                   # 削除
-Move-ObsidianNote -FromPath '旧パス.md' -ToPath '新パス.md'           # リネーム/移動（write+delete合成）
-Edit-ObsidianNoteSection -FilePath '...' -TargetType heading -Target '## 参考文献' -Operation append -Content '追加内容'  # 見出し/ブロック/frontmatterへの相対挿入
-Get-ObsidianActiveNote                                                # Obsidianで現在開いているノート
-Get-ObsidianCommandList                                               # 実行可能コマンド一覧
-Invoke-ObsidianCommand -CommandId 'app:reload'                        # コマンド実行（検索インデックス再構築など）
+Set-ObsidianVault -Vault 'awa'                                        # 以降このプロセスの既定Vaultをawaに切り替え（$env:OBSIDIAN_VAULTセット）
+Test-ObsidianApi [-Vault awa|religion]                                # 疎通テスト
+Search-ObsidianVault -Query '検索語' -ContextLength 100 [-Limit N] [-Vault awa|religion]    # 全文検索
+Search-ObsidianVaultAdvanced -Query @{ 'in' = @('検索語', @{'var'='tags'}) } [-Vault awa|religion]  # JsonLogic構造化検索
+Get-ObsidianNote -FilePath 'フォルダ/note.md' [-Vault awa|religion]   # 読み取り
+Get-ObsidianVaultList [-Vault awa|religion]                           # ルート一覧
+Get-ObsidianDirList -DirPath 'フォルダ/' [-Vault awa|religion]        # サブフォルダ一覧
+Append-ObsidianNote -FilePath '...' -Content '追記内容' [-Vault awa|religion]  # 末尾追記
+Write-ObsidianNote -FilePath '...' -Content '新内容' [-Vault awa|religion]     # 完全上書き/新規作成
+Remove-ObsidianNote -FilePath '...' [-Vault awa|religion]             # 削除
+Move-ObsidianNote -FromPath '旧パス.md' -ToPath '新パス.md' [-Vault awa|religion]  # リネーム/移動（write+delete合成）
+Edit-ObsidianNoteSection -FilePath '...' -TargetType heading -Target @('タイトル','参考文献') -Operation append -Content '追加内容' [-Vault awa|religion]  # 見出し/ブロック/frontmatterへの相対挿入（heading targetは'#'なし・ルートからの配列）
+Get-ObsidianActiveNote [-Vault awa|religion]                          # Obsidianで現在開いているノート
+Get-ObsidianCommandList [-Vault awa|religion]                         # 実行可能コマンド一覧
+Invoke-ObsidianCommand -CommandId 'app:reload' [-Vault awa|religion]  # コマンド実行（検索インデックス再構築など）
 ```
 
 ## Highlights
@@ -154,7 +172,8 @@ SKILL.mdより。
 
 ## セキュリティ
 
-- API KeyはローカルのAPI設定ファイル（`_secrets/obsidian.json`）に保管する。
+- API KeyはローカルのAPI設定ファイル（`_secrets/obsidian.<vault名>.json`、Vaultごとに別ファイル）に保管する。
 - 接続先は`127.0.0.1:27124`のみ（ローカル限定）。
 - HTTPS自己署名証明書を使うため、PowerShellは`-SkipCertificateCheck`を使用。
 - Obsidian起動時のみAPIが動作する。
+- 複数Vaultを管理する場合でも、同時にAPIへ応答できるのはObsidianアプリで実際に開いているVault1つのみ。誤ったVaultのAPIキーを指定すると`40101 Authorization required`になる（クロスVaultでの誤操作を防ぐ安全弁として機能する）。

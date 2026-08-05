@@ -1,9 +1,10 @@
 # vault-delete.ps1
 # Obsidian Vault ファイル削除（Local REST API経由）
-# 使い方: pwsh -NoProfile -File vault-delete.ps1 -Path "<Vault相対パス>"
+# 使い方: pwsh -NoProfile -File vault-delete.ps1 -Path "<Vault相対パス>" [-Vault awa|religion]
 
 param(
-    [Parameter(Mandatory)][string]$Path
+    [Parameter(Mandatory)][string]$Path,
+    [string]$Vault
 )
 
 # UTF-8 出力（Bash経由のpwsh呼び出しで日本語が文字化けするのを防ぐ）
@@ -11,5 +12,5 @@ param(
 
 Import-Module (Join-Path $PSScriptRoot 'obsidian-api.psm1') -Force -WarningAction SilentlyContinue
 
-$null = Remove-ObsidianNote -FilePath $Path
+$null = Remove-ObsidianNote -FilePath $Path -Vault $Vault
 Write-Output ("削除完了: " + $Path)

@@ -1,9 +1,10 @@
 # vault-list.ps1
 # Obsidian Vault ディレクトリ一覧（Local REST API経由）
-# 使い方: pwsh -NoProfile -File vault-list.ps1 [-Path "<Vault相対パス>"]
+# 使い方: pwsh -NoProfile -File vault-list.ps1 [-Path "<Vault相対パス>"] [-Vault awa|religion]
 
 param(
-    [string]$Path = ''
+    [string]$Path = '',
+    [string]$Vault
 )
 
 # UTF-8 出力（Bash経由のpwsh呼び出しで日本語が文字化けするのを防ぐ）
@@ -12,10 +13,10 @@ param(
 Import-Module (Join-Path $PSScriptRoot 'obsidian-api.psm1') -Force -WarningAction SilentlyContinue
 
 if ($Path) {
-    $result = Get-ObsidianDirList -DirPath $Path
+    $result = Get-ObsidianDirList -DirPath $Path -Vault $Vault
     Write-Output ("ディレクトリ: " + $Path)
 } else {
-    $result = Get-ObsidianVaultList
+    $result = Get-ObsidianVaultList -Vault $Vault
     Write-Output "Vaultルート"
 }
 
