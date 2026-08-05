@@ -6,18 +6,18 @@ Obsidian Local REST API（v4.1.2）経由でObsidian Vaultを直接操作する�
 |----------|---------|
 | [SKILL.md](SKILL.md) | 構成・使い方・エンドポイント一覧・トラブルシュート |
 
-> `tools/`配下のラッパー9本（Local REST API経由の7本＋ファイルシステム直接操作の孤立ノート/薄ノート検出2本）と共通モジュール`obsidian-api.psm1`はこのリポジトリに含まれる。APIキーを保管する`_secrets/obsidian.<vault>.json`（例: `obsidian.awa.json`, `obsidian.religion.json`）は`.gitignore`対象でリポジトリには含まれず、自分で作成する。`tools/maintenance/`（個人研究Vault専用の詳細版整備ツール群）は個人研究Vault専用の生データ・個人絶対パスを含むため、このリポジトリでは`.gitignore`で除外している。
+> `tools/`配下のラッパー9本（Local REST API経由の7本＋ファイルシステム直接操作の孤立ノート/薄ノート検出2本）と共通モジュール`obsidian-api.psm1`はこのリポジトリに含まれる。APIキーを保管する`_secrets/obsidian.<vault名>.json`は`.gitignore`対象でリポジトリには含まれず、自分で作成する。`tools/maintenance/`（個人研究Vault専用の詳細版整備ツール群）は個人研究Vault専用の生データ・個人絶対パスを含むため、このリポジトリでは`.gitignore`で除外している。
 
 ## 複数Vault対応
 
-このスキルは複数のObsidian Vault（例: `awa`と`religion`）をそれぞれ別のAPIキーで管理できる。設定ファイルは`_secrets/obsidian.<vault名>.json`という命名規則で、Vaultごとに1ファイル作成する。
+このスキルは複数のObsidian Vaultをそれぞれ別のAPIキーで管理できる。設定ファイルは`_secrets/obsidian.<vault名>.json`という命名規則で、Vaultごとに1ファイル作成する（vault名は自分で決める任意の識別子）。
 
 Obsidian Local REST APIはアプリで現在開いているVaultに対してのみ応答するため、**同時に扱えるのは常にObsidianで実際に開いているVaultのみ**。複数Vaultを並行運用するというより、「今どのVaultを開いているか」に応じて対応するAPIキーへ切り替える仕組みである。
 
 切り替え方法は2つ：
 
-1. **`-Vault`パラメータ**（推奨、単発実行向け）: 各ツールスクリプト・関数に`-Vault awa`または`-Vault religion`を渡す。省略時は`$env:OBSIDIAN_VAULT`、それも未設定なら既定Vault（`obsidian-api.psm1`内の`$script:defaultVault`、既定値`religion`）を使う。
-2. **`Set-ObsidianVault`**（同一セッション内で繰り返し使う場合向け）: `Set-ObsidianVault -Vault 'awa'`を一度呼ぶと、以降そのPowerShellプロセス内では`-Vault`省略時にawa用キーが使われる（`$env:OBSIDIAN_VAULT`をセットするだけの薄いラッパー）。
+1. **`-Vault`パラメータ**（推奨、単発実行向け）: 各ツールスクリプト・関数に`-Vault <vault名>`を渡す。省略時は`$env:OBSIDIAN_VAULT`、それも未設定なら既定Vault（`obsidian-api.psm1`内の`$script:defaultVault`で設定した値）を使う。
+2. **`Set-ObsidianVault`**（同一セッション内で繰り返し使う場合向け）: `Set-ObsidianVault -Vault '<vault名>'`を一度呼ぶと、以降そのPowerShellプロセス内では`-Vault`省略時にそのVault用キーが使われる（`$env:OBSIDIAN_VAULT`をセットするだけの薄いラッパー）。
 
 後方互換: `_secrets/obsidian.json`（Vault名なしの旧命名）のみが存在する環境では、`-Vault`指定に関わらずそのファイルが使われる。
 
@@ -29,11 +29,11 @@ Obsidian Local REST APIはアプリで現在開いているVaultに対しての�
 
 `obsidian-api.psm1`の設定ファイルディレクトリ（`$script:secretsDir`）は`Join-Path $PSScriptRoot '..\_secrets'`、各`vault-*.ps1`の`Import-Module`行は`Join-Path $PSScriptRoot 'obsidian-api.psm1'`で、いずれもスクリプト自身の位置からの相対パス解決になっている。クローン先を変えてもパスの書き換えは不要。
 
-1. Vaultごとに`vault-api/_secrets/obsidian.<vault名>.json`を作成し、API Key・接続情報（`scheme`/`host`/`port`/`apiKey`）を設定する（例: `obsidian.awa.json`, `obsidian.religion.json`）。
+1. Vaultごとに`vault-api/_secrets/obsidian.<vault名>.json`を作成し、API Key・接続情報（`scheme`/`host`/`port`/`apiKey`）を設定する。
 2. Obsidianアプリで対象Vaultを開き、疎通確認する。
 
 ```bash
-pwsh -NoProfile -Command "Import-Module '<このスキルのtools>/obsidian-api.psm1'; Test-ObsidianApi -Vault religion | Format-List"
+pwsh -NoProfile -Command "Import-Module '<このスキルのtools>/obsidian-api.psm1'; Test-ObsidianApi -Vault <vault名> | Format-List"
 ```
 
 正常時: `status: OK`、`authenticated: True`
@@ -42,31 +42,31 @@ pwsh -NoProfile -Command "Import-Module '<このスキルのtools>/obsidian-api.
 
 Bash経由で呼び出すラッパースクリプト（`tools/`配下）。
 
-全ラッパーは`-Vault awa|religion`を受け付ける（省略時は`$env:OBSIDIAN_VAULT`または既定Vault）。
+全ラッパーは`-Vault <vault名>`を受け付ける（省略時は`$env:OBSIDIAN_VAULT`または既定Vault）。
 
 ```bash
 # 全文検索（コンテキスト付き）
-pwsh -NoProfile -File <このスキルのtools>/vault-search.ps1 -Query "検索語" [-Limit 20] [-ContextLength 100] [-Vault awa|religion]
+pwsh -NoProfile -File <このスキルのtools>/vault-search.ps1 -Query "検索語" [-Limit 20] [-ContextLength 100] [-Vault <vault名>]
 
 # ファイル読み取り
-pwsh -NoProfile -File <このスキルのtools>/vault-read.ps1 -Path "フォルダ/note.md" [-Lines N] [-Vault awa|religion]
+pwsh -NoProfile -File <このスキルのtools>/vault-read.ps1 -Path "フォルダ/note.md" [-Lines N] [-Vault <vault名>]
 
 # 複数ファイルの一括サマリ（frontmatter+冒頭N行のみ、トークン節約用）
-pwsh -NoProfile -Command "& '<このスキルのtools>/vault-batch-summary.ps1' -Paths @('フォルダ/a.md','フォルダ/b.md') -Vault religion"
-pwsh -NoProfile -File <このスキルのtools>/vault-batch-summary.ps1 -PathsFile paths.txt [-Lines 5] [-Vault awa|religion]
+pwsh -NoProfile -Command "& '<このスキルのtools>/vault-batch-summary.ps1' -Paths @('フォルダ/a.md','フォルダ/b.md') -Vault <vault名>"
+pwsh -NoProfile -File <このスキルのtools>/vault-batch-summary.ps1 -PathsFile paths.txt [-Lines 5] [-Vault <vault名>]
 
 # ディレクトリ一覧（-Path省略でルート）
-pwsh -NoProfile -File <このスキルのtools>/vault-list.ps1 [-Path "フォルダ/"] [-Vault awa|religion]
+pwsh -NoProfile -File <このスキルのtools>/vault-list.ps1 [-Path "フォルダ/"] [-Vault <vault名>]
 
 # ファイル末尾追記（Content文字列指定 or ファイルから読み込み）
-pwsh -NoProfile -File <このスキルのtools>/vault-append.ps1 -Path "フォルダ/note.md" -Content "追記内容" [-Vault awa|religion]
-pwsh -NoProfile -File <このスキルのtools>/vault-append.ps1 -Path "フォルダ/note.md" -ContentFile "追記内容ファイルパス" [-Vault awa|religion]
+pwsh -NoProfile -File <このスキルのtools>/vault-append.ps1 -Path "フォルダ/note.md" -Content "追記内容" [-Vault <vault名>]
+pwsh -NoProfile -File <このスキルのtools>/vault-append.ps1 -Path "フォルダ/note.md" -ContentFile "追記内容ファイルパス" [-Vault <vault名>]
 
 # リネーム/移動（内部的には新パス書き込み→旧パス削除の合成）
-pwsh -NoProfile -File <このスキルのtools>/vault-move.ps1 -From "旧フォルダ/note.md" -To "新フォルダ/note.md" [-Vault awa|religion]
+pwsh -NoProfile -File <このスキルのtools>/vault-move.ps1 -From "旧フォルダ/note.md" -To "新フォルダ/note.md" [-Vault <vault名>]
 
 # 削除
-pwsh -NoProfile -File <このスキルのtools>/vault-delete.ps1 -Path "フォルダ/note.md" [-Vault awa|religion]
+pwsh -NoProfile -File <このスキルのtools>/vault-delete.ps1 -Path "フォルダ/note.md" [-Vault <vault名>]
 
 # 孤立ノート検出（どこからもwikilinkされていないノート、ファイルシステム直接操作のため-Vault不要・-VaultRootで直接指定）
 # -Summaryでフォルダ別集計+サイズ上位N件のみ返す（生の全件一覧を出さずトークン節約。全件必要なら-OutCsv）
@@ -76,26 +76,26 @@ pwsh -NoProfile -File <このスキルのtools>/vault-orphans.ps1 -VaultRoot "<V
 pwsh -NoProfile -File <このスキルのtools>/vault-thin-notes.ps1 -VaultRoot "<Vaultパス>" [-Folder "部分一致名"] [-Threshold 3000] [-Summary [-Top 10]]
 ```
 
-`obsidian-api.psm1` を直接importして使う場合の主な関数（ラッパースクリプトが内部で呼んでいるもの）。全て`-Vault awa|religion`を受け付ける。
+`obsidian-api.psm1` を直接importして使う場合の主な関数（ラッパースクリプトが内部で呼んでいるもの）。全て`-Vault <vault名>`を受け付ける。
 
 ```powershell
 Import-Module '<このスキルのtools>/obsidian-api.psm1'
 
-Set-ObsidianVault -Vault 'awa'                                        # 以降このプロセスの既定Vaultをawaに切り替え（$env:OBSIDIAN_VAULTセット）
-Test-ObsidianApi [-Vault awa|religion]                                # 疎通テスト
-Search-ObsidianVault -Query '検索語' -ContextLength 100 [-Limit N] [-Vault awa|religion]    # 全文検索
-Search-ObsidianVaultAdvanced -Query @{ 'in' = @('検索語', @{'var'='tags'}) } [-Vault awa|religion]  # JsonLogic構造化検索
-Get-ObsidianNote -FilePath 'フォルダ/note.md' [-Vault awa|religion]   # 読み取り
-Get-ObsidianVaultList [-Vault awa|religion]                           # ルート一覧
-Get-ObsidianDirList -DirPath 'フォルダ/' [-Vault awa|religion]        # サブフォルダ一覧
-Append-ObsidianNote -FilePath '...' -Content '追記内容' [-Vault awa|religion]  # 末尾追記
-Write-ObsidianNote -FilePath '...' -Content '新内容' [-Vault awa|religion]     # 完全上書き/新規作成
-Remove-ObsidianNote -FilePath '...' [-Vault awa|religion]             # 削除
-Move-ObsidianNote -FromPath '旧パス.md' -ToPath '新パス.md' [-Vault awa|religion]  # リネーム/移動（write+delete合成）
-Edit-ObsidianNoteSection -FilePath '...' -TargetType heading -Target @('タイトル','参考文献') -Operation append -Content '追加内容' [-Vault awa|religion]  # 見出し/ブロック/frontmatterへの相対挿入（heading targetは'#'なし・ルートからの配列）
-Get-ObsidianActiveNote [-Vault awa|religion]                          # Obsidianで現在開いているノート
-Get-ObsidianCommandList [-Vault awa|religion]                         # 実行可能コマンド一覧
-Invoke-ObsidianCommand -CommandId 'app:reload' [-Vault awa|religion]  # コマンド実行（検索インデックス再構築など）
+Set-ObsidianVault -Vault '<vault名>'                                  # 以降このプロセスの既定Vaultを切り替え（$env:OBSIDIAN_VAULTセット）
+Test-ObsidianApi [-Vault <vault名>]                                # 疎通テスト
+Search-ObsidianVault -Query '検索語' -ContextLength 100 [-Limit N] [-Vault <vault名>]    # 全文検索
+Search-ObsidianVaultAdvanced -Query @{ 'in' = @('検索語', @{'var'='tags'}) } [-Vault <vault名>]  # JsonLogic構造化検索
+Get-ObsidianNote -FilePath 'フォルダ/note.md' [-Vault <vault名>]   # 読み取り
+Get-ObsidianVaultList [-Vault <vault名>]                           # ルート一覧
+Get-ObsidianDirList -DirPath 'フォルダ/' [-Vault <vault名>]        # サブフォルダ一覧
+Append-ObsidianNote -FilePath '...' -Content '追記内容' [-Vault <vault名>]  # 末尾追記
+Write-ObsidianNote -FilePath '...' -Content '新内容' [-Vault <vault名>]     # 完全上書き/新規作成
+Remove-ObsidianNote -FilePath '...' [-Vault <vault名>]             # 削除
+Move-ObsidianNote -FromPath '旧パス.md' -ToPath '新パス.md' [-Vault <vault名>]  # リネーム/移動（write+delete合成）
+Edit-ObsidianNoteSection -FilePath '...' -TargetType heading -Target @('タイトル','参考文献') -Operation append -Content '追加内容' [-Vault <vault名>]  # 見出し/ブロック/frontmatterへの相対挿入（heading targetは'#'なし・ルートからの配列）
+Get-ObsidianActiveNote [-Vault <vault名>]                          # Obsidianで現在開いているノート
+Get-ObsidianCommandList [-Vault <vault名>]                         # 実行可能コマンド一覧
+Invoke-ObsidianCommand -CommandId 'app:reload' [-Vault <vault名>]  # コマンド実行（検索インデックス再構築など）
 ```
 
 ## Highlights
@@ -108,15 +108,15 @@ Invoke-ObsidianCommand -CommandId 'app:reload' [-Vault awa|religion]  # コマ�
 - **UTF-8対策はラッパーによって差がある** — `vault-search.ps1`/`vault-read.ps1`/`vault-list.ps1`/`vault-move.ps1`/`vault-delete.ps1`は先頭で`[Console]::OutputEncoding`をUTF-8に設定しているが、`vault-append.ps1`にはこの設定がない。`obsidian-api.psm1`を直接importして自作スクリプトを書く場合も、スクリプト側で同様の設定が必要。
 - **接続はローカル限定** — 接続先は`127.0.0.1:27124`のみ。HTTPS自己署名証明書のため`-SkipCertificateCheck`を使用。Obsidian起動時のみAPIが動作する。
 
-## 実行例（出力フォーマット、religion Vaultで実測）
+## 実行例（出力フォーマット、動作確認済み）
 
 `vault-search.ps1`:
 ```
-検索: '教団'
+検索: '検索語'
 ヒット数: 280
 
-── 01_宗派・異端研究/sources/src_wikipedia_kurozumikyo.md
-    ipedia「黒住教」記事要約 ## 創始者・立教年 黒住宗忠が1814年...
+── フォルダ/sources/note1.md
+    （コンテキスト文字列、200文字超は...で切り詰め）
 
 ... 残り 277 件は省略
 ```
@@ -125,13 +125,13 @@ Invoke-ObsidianCommand -CommandId 'app:reload' [-Vault awa|religion]  # コマ�
 ```
 対象: 2 件
 
-── 01_宗派・異端研究/12_その他/GLA.md
+── フォルダ/note1.md
     [frontmatter]
-      aliases: [GLA, God Light Association, ...]
-      分類: 新宗教 / 霊道・八正道・魂の学系
+      aliases: [...]
+      分類: ...
       ...
     [本文冒頭]
-      # GLA 専門構造分析ノート
+      # タイトル
       > [!summary] 要旨
       ...
     (全188行 / 6932文字)
@@ -150,19 +150,19 @@ Scanning... SubPath=(全体)
 孤立ノート数: 114
 
 === フォルダ別集計 ===
-    87件 : note_ichinomoto185
-    14件 : 01_宗派・異端研究\sources
+    87件 : フォルダA
+    14件 : フォルダB/sources
      ...
 
 === 上位 5 件（サイズ降順） ===
-  994968B : 01_宗派・異端研究\sources\src_bunkacho_shukyo_nenkan_r03.md
+  994968B : フォルダB/sources/note2.md
    ...
   ... 残り 109 件は省略（-OutCsv で全件出力可）
 ```
 
 `vault-thin-notes.ps1`（`-Summary -Top 5`）:
 ```
-検索対象: D:/Vault/religion 全体
+検索対象: <Vaultパス> 全体
 対象総数: 383
 閾値: 3000B
 
@@ -172,12 +172,12 @@ Scanning... SubPath=(全体)
 - 3000B未満: 75 件
 
 === フォルダ別集計 ===
-    37件 : 01_宗派・異端研究\sources
-    35件 : note_ichinomoto185
+    37件 : フォルダB/sources
+    35件 : フォルダA
      ...
 
 === 最小サイズ上位 5 件 ===
-     355B : note_ichinomoto185\2022-08-31-中山みき研究ノート 資料18.md
+     355B : フォルダA/note3.md
      ...
   ... 残り 70 件は省略（-OutCsv で全件出力可）
 
