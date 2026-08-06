@@ -303,6 +303,7 @@ pwsh -NoProfile -Command "Import-Module '<このスキルのtools>/obsidian-api.
 |---|---|
 | **全文検索が全クエリで 500 (Internal Server Error)** | 検索インデックスが**改名/移動前の旧パス**を参照したまま。`Invoke-ObsidianApi` は `ENOENT ... open '<旧パス>'` を検知すると原因パスと対処法を含めたエラーメッセージを自動的に投げる → `Invoke-ObsidianCommand -CommandId 'app:reload'` でインデックス再構築。reload後にAPIが戻らない場合はObsidianを手動起動（サンドボックスから起動不可） |
 | Bash経由のpwsh出力で日本語が文字化け | ラッパー(`vault-*.ps1`)は先頭で `[Console]::OutputEncoding = UTF8` 済み。`obsidian-api.psm1` を直接 `Import-Module` して自作スクリプトを書く場合は、そのスクリプト先頭でも同行を設定する |
+| Bash経由で`pwsh -Command "..."`に日本語パス/文字列を**インライン**で渡すとコマンド自体が壊れる（`Import-Module: ...パスの日本語部分が文字化け`、直後の行が軒並み「認識されないコマンド」エラーになる） | 入力側の問題で出力側の`OutputEncoding`設定では直らない。日本語を含む自作PowerShellコードは`-Command`直渡しをやめ、**必ず一時`.ps1`ファイルに書いてから`pwsh -NoProfile -File <path>`で実行する**（Write/Bashのheredocでファイル化 → `-File`実行、の2段階）。`vault-*.ps1`本体を`-File`で呼ぶ分には元々問題ない |
 | `Get-ObsidianDirList` で `Cannot bind ... empty string` | ルート一覧は `Get-ObsidianVaultList` を使う（上記参照） |
 | `Move-ObsidianNote` 実行後に一部ノートのリンクが切れる | wikilinkはbasename参照のためフォルダ移動・拡張子維持では切れないが、**basename自体を変更した場合**は他ノートの `[[旧basename]]` 参照が残る。`tools/vault-orphans.ps1` で確認し手動修正するか、Grepで `\[\[旧basename` を検索して一括置換する |
 | `40101 Authorization required` | `-Vault`で指定したAPIキーが、Obsidianアプリで実際に開いているVaultと一致していない。Obsidianアプリ側で対象Vaultを開いてから、対応する`-Vault`名を指定する |

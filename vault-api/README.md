@@ -110,6 +110,7 @@ Invoke-ObsidianCommand -CommandId 'app:reload' [-Vault <vault名>]  # コマン�
 - **wikilinkはbasename参照** — フォルダ移動や拡張子維持のリネームではリンクは切れないが、basename自体を変更すると他ノートの`[[旧basename]]`参照は手動修正が必要（`vault-move.ps1`は実行後にその旨を注意メッセージとして表示する）。
 - **検索全滅は旧パス参照が原因** — 全文検索が全クエリで500エラーになる場合、検索インデックスが改名/移動前の旧パスを参照している。`Invoke-ObsidianApi`は`ENOENT ... open '<旧パス>'`を検知すると原因と対処法（`Invoke-ObsidianCommand -CommandId 'app:reload'`）を含めたエラーメッセージを自動生成する。
 - **UTF-8対策はラッパーによって差がある** — `vault-search.ps1`/`vault-read.ps1`/`vault-list.ps1`/`vault-move.ps1`/`vault-delete.ps1`は先頭で`[Console]::OutputEncoding`をUTF-8に設定しているが、`vault-append.ps1`にはこの設定がない。`obsidian-api.psm1`を直接importして自作スクリプトを書く場合も、スクリプト側で同様の設定が必要。
+- **自作PowerShellコードは`-Command`直渡し禁止（日本語を含む場合）** — Bash経由で`pwsh -Command "..."`に日本語のパス・文字列をインラインで渡すと、Bash→pwsh引数間のエンコーディングが壊れコマンド自体が文字化けして失敗する。`obsidian-api.psm1`をimportして自作の一時スクリプトを書く場合は、必ず`.ps1`ファイルに書き出してから`pwsh -NoProfile -File <path>`で実行する（`vault-*.ps1`本体を`-File`で呼ぶだけなら元々問題ない）。
 - **接続はローカル限定** — 接続先は`127.0.0.1:27124`のみ。HTTPS自己署名証明書のため`-SkipCertificateCheck`を使用。Obsidian起動時のみAPIが動作する。
 
 ## 実行例（出力フォーマット、動作確認済み）
