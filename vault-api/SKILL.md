@@ -39,7 +39,7 @@ Vaultを切り替える際は、**Obsidianアプリ側でも対象Vaultを開い
 | `tools/vault-delete.ps1` | ファイル削除 |
 | `tools/vault-orphans.ps1` | 孤立ノート（どこからもwikilinkされていないノート）検出。`-SubPath`絞り込み・`-ExcludeKeywords`・`-OutCsv`対応 |
 | `tools/vault-thin-notes.ps1` | 薄ノート（指定バイト数未満）検出。`-Folder`絞り込み・`-Threshold`・`-OutCsv`対応 |
-| `tools/vault-shousai-triage.ps1` | `<親>_詳細/<子>.md`分割構造の統合しやすさをprose行数で判定。`-Folder`絞り込み・`-OutCsv`・`-Summary`対応 |
+| `tools/vault-shousai-triage.ps1` | `<親>_詳細/<子>.md`（アンダースコアなし`<親>詳細/`も含む）分割構造の統合しやすさをprose行数で判定。`-Folder`絞り込み・`-OutCsv`・`-Summary`対応 |
 | `tools/vault-basename-collisions.ps1` | 同一basename（拡張子除くファイル名）を持つ.mdファイルの検出。wikilinkの曖昧参照（複数ファイルが同名でどちらに解決されるか不定）を洗い出す。`-OutCsv`対応 |
 | `tools/maintenance/` | 個人研究Vault専用の整備ツール群（vault-links/vault-gps等。Local REST APIではなくファイルシステム直接操作、`.gitignore`対象。詳細は`tools/maintenance/README.md`） |
 
@@ -150,6 +150,8 @@ pwsh -NoProfile -File <このスキルのtools>/vault-shousai-triage.ps1 -VaultR
 **子の方が親より充実している場合**（`Shape=CHILD_LARGER`や、実際に読んで判明するケース）は、通常と逆に「子の内容を主体にし、親の要旨・frontmatter・被リンクを子へ吸収した上で親を削除する」逆統合を検討する。子ノートへの外部被リンク数が多いほど、子basenameを残す逆統合が被リンク破壊を避けられる。
 
 **親子で祭神論・由来説など対立する記述がある場合**（同じ主題を別角度から論じているだけで、単純な重複ではないケース）は、どちらかを採用して他方を捨てるのではなく、両論を「観点」「通説」「阿波説」等の対比表や併記節として親ノートに残す。
+
+**「フォルダ＋子ノート1件のみ」は、それ自体は欠陥ではない。** 式内社の郡別フォルダ（その郡にまだ1社しか調査していないだけ）や`各氏族の研究/<氏族名>/`（資料が少ない氏族のサブフォルダ）のように、将来ファイルが増える前提の正規階層構造が大量にヒットするため、機械的に「1件しかないフォルダ＝要整理」と決めつけない。**真に対処すべきなのは、`<親名>_詳細/`（または`<親名>詳細/`）という命名で、対応する親ノート`<親名>.md`が実在しないケース**（例：`応神天皇/`フォルダに子ノートだけがあり`応神天皇.md`が存在しない）。この場合は「子ノートと同名の親ノートを新規作成して統合する」か「子ノートをフォルダ外に出してフォルダ自体を解消する」（子が既に独立ハブとして外部被リンクを持つ場合）のいずれかで対処する。親ノートが実在する通常の`_詳細/`分割は、上記Shape判定に従う。
 
 ### basename衝突（曖昧wikilink）の検出
 

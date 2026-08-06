@@ -55,11 +55,16 @@ function Get-ProseLineCount([string]$text) {
     return $prose
 }
 
-$shousaiFolders = Get-ChildItem -LiteralPath $searchPath -Recurse -Directory -Filter '*_詳細' -ErrorAction SilentlyContinue
+$shousaiFolders = Get-ChildItem -LiteralPath $searchPath -Recurse -Directory -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -match '詳細$' }
 
 $rows = foreach ($d in $shousaiFolders) {
     $children = Get-ChildItem -LiteralPath $d.FullName -File -Filter '*.md' -ErrorAction SilentlyContinue
-    $parentPath = $d.FullName -replace '_詳細$', '.md'
+    if ($d.Name -match '_詳細$') {
+        $parentPath = $d.FullName -replace '_詳細$', '.md'
+    } else {
+        $parentPath = $d.FullName -replace '詳細$', '.md'
+    }
     $parentExists = Test-Path -LiteralPath $parentPath
     $parentSize = if ($parentExists) { (Get-Item -LiteralPath $parentPath).Length } else { 0 }
 
@@ -101,7 +106,7 @@ $rows = foreach ($d in $shousaiFolders) {
 
 $sorted = $rows | Sort-Object ChildCount, MaxProse
 
-Write-Output ('_詳細フォルダ総数: ' + $rows.Count)
+Write-Output ('詳細フォルダ総数(*_詳細 / *詳細 両対応): ' + $rows.Count)
 Write-Output ''
 Write-Output '=== 統合しやすさ別の内訳 ==='
 $rows | Group-Object Shape | Sort-Object Count -Descending | ForEach-Object {
