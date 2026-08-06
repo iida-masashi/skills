@@ -1,6 +1,6 @@
 ---
 name: vault-publish
-description: Sync an Obsidian Vault (awa-garden or religion-garden) to its Quartz repo's content/, verify a local build, commit, and push to deploy the digital garden on GitHub Pages. Invoke when the user wants to publish Vault changes, deploy to the Quartz site, or update a public digital garden — for either the 阿波説 (awa) Vault or the religion research Vault.
+description: Sync an Obsidian Vault (awa-garden or religion-garden) to its Quartz repo's content/, verify a local build, commit, and push to deploy the digital garden on GitHub Pages. Invoke when the user wants to publish Vault changes, deploy to the Quartz site, or update a public digital garden — for either the 阿波説 (awa) Vault or the religion research Vault. Also handles sync-only/preview requests (no commit/push) via the --sync-only flag — use this skill even when the user just wants to sync or preview locally without publishing.
 ---
 
 # vault-publish: Vault → Quartz → GitHub Pages 公開パイプライン
@@ -22,6 +22,7 @@ Vault → Quartz → GitHub Pages の公開フロー全体をワンステップ�
 - 「Vaultを公開して」「デジタルガーデンを更新」「Quartzをデプロイ」
 - 「awa-garden に push」「religion-garden に push」「変更を反映したい」
 - 「/vault-publish」「/vault-publish religion」のように明示的に呼び出されたとき
+- 「同期だけして」「ローカルで先に見たい」「push せずに反映」「プレビューだけ」→ `--sync-only` を使う（下記「Sync-only モード」参照）
 
 ### ターゲットの決め方
 
@@ -38,10 +39,19 @@ Vault → Quartz → GitHub Pages の公開フロー全体をワンステップ�
 2. **Build verify** (default ON、`--skip-build` で skip 可):
    - `cd <quartz-repo> && npx quartz build` を実行
    - YAML エラーなど発生時は **halt して詳細表示**(ユーザーが Vault を直す必要がある)
-3. **Commit**: 同期結果から自動メッセージ生成(or `--message` で上書き)
-4. **Push**: `git push`
+3. **`--sync-only` ならここで停止**（下記「Sync-only モード」参照）。commit/push は行わない。
+4. **Commit**: 同期結果から自動メッセージ生成(or `--message` で上書き)
+5. **Push**: `git push`
    - `Recv failure: Connection was reset` 等のネットワークエラーで失敗した場合、
      `git config http.postBuffer 524288000` を設定して **1 回だけ retry**
+
+## Sync-only モード（push なしプレビュー）
+
+「同期だけして」「ローカルで先に見たい」「push せずに反映」等、pushを伴わない同期・プレビューが目的の場合は `--sync-only` を使う。commit/push ステップ(4-5)を実行しない点を除き、Pipelineの1-2は通常どおり実行する。
+
+- ユーザーが `--serve` を併用、または「プレビューしたい」と明示した場合のみ、Step 2 の後に `cd <quartz-repo> && npx quartz build --serve` をバックグラウンドで起動し `http://localhost:8080` を案内する（parse に約4分かかるため `run_in_background` + `until grep "Started" ...; do sleep 5; done` 構成で待つ。2ターゲット同時起動はポート衝突の可能性があるため、既に片方が起動中なら停止するか別ポート案内を検討する）
+- Report: どのターゲットを同期したか、build結果、(serveした場合)確認用URL、そして「公開するなら `--sync-only` を外して同じ引数で再実行すればよい（syncは既に完了しているので `--skip-sync` を足すと二度手間を避けられる）」ことを伝える
+- ファイル変更内容だけ確認したい場合は、実行後に `cd <quartz-repo> && git diff --stat` で確認できる
 
 ## Steps to execute
 
@@ -128,8 +138,10 @@ cd <quartz-repo> && git config http.postBuffer 524288000 && git push 2>&1
 | Flag | Effect |
 |---|---|
 | `awa` / `religion` | 対象ターゲットを明示指定（位置引数、例: `/vault-publish religion`） |
-| `--skip-sync` | Step 2 (sync) をスキップ。直前に `vault-sync` 等で同じターゲットのsyncが成功済みの場合に、sync出力の再実行・再表示を避ける |
+| `--skip-sync` | Step 2 (sync) をスキップ。直前に同じターゲットで `--sync-only` 等によりsyncが成功済みの場合に、sync出力の再実行・再表示を避ける |
 | `--skip-build` | Step 3 (build verify) をスキップ。push 速度優先 |
+| `--sync-only` | commit/push (Step 4-5) を行わず sync+build までで停止。push せずローカルプレビューしたい場合に使う |
+| `--serve` | `--sync-only` と併用。build後に `npx quartz build --serve` を起動しプレビューサーバーを立てる |
 | `--message "..."` | commit message を上書き |
 | `--dry-run` | sync スクリプトを `--dry-run` 付きで実行し、何も commit/push しない |
 
@@ -143,6 +155,7 @@ cd <quartz-repo> && git config http.postBuffer 524288000 && git push 2>&1
 
 ## Notes
 
+- push なしで同期・ローカルプレビューだけしたい場合は `--sync-only`（旧 `vault-sync` スキルは本スキルに統合済み、単独では存在しない）
 - 同期スクリプトは idempotent(何度実行しても同じ結果)
 - Vault と content の同期は size + mtime 比較。Vault でのタイムスタンプだけ更新したファイルでも copy が走るが、内容は同じなので git diff には現れない
 - awa: `D:\Vault\awa\_work\QUARTZ_SYNC_README.md` に運用ドキュメント完備

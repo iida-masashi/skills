@@ -465,6 +465,128 @@ function Add-ObsidianCalloutLine {
     return [PSCustomObject]@{ FilePath = $FilePath; InsertedLine = $NewLineContent }
 }
 
+function Set-ObsidianNoteText {
+    <#
+    .SYNOPSIS
+    ファイル内の文字列を安全に置換する（改行コード自動判定＋一意性チェック付き）。
+    .DESCRIPTION
+    このVaultはノートごとにCRLF/LFが混在しており（同一ファイル内で混在する例もある）、
+    スクラッチスクリプトで手書きの `-replace "`n", ...` / `-replace "`r`n", ...` を
+    都度使い分けると、改行の不一致だけで置換が silent に0件ヒットしてハマりやすい
+    （このセッションで検証済みの繰り返しの失敗パターン）。
+    本関数は Old/New 文字列内の `\n` を、対象ファイルの実際の改行コード（自動検出）に
+    変換してから比較・置換する。さらに一致件数が1件でない場合は既定でエラーにする
+    （複数箇所に意図せず適用される事故、0件で気づかず終わる事故の両方を防ぐ）。
+    .PARAMETER FilePath
+    Vault相対パス
+    .PARAMETER Old
+    置換対象の文字列。改行は `\n`（LF）で書けばよい（実ファイルの改行コードに自動変換される）。
+    .PARAMETER New
+    置換後の文字列。同様に `\n` で書けばよい。
+    .PARAMETER AllowCount
+    許容する一致件数。既定は1（一意な一致のみ許可）。同じ置換を全箇所に適用したい場合は
+    -AllowCount 0 を指定する（0は「件数を問わずヒットした分だけ全置換」を意味する）。
+    .PARAMETER Vault
+    'awa' | 'religion' 等。省略時は $env:OBSIDIAN_VAULT または既定Vault
+    .EXAMPLE
+    Set-ObsidianNoteText -FilePath '...' -Old "- [[旧リンク]]" -New "- [[新リンク]]" -Vault awa
+    .EXAMPLE
+    # テーブル行やblockquote行など、複数行にまたがる置換も \n 一本で書ける
+    Set-ObsidianNoteText -FilePath '...' -Old "行A`n- [[重複行]]`n`n### 次見出し" -New "行A`n`n### 次見出し" -Vault awa
+    #>
+    param(
+        [Parameter(Mandatory)][string]$FilePath,
+        [Parameter(Mandatory)][string]$Old,
+        [Parameter(Mandatory)][string]$New,
+        [int]$AllowCount = 1,
+        [string]$Vault
+    )
+    $content = Get-ObsidianNote -FilePath $FilePath -Vault $Vault
+    $nl = if ($content -match "`r`n") { "`r`n" } else { "`n" }
+    $oldResolved = $Old -replace "`n", $nl
+    $newResolved = $New -replace "`n", $nl
+
+    $occurrences = ([regex]::Matches($content, [regex]::Escape($oldResolved))).Count
+    if ($occurrences -eq 0) {
+        throw "Old文字列がファイル内に見つかりません（改行コードは自動変換済み: crlf=$($nl -eq "`r`n")）。文字列がファイルの実際の内容と完全一致しているか確認してください。"
+    }
+    if ($AllowCount -gt 0 -and $occurrences -ne $AllowCount) {
+        throw "Old文字列が $occurrences 箇所ヒットしましたが、期待件数は $AllowCount です。一意に特定できる、より長い文字列を指定するか、-AllowCount 0 で全置換を許可してください。"
+    }
+
+    $fixed = $content.Replace($oldResolved, $newResolved)
+    Write-ObsidianNote -FilePath $FilePath -Content $fixed -Vault $Vault | Out-Null
+    return [PSCustomObject]@{ FilePath = $FilePath; Occurrences = $occurrences; Crlf = ($nl -eq "`r`n") }
+}
+
+function Merge-ObsidianChildNote {
+    <#
+    .SYNOPSIS
+    `<親>_詳細/<子>.md` 型の分割構造で、薄い子ノートを親ノートへ統合する定型作業を1関数にまとめる。
+    .DESCRIPTION
+    このVaultには「親ノート＋<親名>_詳細/フォルダ内の子ノート」という分割構造が105件以上あり、
+    うち多くは子が単なるリンク集・短い補足で、親に戻す方が良い（すべてを機械的に統合してよい
+    わけではない — 子が独立した論考として被リンクを多く持つ場合は統合しない判断が必要。
+    本関数は「統合する」と決めた後の定型作業だけを担う）。
+    本関数は次を行う:
+      1. 親ノートの本文を $MergedContent で完全上書き（改行コードは親の既存コードに自動追従）
+      2. $ExternalRepoints で指定した「他ノート内の子ノートへの参照」を親ノートへ一括付け替え
+         （各エントリは -Old/-New のペア。同一ファイルに複数回書ける）
+      3. 子ノートファイルを削除
+    実行順は 1→2→3 固定（親を書き終える前に外部リンクを差し替えると、リンク切れの窓ができるため）。
+    呼び出し前に必ず子ノートの被リンク元を `vault-search` 等で洗い出し、$ExternalRepoints に
+    もれなく列挙すること（本関数は被リンクの自動検出は行わない）。付け替え先の目次・MOC等に
+    親ノートへの既存リンクがある場合は重複が生じるため、その場合は -New に空文字を渡して
+    行削除にする（付け替えではなく削除）。
+    .PARAMETER ParentPath
+    親ノートのVault相対パス
+    .PARAMETER MergedContent
+    親ノートに書き込む統合後の全文
+    .PARAMETER ChildPath
+    削除する子ノートのVault相対パス
+    .PARAMETER ExternalRepoints
+    子ノートへの外部参照を持つファイルの配列。各要素は
+    @{ Path = '...'; Old = '...'; New = '...'; AllowCount = 1 } の形式（AllowCountは省略可、既定1）。
+    .PARAMETER Vault
+    'awa' | 'religion' 等。省略時は $env:OBSIDIAN_VAULT または既定Vault
+    .EXAMPLE
+    Merge-ObsidianChildNote -Vault awa `
+      -ParentPath '式内社/.../阿波神社.md' -MergedContent $merged `
+      -ChildPath '式内社/.../阿波神社_詳細/各論.md' `
+      -ExternalRepoints @(
+        @{ Path = '式内社/00_式内社_目次.md'; Old = '- [[各論]]'; New = '- [[阿波神社]]' }
+      )
+    #>
+    param(
+        [Parameter(Mandatory)][string]$ParentPath,
+        [Parameter(Mandatory)][string]$MergedContent,
+        [Parameter(Mandatory)][string]$ChildPath,
+        [array]$ExternalRepoints = @(),
+        [string]$Vault
+    )
+    $existing = Get-ObsidianNote -FilePath $ParentPath -Vault $Vault
+    $isCrlf = $existing -match "`r`n"
+    $content = $MergedContent -replace "`r`n", "`n"
+    if ($isCrlf) { $content = $content -replace "`n", "`r`n" }
+    Write-ObsidianNote -FilePath $ParentPath -Content $content -Vault $Vault | Out-Null
+
+    $repointResults = @()
+    foreach ($r in $ExternalRepoints) {
+        $allowCount = if ($r.ContainsKey('AllowCount')) { $r.AllowCount } else { 1 }
+        $result = Set-ObsidianNoteText -FilePath $r.Path -Old $r.Old -New $r.New -AllowCount $allowCount -Vault $Vault
+        $repointResults += $result
+    }
+
+    Remove-ObsidianNote -FilePath $ChildPath -Vault $Vault | Out-Null
+
+    return [PSCustomObject]@{
+        Parent = $ParentPath
+        Child = $ChildPath
+        CrlfParent = $isCrlf
+        Repoints = $repointResults
+    }
+}
+
 function Get-ObsidianActiveNote {
     <#
     .SYNOPSIS
@@ -514,4 +636,4 @@ function Test-ObsidianApi {
     return Invoke-ObsidianApi -Method GET -Path '/' -Vault $Vault
 }
 
-Export-ModuleMember -Function Get-ObsidianConfig, Get-ObsidianConfigPath, Set-ObsidianVault, Get-ObsidianBaseUri, Get-ObsidianHeaders, Invoke-ObsidianApi, Get-ObsidianVaultList, Get-ObsidianDirList, Get-ObsidianNote, Search-ObsidianVault, Search-ObsidianVaultAdvanced, Append-ObsidianNote, Write-ObsidianNote, New-ObsidianFolder, Remove-ObsidianNote, Move-ObsidianNote, Edit-ObsidianNoteSection, Add-ObsidianTableRow, Add-ObsidianCalloutLine, Get-ObsidianActiveNote, Get-ObsidianCommandList, Invoke-ObsidianCommand, Test-ObsidianApi
+Export-ModuleMember -Function Get-ObsidianConfig, Get-ObsidianConfigPath, Set-ObsidianVault, Get-ObsidianBaseUri, Get-ObsidianHeaders, Invoke-ObsidianApi, Get-ObsidianVaultList, Get-ObsidianDirList, Get-ObsidianNote, Search-ObsidianVault, Search-ObsidianVaultAdvanced, Append-ObsidianNote, Write-ObsidianNote, New-ObsidianFolder, Remove-ObsidianNote, Move-ObsidianNote, Edit-ObsidianNoteSection, Add-ObsidianTableRow, Add-ObsidianCalloutLine, Set-ObsidianNoteText, Merge-ObsidianChildNote, Get-ObsidianActiveNote, Get-ObsidianCommandList, Invoke-ObsidianCommand, Test-ObsidianApi

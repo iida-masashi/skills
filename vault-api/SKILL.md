@@ -39,6 +39,8 @@ Vaultを切り替える際は、**Obsidianアプリ側でも対象Vaultを開い
 | `tools/vault-delete.ps1` | ファイル削除 |
 | `tools/vault-orphans.ps1` | 孤立ノート（どこからもwikilinkされていないノート）検出。`-SubPath`絞り込み・`-ExcludeKeywords`・`-OutCsv`対応 |
 | `tools/vault-thin-notes.ps1` | 薄ノート（指定バイト数未満）検出。`-Folder`絞り込み・`-Threshold`・`-OutCsv`対応 |
+| `tools/vault-shousai-triage.ps1` | `<親>_詳細/<子>.md`分割構造の統合しやすさをprose行数で判定。`-Folder`絞り込み・`-OutCsv`・`-Summary`対応 |
+| `tools/vault-basename-collisions.ps1` | 同一basename（拡張子除くファイル名）を持つ.mdファイルの検出。wikilinkの曖昧参照（複数ファイルが同名でどちらに解決されるか不定）を洗い出す。`-OutCsv`対応 |
 | `tools/maintenance/` | 個人研究Vault専用の整備ツール群（vault-links/vault-gps等。Local REST APIではなくファイルシステム直接操作、`.gitignore`対象。詳細は`tools/maintenance/README.md`） |
 
 ## 使い方（Bash経由）
@@ -127,6 +129,36 @@ pwsh -NoProfile -File <このスキルのtools>/vault-thin-notes.ps1 -VaultRoot 
 
 指定フォルダ（省略時は全体）配下で指定バイト数未満の `.md` をサイズ昇順で出力する（`.obsidian/`・`templates/`・`資料/`・`_work/` は除外）。強化対象のノートを体系的に発見する用途。`-Summary`はフォルダ別集計+最小サイズ上位N件のみ返す（`vault-orphans`と同様）。
 
+### `_詳細`分割構造の統合しやすさ判定
+
+```bash
+pwsh -NoProfile -File <このスキルのtools>/vault-shousai-triage.ps1 -VaultRoot "<Vaultパス>" [-Folder "部分一致名"] [-OutCsv path] [-Summary [-Top 20]]
+```
+
+「親ノート＋`<親名>_詳細/`フォルダ内の子ノート」という分割構造（近代化の過程で頻出）を全件走査し、子ノートの**地の文（prose）行数**で統合のしやすさを`Shape`列に分類する:
+
+| Shape | 意味 |
+|---|---|
+| `EMPTY` | 子ノート0件（フォルダのみ残存。ファイルシステム上空ディレクトリとして残るだけで実害はないが、整理したい場合はユーザーの`!`実行等で削除） |
+| `LINK_STUB` | 子1件・地の文ほぼ0行（リンク集）。機械的統合の最有力候補 |
+| `SHORT` | 子1件・地の文少数行。統合候補だが軽く目を通す |
+| `CHILD_LARGER` | 子の合計サイズが親を上回る。統合方向が逆転しうるため要通読 |
+| `NEEDS_READ` | 子が複数件、または内容量が中程度。通読して統合可否を判断 |
+
+**サイズだけで統合可否を判定しない**（`feedback_vault_thin_size_vs_quality`参照）。`Shape=LINK_STUB/SHORT`でも、子ノートが親以外の複数ノートから直接リンクされている場合（`vault-search`で確認）は、単純統合すると被リンクが壊れる。その場合は「親へ統合し、外部参照元のリンクを付け替える」（`Merge-ObsidianChildNote`参照）か、統合を見送るかをユーザーに確認する。
+
+**子の方が親より充実している場合**（`Shape=CHILD_LARGER`や、実際に読んで判明するケース）は、通常と逆に「子の内容を主体にし、親の要旨・frontmatter・被リンクを子へ吸収した上で親を削除する」逆統合を検討する。子ノートへの外部被リンク数が多いほど、子basenameを残す逆統合が被リンク破壊を避けられる。
+
+**親子で祭神論・由来説など対立する記述がある場合**（同じ主題を別角度から論じているだけで、単純な重複ではないケース）は、どちらかを採用して他方を捨てるのではなく、両論を「観点」「通説」「阿波説」等の対比表や併記節として親ノートに残す。
+
+### basename衝突（曖昧wikilink）の検出
+
+```bash
+pwsh -NoProfile -File <このスキルのtools>/vault-basename-collisions.ps1 -VaultRoot "<Vaultパス>" [-OutCsv path]
+```
+
+同一basename（拡張子を除くファイル名）を持つ`.md`ファイルをVault全体から検出する。wikilink（`[[名前]]`）はbasenameで解決されるため、同名ファイルが複数フォルダに存在すると、そのbasenameへのリンクがどちらのファイルに解決されるか不定になる（曖昧参照）。典型例は「詳細論考ポータル」「概要と阿波説における重要性」のような、`_詳細/`分割構造で使い回されがちな**汎用的な子ノート名**。全国に複数実在する同名神社（例：忌部神社、鴨神社）のような**正当な重複**も検出されるため、出力は必ず個別に精査し、実際に問題があるもの（同一主題のノートが誤って別フォルダに複製されている等）だけを対処する。
+
 ## PowerShell モジュールとして直接使う
 
 全関数が `-Vault <vault名>` を受け付ける（省略時は `$env:OBSIDIAN_VAULT` または既定Vault）。
@@ -187,6 +219,25 @@ Add-ObsidianCalloutLine -FilePath '...' -AnchorLineText '> - 既存の最終行'
 ```
 
 いずれも `AnchorRowText`/`AnchorLineText` はファイル内で一意な文字列である必要があり、0件または複数件ヒットした場合はエラーで停止する（サイレントな誤挿入を防ぐ安全策）。
+
+```powershell
+# ファイル内の文字列を安全に置換（改行コード自動判定＋一意性チェック付き）
+# Old/New 内の改行は \n（LF）で書けばよい。対象ファイルの実際の改行コード（CRLF/LF混在Vaultで
+# 都度手動判定するのが手間）に自動変換してから比較・置換する。既定では一致件数が1件でないとエラー
+# （0件=気づかず失敗、2件以上=意図しない多重置換、を両方防ぐ）。全箇所に適用したい場合のみ -AllowCount 0
+Set-ObsidianNoteText -FilePath '...' -Old "- [[旧リンク]]" -New "- [[新リンク]]" -Vault <vault名>
+
+# 「親ノート＋<親名>_詳細/子ノート」分割構造の統合（親上書き→外部参照元の一括付け替え→子削除、を1呼び出しで）
+# ExternalRepoints には、子ノートへの被リンクを vault-search で洗い出した結果を列挙する
+# （本関数自体は被リンクの自動検出はしない）。目次・MOC等に親への既存リンクが既にある場合は
+# New に空文字を渡して行削除にする（付け替えではなく重複解消）
+Merge-ObsidianChildNote -Vault <vault名> `
+    -ParentPath '式内社/.../阿波神社.md' -MergedContent $mergedContent `
+    -ChildPath '式内社/.../阿波神社_詳細/各論.md' `
+    -ExternalRepoints @(
+        @{ Path = '式内社/00_式内社_目次.md'; Old = '- [[各論]]'; New = '- [[阿波神社]]' }
+    )
+```
 
 ```powershell
 

@@ -15,12 +15,16 @@ Obsidian Vault（阿波説デジタルガーデン awa-garden / 宗教研究デ�
 
 対象Vaultが曖昧なとき（単に「公開して」など）は、黙って awa を既定にせず必ずユーザーに確認する。誤ったリポジトリへの push は取り消しにくいため。
 
+「同期だけして」「ローカルで先に見たい」「push せずに反映」等、pushを伴わない用途は `--sync-only` を使う（後述）。
+
 主な引数:
 
 | Flag | 効果 |
 |---|---|
 | `awa` / `religion` | 対象ターゲットを明示指定（位置引数） |
 | `--skip-build` | build検証をスキップして push を優先 |
+| `--sync-only` | commit/pushを行わずsync+buildまでで停止（push前のローカル確認・プレビュー用） |
+| `--serve` | `--sync-only` と併用。build後にプレビューサーバーを起動 |
 | `--message "..."` | commit message を上書き |
 | `--dry-run` | sync スクリプトを `--dry-run` で実行し、commit/push は行わない |
 
@@ -28,8 +32,9 @@ Obsidian Vault（阿波説デジタルガーデン awa-garden / 宗教研究デ�
 
 1. **Sync** — 対象Vault専用の同期スクリプトを実行し、Vault のサブツリーを Quartz リポジトリの `content/` にミラーする。frontmatter の YAML 不正修正・dewikify（壊れた wikilink の外部URL/プレーンテキスト化）も適用される。
 2. **Build verify**（既定でON、`--skip-build` で省略可） — `npx quartz build` を実行。YAML エラー等が出た場合は halt してエラー詳細を表示する（Vault側の修正が必要）。
-3. **Commit** — sync 結果のサマリから自動でコミットメッセージを生成（`--message` で上書き可）。変更がなければ push せずに終了。
-4. **Push** — `git push`。ネットワークエラー（`Connection was reset` 等）の場合は `http.postBuffer` を設定して1回だけ retry する。
+3. `--sync-only` の場合はここで停止（任意で `--serve` によるローカルプレビュー）。
+4. **Commit** — sync 結果のサマリから自動でコミットメッセージを生成（`--message` で上書き可）。変更がなければ push せずに終了。
+5. **Push** — `git push`。ネットワークエラー（`Connection was reset` 等）の場合は `http.postBuffer` を設定して1回だけ retry する。
 
 成功時は公開URLとGitHub Actionsの実行状況確認コマンドを案内する（デプロイはGitHub Actions経由で自動、所要1〜2分）。
 
@@ -56,11 +61,6 @@ Obsidian Vault（阿波説デジタルガーデン awa-garden / 宗教研究デ�
 - **ネットワークエラーは1回だけ自動retry** — `http.postBuffer` 拡張後に再push、それでも失敗したらhaltしてユーザーに委ねる。
 - **2ターゲットを跨いだ同時操作は行わない** — 1回の呼び出しにつき1ターゲットのみ。
 
-## 姉妹スキルとの違い
+## vault-sync との統合について
 
-| スキル | commit/push | 対象 | 用途 |
-|---|---|---|---|
-| **vault-publish**（本スキル） | する | awa/religion固定 | 変更を実際に公開する |
-| [vault-sync](../vault-sync/SKILL.md) | しない | awa/religion固定 | push前のローカル確認・プレビュー専用。sync→build（→任意でserve）まで |
-
-vault-sync との関係: vault-publish から git commit/push を除いたものが vault-sync。ローカルで先に見たい・pushせず反映したいときは vault-sync、フル公開したいときは vault-publish、という使い分けがSKILL.md双方に明記されている。直前に vault-sync でsync/buildが成功済みなら、`/vault-publish <target> --skip-sync --skip-build`（後述の「Arguments」参照）で再実行せずcommit/pushだけ行う運用ができる。
+以前は commit/push を行わないプレビュー専用スキル `vault-sync` を別スキルとして分けていたが、単独で使うユースケースがほとんどなかったため本スキルの `--sync-only` フラグに統合した（2026-08-06）。push前にローカル確認したいだけの場合は `/vault-publish <target> --sync-only`（プレビューサーバーも見たければ `--serve` を追加）を使う。sync/buildが既に成功済みの状態から公開する場合は `--sync-only` を外し `--skip-sync --skip-build` を付けて再実行すれば二度手間にならない。
