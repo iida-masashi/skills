@@ -44,8 +44,8 @@ Obsidian Vault（阿波説デジタルガーデン awa-garden / 宗教研究デ�
 
 | ターゲット | Vault | Syncスクリプト | Quartzリポジトリ | GitHub repo | 公開URL |
 |---|---|---|---|---|---|
-| **awa**（既定） | `D:\Vault\awa` | `D:\Vault\awa\_work\_sync_to_quartz.py` | `C:\Users\iidam\quartz` | `iida-masashi/awa-garden` | `https://iida-masashi.github.io/awa-garden/` |
-| **religion** | `D:\Vault\religion` | `D:\Vault\religion\_work\_sync_to_quartz_religion.py` | `C:\Users\iidam\quartz-religion` | `iida-masashi/religion-garden` | `https://iida-masashi.github.io/religion-garden/` |
+| **awa**（既定） | `D:\Vault\awa` | `D:\Vault\awa\_work\_sync_to_quartz.py` | `<quartz-repo>` | `iida-masashi/awa-garden` | `https://iida-masashi.github.io/awa-garden/` |
+| **religion** | `D:\Vault\religion` | `D:\Vault\religion\_work\_sync_to_quartz_religion.py` | `<quartz-religion-repo>` | `iida-masashi/religion-garden` | `https://iida-masashi.github.io/religion-garden/` |
 
 ターゲットの決め方:
 1. ユーザーが `religion`／`宗教`／`religion-garden` 等を明示、または直前の会話が `D:\Vault\religion` 配下のVault操作なら religion。
