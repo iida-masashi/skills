@@ -91,7 +91,7 @@ def search_raw(query: str, model: str = "gemini-3.6-flash", no_resolve: bool = F
     return {"text": response.text, "sources": sources}
 
 
-def verify_claim(text: str, sources: list, client: genai.Client) -> list:
+def verify_claim(text: str, sources: list, client: genai.Client, model: str = "gemini-3.6-flash") -> list:
     """回答本文の主張を項目単位に分解し、各出典ページで裏付けられるかを並列にクロスチェックする。
 
     出典ごとのcheck_claim_raw呼び出しは互いに独立しているため、
@@ -100,7 +100,7 @@ def verify_claim(text: str, sources: list, client: genai.Client) -> list:
     claim = text[:500]
 
     def _check_one(src: dict) -> dict:
-        result = check_claim_raw(src["url"], claim, client=client)
+        result = check_claim_raw(src["url"], claim, model=model, client=client)
         return {
             "title": src["title"],
             "url": src["url"],
@@ -124,7 +124,7 @@ def search(query: str, model: str = "gemini-3.6-flash", no_resolve: bool = False
 
     checks = None
     if do_verify and result["sources"]:
-        checks = verify_claim(result["text"], result["sources"], client)
+        checks = verify_claim(result["text"], result["sources"], client, model=model)
 
     if as_json:
         payload = {"text": result["text"], "sources": result["sources"]}
@@ -159,6 +159,10 @@ def main() -> None:
     parser.add_argument("--no-resolve", action="store_true", help="出典URLのリダイレクト解決を無効化する")
     parser.add_argument("--json", action="store_true", help="結果をJSONで出力する")
     parser.add_argument(
+        "--model", default="gemini-3.6-flash",
+        help="使用するGeminiモデル（既定: gemini-3.6-flash。例: gemini-3.1-pro-preview）",
+    )
+    parser.add_argument(
         "--verify-claim", action="store_true",
         help="回答本文の主張を項目単位に分解し、各出典ページで裏付けられるか並列でクロスチェックする",
     )
@@ -170,6 +174,7 @@ def main() -> None:
 
     search(
         " ".join(args.query),
+        model=args.model,
         no_resolve=args.no_resolve,
         as_json=args.json,
         do_verify=args.verify_claim,

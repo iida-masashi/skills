@@ -163,15 +163,19 @@ def main() -> None:
         help="要約の代わりに、この主張がURLの内容で裏付けられるか項目単位で検証する",
     )
     parser.add_argument("--json", action="store_true", help="結果をJSONで出力する")
+    parser.add_argument(
+        "--model", default="gemini-3.6-flash",
+        help="使用するGeminiモデル（既定: gemini-3.6-flash。例: gemini-3.1-pro-preview）",
+    )
     args = parser.parse_args()
 
     if args.check:
         if args.instruction:
             parser.error("--check と追加の指示（自由記述）は同時に指定できません")
-        check(args.url, args.check, as_json=args.json)
+        check(args.url, args.check, model=args.model, as_json=args.json)
     else:
         instruction = " ".join(args.instruction) if args.instruction else DEFAULT_INSTRUCTION
-        fetch(args.url, instruction)
+        fetch(args.url, instruction, model=args.model)
 
 
 if __name__ == "__main__":
