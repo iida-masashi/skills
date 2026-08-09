@@ -6,6 +6,8 @@ Anaplanのワークスペース履歴監査（History Audit）とモデル解析
 |----------|---------|
 | [SKILL.md](SKILL.md) | スキルの目的と主要機能の概要 |
 | [libs/history_audit/config.example.py](libs/history_audit/config.example.py) | 設定ファイルのサンプル（`config.py`としてコピーして使用） |
+| [run_local.ps1](run_local.ps1) | Model Analyzerをローカルで起動するPowerShellスクリプト |
+| [Dockerfile](Dockerfile) / [.github/workflows/anaplan-skill-deploy.yml](../.github/workflows/anaplan-skill-deploy.yml) | Cloud Runデプロイ用のコンテナ定義とGitHub Actionsワークフロー |
 
 ## Quick Start
 
@@ -25,6 +27,17 @@ copy libs\history_audit\config.example.py libs\history_audit\config.py
 - `ANAPLAN_PASSWORD`: Anaplanパスワード
 - `ANAPLAN_WS` / `ANAPLAN_MODEL`: Model Analyzerダッシュボードのサイドバー初期値（省略可、画面から入力も可）
 - `GEMINI_API_KEY`: Model Analyzerの「AIでPLANS原則違反を監査する」機能を使う場合のみ必須
+
+Model Analyzerには上記に加えてアプリ内ログイン画面（`streamlit-authenticator`）があり、以下3つの環境変数が必須です（未設定だとエラー表示で`st.stop()`）。これはAnaplan自体への認証情報とは別物で、「誰がこのダッシュボードを開けるか」を制御するものです。
+
+- `APP_LOGIN_USER`: ログイン画面で使うユーザー名
+- `APP_LOGIN_PASSWORD_HASH`: ログインパスワードのbcryptハッシュ（平文は保存しない）
+- `APP_COOKIE_KEY`: 認証クッキーの署名鍵（再起動をまたいでログイン状態を保持するなら固定値にする）
+
+`APP_LOGIN_PASSWORD_HASH`の生成方法:
+```bash
+uv run python -c "import streamlit_authenticator as stauth; print(stauth.Hasher.hash('好きなパスワード'))"
+```
 
 ## 主要コマンド
 
@@ -70,8 +83,57 @@ uv run python libs/history_audit/HistoryAudit_Scheduled.py
 20260801all_summary_dashboard.html
 ```
 
-Model Analyzerダッシュボードを起動する場合:
+Model Analyzerダッシュボードを起動する場合（`ANAPLAN_USER`/`ANAPLAN_PASSWORD`に加え、`APP_LOGIN_USER`/`APP_LOGIN_PASSWORD_HASH`/`APP_COOKIE_KEY`も環境変数に必要）:
 ```bash
 uv run streamlit run libs/model_analyzer/dashboard.py
 ```
-ブラウザが開いたら、サイドバーでWorkspace ID / Model IDを入力し、各タブでモジュール間依存関係やライン別アイテムの検索・Excel出力・AI監査を行う。
+ブラウザが開くとまずログイン画面が表示される。`APP_LOGIN_USER`/`APP_LOGIN_PASSWORD_HASH`で設定したID/PASSでログイン後、サイドバーでWorkspace ID / Model IDを入力し、各タブでモジュール間依存関係やライン別アイテムの検索・Excel出力・AI監査を行う。
+
+## ローカルでの起動（PowerShellスクリプト）
+
+[run_local.ps1](run_local.ps1) は必要な環境変数が設定されていることを確認した上で `uv run streamlit run` を実行する。認証情報はスクリプトに埋め込まず、実行前に環境変数として渡す。
+
+```powershell
+$env:ANAPLAN_USER = "<Anaplanログインメールアドレス>"
+$env:ANAPLAN_PASSWORD = "<Anaplanパスワード>"
+$env:ANAPLAN_WS = "<Workspace ID>"       # 省略可、画面からも入力可
+$env:ANAPLAN_MODEL = "<Model ID>"        # 省略可、画面からも入力可
+$env:APP_LOGIN_USER = "<アプリログイン用ユーザー名>"
+$env:APP_LOGIN_PASSWORD_HASH = "<bcryptハッシュ>"
+$env:APP_COOKIE_KEY = "<任意の乱数文字列>"
+
+pwsh -File "run_local.ps1"
+```
+
+`.env`ファイル（`ANAPLAN_USER="..."`のような形式）から読み込みたい場合は`-EnvFile`オプションを使う。
+
+```powershell
+pwsh -File "run_local.ps1" -EnvFile "<.envファイルへのパス>"
+```
+
+起動後、ターミナルに表示される `Local URL: http://localhost:8501` をブラウザで開く。停止は Ctrl+C。必要な環境変数が未設定の場合はエラーで一覧表示され、起動しない。
+
+## Cloud Runへのデプロイ
+
+`anaplan-skill/**`への変更を`main`ブランチにpushすると、[.github/workflows/anaplan-skill-deploy.yml](../.github/workflows/anaplan-skill-deploy.yml)（モノレポルート`claude-gemini-skills/.github/workflows/`に配置、GitHubはこの場所しか認識しない）が自動的にDockerイメージをビルドし、Google Cloud Run（サービス名 `anaplan-model-analyzer`、リージョン `asia-northeast1`）へデプロイする。
+
+- **GCP↔GitHub Actions認証**: Workload Identity Federation（長期キー不要。プロジェクト`trim-opus-407712`の既存プール`github-pool`/プロバイダ`sera-provider`を再利用）
+- **イメージ格納先**: 既存のArtifact Registryリポジトリ`apps`（`asia-northeast1`）
+- **デプロイ用サービスアカウント**: `anaplan-skill-deployer@trim-opus-407712.iam.gserviceaccount.com`（Artifact Registry writer + Cloud Run admin）
+- **ランタイム用サービスアカウント**: `anaplan-skill-runtime@trim-opus-407712.iam.gserviceaccount.com`（Secret Managerの各シークレットへのアクセス権のみ）
+- **認証情報の受け渡し**: `ANAPLAN_USER`/`ANAPLAN_PASSWORD`/`ANAPLAN_WS`/`ANAPLAN_MODEL`/`APP_LOGIN_USER`/`APP_LOGIN_PASSWORD_HASH`/`APP_COOKIE_KEY`/`GEMINI_API_KEY`はすべてSecret Manager経由でCloud Runに注入。リポジトリやDockerイメージには一切含まれない
+- **アクセス制御**: Cloud Run自体は`--allow-unauthenticated`（IAMは開放）。実際のセキュリティ境界はStreamlitアプリ内のログイン画面（`streamlit-authenticator`、`libs/model_analyzer/auth.py`）
+
+デプロイ状況の確認:
+```bash
+gh run list --repo iida-masashi/skills --workflow=anaplan-skill-deploy.yml
+gcloud run services describe anaplan-model-analyzer --region=asia-northeast1 --project=trim-opus-407712 --format='value(status.url)'
+```
+
+Secret Managerの値を更新する場合（例: アプリログインのパスワード変更）:
+```bash
+uv run python -c "import streamlit_authenticator as stauth; print(stauth.Hasher.hash('新しいパスワード'))"
+# 出力されたハッシュを新バージョンとして登録
+echo -n "<ハッシュ>" | gcloud secrets versions add APP_LOGIN_PASSWORD_HASH --data-file=- --project=trim-opus-407712
+```
+次回のデプロイ（またはリビジョンの再作成）で`:latest`が新バージョンを指すようになる。
