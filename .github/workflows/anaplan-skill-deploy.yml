@@ -86,6 +86,8 @@ jobs:
           secrets: |
             ANAPLAN_USER=ANAPLAN_USER:latest
             ANAPLAN_PASSWORD=ANAPLAN_PASSWORD:latest
+            ANAPLAN_WS=ANAPLAN_WS:latest
+            ANAPLAN_MODEL=ANAPLAN_MODEL:latest
             APP_LOGIN_USER=APP_LOGIN_USER:latest
             APP_LOGIN_PASSWORD_HASH=APP_LOGIN_PASSWORD_HASH:latest
             APP_COOKIE_KEY=APP_COOKIE_KEY:latest
