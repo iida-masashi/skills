@@ -166,7 +166,7 @@ def test_fetch_actions_parallel(mocker):
         elif url.endswith("/processes"):
             return MockResponse({"processes": [{"id": "proc1", "name": "Proc 1"}]})
         elif url.endswith("/processes/proc1"):
-            return MockResponse({"processMetadata": {"actions": [{"actionName": "Step 1"}]}})
+            return MockResponse({"processMetadata": {"actions": [{"id": "act_step1", "name": "Step 1", "actionType": "IMPORT"}]}})
         elif url.endswith("/actions"):
             return MockResponse({"actions": [{"id": "act1", "name": "Action 1"}]})
         elif url.endswith("/actions/act1"):
@@ -190,7 +190,7 @@ def test_fetch_actions_parallel(mocker):
 
     assert actions["imports"][0]["columnCount"] == 3
     assert actions["exports"][0]["rowCount"] == 100
-    assert actions["processes"][0]["steps"][0]["actionName"] == "Step 1"
+    assert actions["processes"][0]["steps"][0]["name"] == "Step 1"
     assert actions["actions"][0]["actionType"] == "DELETE"
 
     assert len(callback_messages) > 0

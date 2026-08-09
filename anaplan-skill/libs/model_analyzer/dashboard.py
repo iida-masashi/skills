@@ -1,14 +1,20 @@
+import concurrent.futures
 import hashlib
 import html
+import io
 import os
 import tempfile
+import threading
 
 import networkx as nx
 import polars as pl
 import streamlit as st
 import streamlit.components.v1 as components
+import xlsxwriter
 from dotenv import load_dotenv
+from google import genai
 from pyvis.network import Network
+from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
 
 env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', '..', '.env'))
 load_dotenv(env_path)
@@ -36,11 +42,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 require_login()  # アプリ内ログインゲート。Anaplan呼び出しより前に実行
-
-import concurrent.futures
-import threading
-
-from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
 
 
 @st.cache_data(ttl=None, persist="disk", show_spinner=False)
@@ -92,10 +93,6 @@ def fetch_all_model_data(username: str, password: str, workspace_id: str, model_
     progress_bar.empty()
 
     return nodes_m, edges_m, nodes_li, edges_li, actions_dfs, lists_df, modules_df, li_df, ws_details, model_details
-
-import io
-
-import xlsxwriter
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -156,8 +153,6 @@ st.sidebar.download_button(
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
 
-from google import genai
-
 
 def run_ai_audit(formulas: list[str]) -> str:
     api_key = os.environ.get("GEMINI_API_KEY")
@@ -179,6 +174,58 @@ def run_ai_audit(formulas: list[str]) -> str:
         return response.text
     except Exception as e:
         return f"AI Audit failed: {str(e)}"
+
+def build_details_column(df: pl.DataFrame, field_specs: list[tuple[str, str]], nested_col: str | None = None) -> pl.DataFrame:
+    """指定したフィールドの値を " | " 区切りで連結した "details" 列を追加する。
+    field_specs: [(フィールド名, 表示テンプレート), ...]。テンプレートは "Cols: {}" のように{}に値を埋め込む。
+    値が無い/Falsyなフィールドはスキップする。
+    nested_col: 値がトップレベルではなく、この名前の辞書列の中に入っている場合に指定する
+    （例: Importsの columnCount/columnSeparator は "source" 列の中）。"""
+    def format_details(row):
+        target = row.get(nested_col) if nested_col else row
+        if not isinstance(target, dict):
+            return ""
+        parts = [template.format(target[field]) for field, template in field_specs if target.get(field)]
+        return " | ".join(parts)
+
+    return df.with_columns(
+        pl.struct(df.columns).map_elements(format_details, return_dtype=pl.Utf8).alias("details")
+    )
+
+
+def flatten_struct_list_columns(df: pl.DataFrame) -> pl.DataFrame:
+    """List[Struct]型の列（例: appliesTo, properties, subsets）を、
+    各要素の name フィールドをカンマ区切りにした文字列に変換する。
+    Streamlitのdataframeグリッドはこの型をそのまま渡すと "Object" としか表示できないため、
+    to_pandas()する前に必ずこの関数を通す。"""
+    exprs = []
+    for col_name, dtype in df.schema.items():
+        if isinstance(dtype, pl.List) and isinstance(dtype.inner, pl.Struct) and "name" in dtype.inner.to_schema():
+            exprs.append(
+                pl.col(col_name).list.eval(pl.element().struct.field("name")).list.join(", ").alias(col_name)
+            )
+    return df.with_columns(exprs) if exprs else df
+
+
+def select_display_cols(df: pl.DataFrame, display_cols: list[str] | None) -> pl.DataFrame:
+    """display_colsで指定した列のみを、その順序で選択する（未指定なら全列）。
+    存在しない列名は無視する。"""
+    df = flatten_struct_list_columns(df)
+    if not display_cols:
+        return df
+    cols = df.columns
+    ordered_cols = [c for c in display_cols if c in cols]
+    return df.select(ordered_cols)
+
+
+def reorder_front_cols(df: pl.DataFrame, front_cols: list[str]) -> pl.DataFrame:
+    """front_colsで指定した重要な列を先頭に並べ、残りの全列もそのまま後ろに続ける
+    （列を絞り込まず全件表示したいタブ用）。"""
+    df = flatten_struct_list_columns(df)
+    cols = df.columns
+    ordered_cols = [c for c in front_cols if c in cols] + [c for c in cols if c not in front_cols]
+    return df.select(ordered_cols)
+
 
 def render_dataframe_tab(
     df: pl.DataFrame,
@@ -206,12 +253,7 @@ def render_dataframe_tab(
     if disp_df.is_empty():
         st.info("検索条件に一致するデータがありません")
     else:
-        if display_cols:
-            cols = disp_df.columns
-            ordered_cols = [c for c in display_cols if c in cols] + [c for c in cols if c not in display_cols]
-            st.dataframe(disp_df.select(ordered_cols).to_pandas(), width='stretch', height=700)
-        else:
-            st.dataframe(disp_df.to_pandas(), width='stretch', height=700)
+        st.dataframe(select_display_cols(disp_df, display_cols).to_pandas(), width='stretch', height=700)
 
 def filter_network(nodes_df: pl.DataFrame, edges_df: pl.DataFrame, search_ids: list[str] | None, depth: str = "1") -> tuple[pl.DataFrame, pl.DataFrame, set[str] | None]:
     if not search_ids:
@@ -337,6 +379,11 @@ def render_network(n_df: pl.DataFrame, e_df: pl.DataFrame, matched_ids: set[str]
           "springConstant": 0.04,
           "damping": 0.09,
           "avoidOverlap": 0.1
+        },
+        "stabilization": {
+          "enabled": true,
+          "iterations": 200,
+          "fit": true
         }
       }
     }
@@ -353,19 +400,27 @@ def render_network(n_df: pl.DataFrame, e_df: pl.DataFrame, matched_ids: set[str]
         with open(file_path, encoding="cp932", errors="replace") as f:
             html_data = f.read()
 
-    # JS Injection for Double-click Fullscreen
+    # JS Injection: 安定化完了後にphysicsを自動OFF（体感速度向上）＋ダブルクリック/ボタンでフルスクリーン
     fullscreen_js = """
+    <button id="btn_max" style="position:absolute;top:8px;right:8px;z-index:1000;padding:6px 12px;cursor:pointer;">🗖 最大化</button>
     <script type="text/javascript">
-      // Double click on the network container to enter fullscreen
-      document.getElementById('mynetwork').addEventListener('dblclick', function(e) {
+      if (typeof network !== 'undefined') {
+          network.once('stabilizationIterationsDone', function() {
+              network.setOptions({ physics: false });
+          });
+      }
+      function toggleFs() {
+          var el = document.getElementById('mynetwork');
           if (!document.fullscreenElement) {
-              this.requestFullscreen().catch(err => {
+              el.requestFullscreen().catch(err => {
                   console.log(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
               });
           } else {
               document.exitFullscreen();
           }
-      });
+      }
+      document.getElementById('mynetwork').addEventListener('dblclick', toggleFs);
+      document.getElementById('btn_max').addEventListener('click', toggleFs);
     </script>
     </body>
     """
@@ -514,7 +569,7 @@ with tab_mod:
     if search_m and not disp_m.is_empty():
         disp_m = disp_m.filter(pl.col("name").fill_null("").str.to_lowercase().str.contains(search_m.lower()))
     if not disp_m.is_empty():
-        st.dataframe(disp_m.to_pandas(), width='stretch', height=750)
+        st.dataframe(flatten_struct_list_columns(disp_m).to_pandas(), width='stretch', height=750)
     else:
         st.info("データがありません")
 
@@ -525,11 +580,8 @@ with tab_lst:
     if search_l and not disp_l.is_empty():
         disp_l = disp_l.filter(pl.col("name").fill_null("").str.to_lowercase().str.contains(search_l.lower()))
     if not disp_l.is_empty():
-        # カラムの並び替え（詳細メタデータがある場合は前に持ってくる）
-        cols = disp_l.columns
         front_cols = ["name", "itemCount", "numberedList", "productionData", "hasSelectiveAccess", "usedInAppliesTo", "id"]
-        ordered_cols = [c for c in front_cols if c in cols] + [c for c in cols if c not in front_cols]
-        st.dataframe(disp_l.select(ordered_cols).to_pandas(), width='stretch', height=750)
+        st.dataframe(reorder_front_cols(disp_l, front_cols).to_pandas(), width='stretch', height=750)
     else:
         st.info("データがありません")
 
@@ -561,28 +613,18 @@ with tab_li:
                 st.markdown(report)
 
     if not disp_li.is_empty():
-        cols = disp_li.columns
         front_cols = ["moduleName", "name", "formula", "cellCount", "estimated_size_mb", "is_summary_optimization_candidate", "id"]
-        ordered_cols = [c for c in front_cols if c in cols] + [c for c in cols if c not in front_cols]
-        st.dataframe(disp_li.select(ordered_cols).to_pandas(), width='stretch', height=750)
+        st.dataframe(reorder_front_cols(disp_li, front_cols).to_pandas(), width='stretch', height=750)
     else:
         st.info("データがありません")
 
 with tab_imp:
     imports_df = actions_dfs.get("imports", pl.DataFrame())
     if not imports_df.is_empty():
-        def format_import_details(row):
-            parts = []
-            src = row.get("source")
-            if isinstance(src, dict):
-                if "columnCount" in src:
-                    parts.append(f"Cols: {src['columnCount']}")
-                if "columnSeparator" in src:
-                    parts.append(f"Sep: '{src['columnSeparator']}'")
-            return " | ".join(parts) if parts else ""
-
-        imports_df = imports_df.with_columns(
-            pl.struct(imports_df.columns).map_elements(format_import_details, return_dtype=pl.Utf8).alias("details")
+        imports_df = build_details_column(
+            imports_df,
+            field_specs=[("columnCount", "Cols: {}"), ("columnSeparator", "Sep: '{}'")],
+            nested_col="source"
         )
         display_cols = ["name", "importType", "sourceFileName", "details", "id"] if "sourceFileName" in imports_df.columns else ["name", "importType", "details", "id"]
     else:
@@ -600,7 +642,7 @@ with tab_imp:
 with tab_proc:
     processes_df = actions_dfs.get("processes", pl.DataFrame())
     if not processes_df.is_empty() and "steps" in processes_df.columns:
-        # stepsは dict の list。actionName を抽出してカンマ区切りにする
+        # stepsは dict の list。name/actionType を抽出して改行区切りの詳細行にする
         def format_steps(steps_list):
             if steps_list is None:
                 return ""
@@ -609,9 +651,15 @@ with tab_proc:
                     steps_list = steps_list.to_list()
                 if len(steps_list) == 0:
                     return ""
-                # 辞書のリストから actionName を取り出す
-                names = [s.get("actionName", "Unknown") if isinstance(s, dict) else str(s) for s in steps_list]
-                return ", ".join(names)
+                lines = []
+                for s in steps_list:
+                    if not isinstance(s, dict):
+                        lines.append(str(s))
+                        continue
+                    step_name = s.get("name", "Unknown")
+                    action_type = s.get("actionType", "")
+                    lines.append(f"[{action_type}] {step_name}" if action_type else step_name)
+                return "\n".join(lines)
             except Exception:
                 return str(steps_list)
 
@@ -619,6 +667,11 @@ with tab_proc:
             pl.col("steps").map_elements(format_steps, return_dtype=pl.Utf8).alias("step_details")
         )
 
+    st.caption(
+        "ℹ️ Anaplan APIのインポート/エクスポートメタデータにはソース側の情報（ファイル列名等）のみが含まれ、"
+        "更新先のモジュール・ラインアイテムを示す情報は含まれていません（実データで確認済み）。"
+        "そのためstep_detailsではモジュール/ラインアイテムの特定はできず、actionTypeとステップ名のみを表示しています。"
+    )
     render_dataframe_tab(
         df=processes_df,
         tab_title="Processes (一連の処理)",
@@ -631,18 +684,9 @@ with tab_proc:
 with tab_exp:
     exports_df = actions_dfs.get("exports", pl.DataFrame())
     if not exports_df.is_empty():
-        def format_export_details(row):
-            parts = []
-            if row.get("rowCount"):
-                parts.append(f"Rows: {row['rowCount']}")
-            if row.get("columnCount"):
-                parts.append(f"Cols: {row['columnCount']}")
-            if row.get("separator"):
-                parts.append(f"Sep: '{row['separator']}'")
-            return " | ".join(parts) if parts else ""
-
-        exports_df = exports_df.with_columns(
-            pl.struct(exports_df.columns).map_elements(format_export_details, return_dtype=pl.Utf8).alias("details")
+        exports_df = build_details_column(
+            exports_df,
+            field_specs=[("rowCount", "Rows: {}"), ("columnCount", "Cols: {}"), ("separator", "Sep: '{}'")]
         )
         display_cols = ["name", "exportFormat", "details", "id"]
     else:
@@ -660,16 +704,9 @@ with tab_exp:
 with tab_act:
     actions_df = actions_dfs.get("actions", pl.DataFrame())
     if not actions_df.is_empty():
-        def format_action_details(row):
-            parts = []
-            if row.get("actionType"):
-                parts.append(f"Type: {row['actionType']}")
-            if row.get("listId"):
-                parts.append(f"TargetList: {row['listId']}")
-            return " | ".join(parts) if parts else ""
-
-        actions_df = actions_df.with_columns(
-            pl.struct(actions_df.columns).map_elements(format_action_details, return_dtype=pl.Utf8).alias("details")
+        actions_df = build_details_column(
+            actions_df,
+            field_specs=[("actionType", "Type: {}"), ("listId", "TargetList: {}")]
         )
         display_cols = ["name", "details", "id"]
     else:

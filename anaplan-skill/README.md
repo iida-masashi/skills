@@ -68,6 +68,17 @@ uv run pytest
 - **AI監査は任意機能** — 表示中の数式（50件以下）をGemini（`gemini-3-flash-preview`）に送信し、PLANS原則（長すぎるIF文・TEXT結合の乱用・不必要なLOOKUP等）違反を診断する。`GEMINI_API_KEY`未設定時はエラーメッセージを返すのみで他機能に影響しない。
 - **Excel仕様書出力** — `xlsxwriter`でModules/Lists/LineItems/各Action種別をシート分けしたExcelファイルをダウンロードボタンから取得できる。
 
+## DataFrame列の命名規則
+
+`dashboard.py`/`analyzer.py`のPolars DataFrameでは、列名がcamelCase（例: `moduleName`, `cellCount`, `appliesTo`）とsnake_case（例: `line_item_count`, `estimated_size_mb`, `step_details`）に混在しているが、これは意図した区別である。
+
+- **camelCase** = Anaplan APIのレスポンスをそのまま保持している列（キー名をリネームしない）
+- **snake_case** = このコードがローカルで計算・導出した列（集計、フラグ、整形済みテキストなど）
+
+新しい列を追加する際もこの区別に従うこと。API由来の列名を勝手にリネームしない（`Model Diff`タブの`compare_dataframes`呼び出しが列名をそのまま結合キーとして使っているため、リネームすると比較ロジックが壊れる）。
+
+List[Struct]型の列（`appliesTo`など）をStreamlitの`st.dataframe`に渡す前は、`flatten_struct_list_columns`（`dashboard.py`）を必ず通す。素通しすると`to_pandas()`後にセルが`Object`としか表示されない。
+
 ## 実行例
 
 ```bash

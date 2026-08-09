@@ -44,4 +44,5 @@ if ($missing) {
 }
 
 Set-Location $PSScriptRoot
+$env:PYTHONPATH = $PSScriptRoot
 uv run streamlit run libs/model_analyzer/dashboard.py
