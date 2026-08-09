@@ -14,6 +14,7 @@ env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '
 load_dotenv(env_path)
 
 from libs.model_analyzer.analyzer import AnaplanConfig, AnaplanModelAnalyzer
+from libs.model_analyzer.auth import require_login
 from libs.model_analyzer.diff_engine import compare_dataframes
 
 st.set_page_config(page_title="Anaplan Model Analyzer", layout="wide", initial_sidebar_state="expanded")
@@ -34,7 +35,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-
+require_login()  # アプリ内ログインゲート。Anaplan呼び出しより前に実行
 
 import concurrent.futures
 import threading

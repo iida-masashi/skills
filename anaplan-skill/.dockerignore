@@ -1,0 +1,45 @@
+# Docs not needed in runtime image
+README.md
+SKILL.md
+
+# Git
+.git
+.github
+.gitignore
+
+# Python cache / tooling
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.psc-baseline.json
+
+# Tests (not needed at runtime)
+tests/
+
+# history_audit subsystem — out of scope for this deployment, not imported
+# by dashboard.py, excluded to keep the build context and image slim.
+libs/history_audit/
+
+# Local env / virtualenv
+.env
+.venv
+venv
+
+# Test/output artifacts
+test_output/
+*.xlsx
+*.csv
+anaplan_network.html
+
+# Build artifacts
+build/
+*.egg-info/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode
+.idea

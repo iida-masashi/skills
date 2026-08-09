@@ -16,6 +16,7 @@ dependencies = [
     "pyvis>=0.3.1",
     "python-dotenv>=1.0.0",
     "xlsxwriter>=3.0.0",
+    "streamlit-authenticator>=0.4.2",
 ]
 
 [project.optional-dependencies]
