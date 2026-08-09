@@ -38,6 +38,7 @@ Claude Code と Gemini CLI の両方から共有して使う、自作エージ�
 | [`context-compression-skill`](./context-compression-skill/) | シェルコマンド・検索・ファイル読み込みの出力をコンテキストに入れる前に圧縮・フィルタしたいとき（常時適用の作法スキル） | なし |
 | [`galaxy-orchestrator`](./galaxy-orchestrator/) | Gemini 3系列（3.1 Pro/3.6 Flash/3.5 Flash-Lite）の呼び出しを一本化し、動的モデル選択・リトライ・フォールバック・MCP経由のツール呼び出しを行いたいとき | `pip install -r requirements.txt`、`.env`に`GOOGLE_API_KEY`（or `GEMINI_API_KEY`）、MCPサーバー起動用にNode.js（npx）・`uv`（uvx） |
 | [`web-search`](./web-search/) | Web検索・URL取得を行いたいとき（標準でGemini API優先、失敗時はClaudeネイティブのWebSearch/WebFetchにフォールバック） | `<gemini-scripts-dir>`に`gemini_websearch.py`/`gemini_webfetch.py`と`.env`、`convMD` uvプロジェクトが別途必要 |
+| [`gcp-docker-deploy`](./gcp-docker-deploy/) | Dockerizedアプリ（Streamlit/FastAPI/Node.js等）をGitHub Actions経由でGoogle Cloud（Cloud RunまたはVM）にデプロイしたいとき、Cloud Run/VMの選定に迷うとき、WIF/サービスアカウント鍵のどちらで認証するか決めたいとき | `gcloud`/`gh` CLI、Artifact Registry、Workload Identity Federation設定（またはサービスアカウントJSON鍵）。手順のみでスクリプトは持たない |
 
 ## 両ツールから使う仕組み
 
