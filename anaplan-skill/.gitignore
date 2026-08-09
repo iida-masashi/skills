@@ -7,3 +7,7 @@ test_output/
 *.xlsx
 *.csv
 anaplan_network.html
+
+# Build artifacts
+build/
+*.egg-info/

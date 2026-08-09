@@ -1,7 +1,7 @@
 [project]
 name = "anaplan-skill"
 version = "2.1.0"
-description = "Anaplan integration suite for SCM demand forecasting and workspace history auditing."
+description = "Anaplan integration suite for workspace history auditing and model analysis."
 readme = "SKILL.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -25,7 +25,7 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["libs"]
+packages = ["libs", "libs.common", "libs.history_audit", "libs.model_analyzer"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

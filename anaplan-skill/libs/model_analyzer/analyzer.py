@@ -513,7 +513,7 @@ class AnaplanModelAnalyzer:
 
         if "appliesTo" in li_df.columns:
             agg_exprs.append(
-                pl.col("appliesTo").explode().struct.field("name")
+                pl.col("appliesTo").explode(empty_as_null=True).struct.field("name")
                 .drop_nulls().unique().drop_nulls().implode().list.join(", ")
                 .alias("dimensions")
             )
