@@ -30,8 +30,9 @@ def main():
         print(f"File not found: {csv_path}")
         return
 
+    output_path = csv_path.with_name(csv_path.stem + "_dashboard.html")
     generator = AuditDashboardGenerator(pl.read_csv(csv_path), csv_path)
-    dashboard_path = generator.generate()
+    dashboard_path = generator.generate(output_path)
 
     print("\nSuccess!")
     print("Open the dashboard in your browser:")

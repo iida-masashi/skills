@@ -271,8 +271,9 @@ def main():
             combined_df.write_csv(csv_path)
 
         # Generate dashboard (including failed models)
+        dashboard_output_path = Path(OUTPUT_FOLDER) / f"{timestamp}_dashboard.html"
         dashboard_gen = AuditDashboardGenerator(combined_df)
-        dashboard_path = dashboard_gen.generate(combined_df, timestamp, failed_models)
+        dashboard_path = dashboard_gen.generate(dashboard_output_path, timestamp, failed_models)
 
         total_time = (datetime.now(UTC) - start_time).total_seconds()
         total_rows = sum(r['total_rows'] for r in results) if results else 0

@@ -5,9 +5,6 @@ Anaplanのワークスペース履歴監査（History Audit）とモデル解析
 | Document | Purpose |
 |----------|---------|
 | [SKILL.md](SKILL.md) | スキルの目的と主要機能の概要 |
-| [libs/history_audit/README.md](libs/history_audit/README.md) | History Auditシステムの詳細（一部、現行のPolars実装より古い記述を含む） |
-| [libs/history_audit/CONFIGURATION.md](libs/history_audit/CONFIGURATION.md) | モデル設定の追加方法・認証情報の管理方法 |
-| [libs/history_audit/PERFORMANCE_OPTIMIZATION.md](libs/history_audit/PERFORMANCE_OPTIMIZATION.md) | チャンク処理・並列処理の最適化手法の説明 |
 | [libs/history_audit/config.example.py](libs/history_audit/config.example.py) | 設定ファイルのサンプル（`config.py`としてコピーして使用） |
 
 ## Quick Start
