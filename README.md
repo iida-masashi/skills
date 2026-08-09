@@ -13,8 +13,7 @@ Claude Code と Gemini CLI の両方から共有して使う、自作エージ�
 | スキル | 使う場面 | 前提条件 |
 |---|---|---|
 | [`convmd`](./convmd/) | Web記事（Zenn/Qiita/note/X/Wikipedia/GitHub/Reddit/はてな/Substack/Medium等）・動画/音声・ローカルOffice/PDFファイルをObsidian向けMarkdownに変換・取り込みたいとき | convMD CLI（`<convmd-repo>`、uv管理）。機能別に`GEMINI_API_KEY`（OCR/自動リンク）、`XAI_API_KEY`（X/Twitter）、`uv sync --extra whisper`+FFmpeg（音声文字起こし）、pandoc（epub/pdf/docx変換） |
-| [`vault-publish`](./vault-publish/) | 阿波説(awa)Vault・宗教研究(religion)Vault専用に、Quartz→GitHub Pagesへの公開パイプライン（sync→build検証→commit→push）をワンステップで実行したいとき | Vault側の同期スクリプト、Node.js/npx（`quartz build`）、対象Quartzリポジトリ、`gh` CLI（任意） |
-| [`vault-sync`](./vault-sync/) | 同上のVault対象で、commit/pushせずローカル同期とビルド確認・プレビューだけしたいとき | vault-publishと同じ。git操作は不要 |
+| [`vault-publish`](./vault-publish/) | 阿波説(awa)Vault・宗教研究(religion)Vault専用に、Quartz→GitHub Pagesへの公開パイプライン（sync→build検証→commit→push）をワンステップで実行したいとき。`--sync-only`でcommit/pushせずローカル同期・ビルド確認・プレビューだけも可（旧`vault-sync`スキルはこれに統合され廃止済み） | Vault側の同期スクリプト、Node.js/npx（`quartz build`）、対象Quartzリポジトリ、`gh` CLI（任意） |
 | [`vault-api`](./vault-api/) | Obsidian Local REST API経由でVaultを直接操作（全文検索・読み取り・一覧・追記・見出し挿入・リネーム・削除）、または孤立ノート/薄ノート検出等のメンテナンスをしたいとき | Obsidian本体起動中＋Local REST APIプラグイン、PowerShell 7（`pwsh`、UTF-8対応）、`_secrets/obsidian.json`にAPIキー設定（孤立ノート/薄ノート検出等のメンテナンスツールはAPI不要、対象Vaultパスの指定が必要） |
 | [`shrine-note-template`](./shrine-note-template/) | 神社・神格の専門ノートを標準12セクション構造で新規作成したいとき | 特になし（テンプレ・ガイドラインのみ）。作成後の検証に`vault-verify-notes.ps1`（任意） |
 | [`essay-note-template`](./essay-note-template/) | 神格論・氏族論・伝承等の論考型ノートを新規作成・整備したいとき（shrine-note-templateの論考版） | 特になし。検証に`vault-verify-notes.ps1`（任意） |
