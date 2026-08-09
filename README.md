@@ -18,7 +18,7 @@ Claude Code と Gemini CLI の両方から共有して使う、自作エージ�
 | [`vault-api`](./vault-api/) | Obsidian Local REST API経由でVaultを直接操作（全文検索・読み取り・一覧・追記・見出し挿入・リネーム・削除）、または孤立ノート/薄ノート検出等のメンテナンスをしたいとき | Obsidian本体起動中＋Local REST APIプラグイン、PowerShell 7（`pwsh`、UTF-8対応）、`_secrets/obsidian.json`にAPIキー設定（孤立ノート/薄ノート検出等のメンテナンスツールはAPI不要、対象Vaultパスの指定が必要） |
 | [`shrine-note-template`](./shrine-note-template/) | 神社・神格の専門ノートを標準12セクション構造で新規作成したいとき | 特になし（テンプレ・ガイドラインのみ）。作成後の検証に`vault-verify-notes.ps1`（任意） |
 | [`essay-note-template`](./essay-note-template/) | 神格論・氏族論・伝承等の論考型ノートを新規作成・整備したいとき（shrine-note-templateの論考版） | 特になし。検証に`vault-verify-notes.ps1`（任意） |
-| [`religion-research`](./religion-research/) | 天理教・その分派異端運動（ほんみち、ほんぶしん等）を調査し、宗教研究Vault（`religion-garden`）に構造化ノートを構築・維持したいとき | 特になし（指示書のみ、スクリプトは持たない） |
+| [`religion-research`](./religion-research/) | 宗教（天理教・その分派異端運動等）・食文化（郷土料理・儀礼食）・音楽（民族音楽・伝承歌謡）・土着の民族文化（親族制度・通過儀礼）を文化人類学的に調査し、宗教研究Vault（`religion-garden`）に構造化ノートを構築・維持したいとき | 特になし（指示書のみ、スクリプトは持たない）。領域別の詳細は`references/`配下（religion/food/music/ethnic-culture） |
 
 ### 業務分析・データ処理系
 
