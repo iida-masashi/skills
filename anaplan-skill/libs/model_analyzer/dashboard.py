@@ -441,7 +441,7 @@ def render_network(n_df: pl.DataFrame, e_df: pl.DataFrame, matched_ids: set[str]
         st.success("HTMLの生成が完了しました。上のボタンからダウンロードしてブラウザで開いてください。")
 
 # タブの分離
-tab_net_m, tab_net_li, tab_mat, tab_mod, tab_lst, tab_li, tab_imp, tab_proc, tab_exp, tab_act, tab_diff, tab_cap = st.tabs([
+tab_net_m, tab_net_li, tab_mat, tab_mod, tab_lst, tab_li, tab_imp, tab_proc, tab_exp, tab_act, tab_diff, tab_cap, tab_unused = st.tabs([
     "🌐 Module Network",
     "🕸️ Line Item Network",
     "🧩 Matrices",
@@ -453,7 +453,8 @@ tab_net_m, tab_net_li, tab_mat, tab_mod, tab_lst, tab_li, tab_imp, tab_proc, tab
     "📤 Exports",
     "⚙️ Actions",
     "⚖️ Model Diff",
-    "📊 Capacity"
+    "📊 Capacity",
+    "🗑️ Unused Objects"
 ])
 
 with tab_net_m:
@@ -824,4 +825,103 @@ with tab_cap:
             st.success("最適化候補（明らかなSummary設定の無駄）は見つかりませんでした。")
     else:
         st.warning("容量データが計算されていません。")
+
+with tab_unused:
+    st.markdown("### 🗑️ 未使用の可能性があるオブジェクト")
+    st.warning(
+        "⚠️ ここに表示される項目は、あくまで**メタデータ上の手がかりに基づく候補**です。断定ではありません。"
+        "特にLine Item判定は、レポート/ダッシュボードの最終表示列（他の数式からは参照されないが意図的に使われている）や、"
+        "Importの書き込み先列（このモデルでは実データ上、書き込み先を判別する情報がAPIに含まれないことを確認済み）を"
+        "誤って「未使用」と表示することがあります。**削除前に必ずAnaplan UI側で手動確認してください。**"
+    )
+
+    st.markdown("#### 📋 未使用の可能性があるList")
+    st.caption("どのModule/Line ItemのAppliesToにも使われていないList（`usedInAppliesTo`が空）。")
+    if not lists_df.is_empty() and "usedInAppliesTo" in lists_df.columns:
+        unused_lists = lists_df.filter(pl.col("usedInAppliesTo").fill_null("") == "")
+        if unused_lists.is_empty():
+            st.success("該当するListはありません。")
+        else:
+            st.warning(f"{unused_lists.height}件のListが未使用の可能性があります。")
+            st.dataframe(unused_lists.select(["name", "itemCount", "id"]).to_pandas(), width='stretch')
+    else:
+        st.info("List情報が取得できていません。")
+
+    st.divider()
+
+    st.markdown("#### 🧮 未使用の可能性があるLine Item")
+    st.caption("他のどの数式からも参照されていないLine Item（`referencedBy`が空）。")
+    if not li_df.is_empty() and "referencedBy" in li_df.columns:
+        unused_li = li_df.filter(pl.col("referencedBy").list.len() == 0)
+        if unused_li.is_empty():
+            st.success("該当するLine Itemはありません。")
+        else:
+            st.warning(f"{unused_li.height}件のLine Itemが未使用の可能性があります。")
+            cols = [c for c in ["moduleName", "name", "formula", "cellCount", "id"] if c in unused_li.columns]
+            st.dataframe(unused_li.select(cols).to_pandas(), width='stretch', height=500)
+    else:
+        st.info("Line Item情報が取得できていません。")
+
+    st.divider()
+
+    st.markdown("#### ⚙️ どのProcessのステップにも含まれないAction")
+    st.caption(
+        "Import/Export/その他Actionのうち、どのProcessのステップにも組み込まれていないもの。"
+        "ダッシュボード等から手動実行されるActionも該当するため、これも未使用の確定情報ではありません。"
+    )
+    processes_raw = actions_dfs.get("processes", pl.DataFrame())
+    step_ids_in_processes: set[str] = set()
+    if not processes_raw.is_empty() and "steps" in processes_raw.columns:
+        for steps_list in processes_raw["steps"].to_list():
+            if not steps_list:
+                continue
+            for step in steps_list:
+                if isinstance(step, dict) and step.get("id"):
+                    step_ids_in_processes.add(step["id"])
+
+    standalone_rows = []
+    for action_type, label in [("imports", "Import"), ("exports", "Export"), ("actions", "Action")]:
+        action_df = actions_dfs.get(action_type, pl.DataFrame())
+        if action_df.is_empty() or "id" not in action_df.columns:
+            continue
+        for row in action_df.select(["id", "name"]).iter_rows(named=True):
+            if row["id"] not in step_ids_in_processes:
+                standalone_rows.append({"type": label, "name": row["name"], "id": row["id"]})
+
+    if not standalone_rows:
+        st.success("該当するActionはありません（全てのImport/Export/Actionが何らかのProcessに組み込まれています）。")
+    else:
+        standalone_df = pl.DataFrame(standalone_rows)
+        st.warning(f"{standalone_df.height}件のActionがどのProcessのステップにも含まれていません。")
+        st.dataframe(standalone_df.to_pandas(), width='stretch', height=400)
+
+    st.divider()
+
+    st.markdown("#### 📦 未使用の可能性があるModule")
+    st.caption(
+        "含まれる全Line Itemが未参照（上記と同じ判定）、かつ他モジュールからも参照されておらず、"
+        "Importの更新先としても推定されていないModule。判定項目が多いため、上記2つより誤検知の可能性が高くなります。"
+    )
+    if not modules_df.is_empty() and not li_df.is_empty() and "referencedBy" in li_df.columns:
+        li_used_flag = li_df.group_by("moduleId").agg(
+            (pl.col("referencedBy").list.len() > 0).any().alias("has_referenced_line_item")
+        )
+        referenced_module_ids = set(edges_m.filter(pl.col("label") == "referenced_by")["target"].to_list()) if not edges_m.is_empty() else set()
+        updated_module_ids = set(edges_m.filter(pl.col("label") == "updates (inferred)")["target"].to_list()) if not edges_m.is_empty() else set()
+
+        mod_check = modules_df.join(li_used_flag, left_on="id", right_on="moduleId", how="left").with_columns(
+            pl.col("has_referenced_line_item").fill_null(False)
+        )
+        unused_modules = mod_check.filter(
+            (~pl.col("has_referenced_line_item"))
+            & (~pl.col("id").is_in(referenced_module_ids))
+            & (~pl.col("id").is_in(updated_module_ids))
+        )
+        if unused_modules.is_empty():
+            st.success("該当するModuleはありません。")
+        else:
+            st.warning(f"{unused_modules.height}個のModuleが未使用の可能性があります。")
+            st.dataframe(unused_modules.select(["name", "line_item_count", "id"]).to_pandas(), width='stretch')
+    else:
+        st.info("判定に必要なデータが取得できていません。")
 # trigger reload
