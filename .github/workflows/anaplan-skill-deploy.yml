@@ -101,4 +101,5 @@ jobs:
             --port=8080
 
       - name: Show service URL
-        run: echo "Service URL: ${{ steps.deploy.outputs.url }}" >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          echo "Service URL: ${{ steps.deploy.outputs.url }}" >> "$GITHUB_STEP_SUMMARY"
