@@ -60,7 +60,8 @@ uv run pytest
 
 - **History Auditはconfig.py駆動** — `MODELS`リストに`ModelConfig(ws_id, m_id, action_id, file_suffix, users_csv, model_name)`を複数登録すると、`ProcessPoolExecutor`（`MAX_WORKERS`、デフォルト`min(CPU数, 4)`）でモデルごとに並列エクスポート・集計する。
 - **大規模TSVはPolarsの遅延評価で処理** — `pl.scan_csv`によるlazy scanでユーザー別アクション数を集計し、`Users.csv`と左結合してモデル別・全体サマリーCSVを出力する。
-- **Model Analyzerは12タブ構成** — Module Network / Line Item Network / Matrices / Modules / Lists / Line Items / Imports / Processes / Exports / Actions / Model Diff / Capacityで、モジュール・ラインアイテム・リスト・アクション類のメタデータをそれぞれ検索・閲覧できる。
+- **Model Analyzerは13タブ構成** — Module Network / Line Item Network / Matrices / Modules / Lists / Line Items / Imports / Processes / Exports / Actions / Model Diff / Capacity / Unused Objectsで、モジュール・ラインアイテム・リスト・アクション類のメタデータをそれぞれ検索・閲覧できる。
+- **Unused Objectsタブは未使用候補をメタデータのみから検出** — List（`usedInAppliesTo`が空）、Line Item（`referencedBy`が空）、Process未組み込みのImport/Export/Action、参照も更新もされていないModuleの4種類をヒューリスティックで抽出する。レポート表示専用列やImport書き込み先は誤検知しうるため、削除前にAnaplan UI側での手動確認が必須（タブ内に警告文で明記）。
 - **依存関係グラフは確定情報と推論情報を線種で区別** — 実線はAPIメタデータから確定した関係（`referenced_by`・`executes`・`reads_from`）、点線はインポート名とモジュール名の一致から推論した`updates (inferred)`関係。
 - **ノード色はモジュール名のMD5ハッシュから決定的に生成** — 同じモジュールは再描画しても常に同じ色になり、既知の種別（Module/Process/Import/Data Source）は固定色を使用。巨大なLine Item Networkは検索必須＋1000ノード超で警告し、ボタン押下でHTML生成・ダウンロードして別ブラウザで開く運用に退避できる。
 - **Model Diffタブでベース/比較先モデルをオンザフライ比較** — Polarsの`full`ジョインでModules/Lists/Line Itemsのメタデータ差分をAdded/Removed/Modified/Unchangedに分類する。

@@ -16,7 +16,7 @@ Anaplanの履歴監査データを取得し、ユーザーアクティビティ�
 - **ダッシュボード生成**: `uv run python libs/history_audit/generate_dashboard.py`
 
 ### 2. モデル解析と可視化 (Model Analyzer)
-Anaplanモデルからモジュール、リスト、ラインアイテム等のメタデータを抽出し、依存関係をネットワークグラフとしてインタラクティブに可視化します。不要なリストの特定やモデル構造のリファクタリングに活用できます。
+Anaplanモデルからモジュール、リスト、ラインアイテム等のメタデータを抽出し、依存関係をネットワークグラフとしてインタラクティブに可視化します。Unused Objectsタブで未使用候補（List/Line Item/Action/Module）を検出でき、モデル構造のリファクタリングに活用できます。
 - **データ処理**: Polars, NetworkX, PyVis を組み合わせた依存関係抽出。
 - **メインモジュール**: `libs/model_analyzer/analyzer.py`
 - **ダッシュボード**: `uv run streamlit run libs/model_analyzer/dashboard.py`
