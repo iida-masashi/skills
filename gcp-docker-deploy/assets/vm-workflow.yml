@@ -1,0 +1,91 @@
+# Starting point for a VM (Compute Engine) deploy workflow.
+# Save this to <repo-root>/.github/workflows/<app-name>-deploy.yml.
+# Assumes the one-time setup in references/vm-deploy.md (service accounts,
+# VM creation, startup script) has already been run. Replace every
+# <PLACEHOLDER>. See references/vm-deploy.md for the annotated walkthrough
+# and the gotchas (COS read-only /root, OS Login key accumulation, etc).
+
+name: Deploy <APP_NAME> to VM
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '<SUBPROJECT_DIR>/**'
+      - '.github/workflows/<THIS_FILE_NAME>.yml'
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: <PROJECT_ID>
+  REGION: <REGION>
+  ZONE: <ZONE>
+  VM_NAME: <VM_NAME>
+  IMAGE: <REGION>-docker.pkg.dev/<PROJECT_ID>/<AR_REPO>/<IMAGE_NAME>
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+          # Alternative: credentials_json: ${{ secrets.GCP_SA_KEY }}  (see references/sa-key-setup.md)
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build & push image
+        run: |
+          SHORT_SHA=${GITHUB_SHA::7}
+          docker build -t "${{ env.IMAGE }}:${SHORT_SHA}" -t "${{ env.IMAGE }}:latest" ./<SUBPROJECT_DIR>
+          docker push "${{ env.IMAGE }}:${SHORT_SHA}"
+          docker push "${{ env.IMAGE }}:latest"
+          echo "SHORT_SHA=${SHORT_SHA}" >> "$GITHUB_ENV"
+
+      # gcloud compute ssh registers a fresh OS Login key every run; left
+      # unpruned this hits a 32 KiB profile cap and SSH starts failing weeks
+      # after setup, not on day one. Always prune before connecting.
+      - name: Prune OS Login SSH keys
+        run: |
+          for fp in $(gcloud compute os-login ssh-keys list --format="value(value.fingerprint)"); do
+            gcloud compute os-login ssh-keys remove --key "$fp" --quiet || true
+          done
+
+      - name: Deploy on VM
+        run: |
+          gcloud compute ssh --zone="${{ env.ZONE }}" --tunnel-through-iap \
+            "${{ env.VM_NAME }}" --command="
+              set -eu
+              IMAGE_TAG='${{ env.IMAGE }}:${{ env.SHORT_SHA }}'
+
+              # Wait for the VM's first-boot startup script to finish writing .env
+              for i in 1 2 3 4 5 6 7 8 9 10; do
+                if [ -f /var/lib/<APP_NAME>/.env ]; then break; fi
+                echo 'Waiting for /var/lib/<APP_NAME>/.env ...'
+                sleep 3
+              done
+
+              sudo docker pull \"\${IMAGE_TAG}\"
+              sudo docker rm -f <CONTAINER_NAME> 2>/dev/null || true
+              sudo docker run -d \\
+                --name <CONTAINER_NAME> \\
+                --restart always \\
+                --env-file /var/lib/<APP_NAME>/.env \\
+                -p 80:<CONTAINER_PORT> \\
+                \"\${IMAGE_TAG}\"
+              sudo docker image prune -f || true
+              sudo docker ps
+            "
+
+      - name: Print access URL
+        run: |
+          IP=$(gcloud compute instances describe ${{ env.VM_NAME }} --zone=${{ env.ZONE }} \
+            --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
+          echo "Deployed! Access: http://${IP}/"
