@@ -10,7 +10,6 @@ dependencies = [
     "numpy>=1.23.0",
     "google-cloud-bigquery>=3.0.0",
     "google-cloud-storage>=2.0.0",
-    "prophet>=1.1.0",
     "anaplan-sdk>=0.1.0",
     "scikit-learn>=1.2.0",
     "sendgrid>=6.9.0",
