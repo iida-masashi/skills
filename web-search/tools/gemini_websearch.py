@@ -61,7 +61,7 @@ def load_env(path: Path) -> None:
             os.environ[key] = value
 
 
-def search_raw(query: str, model: str = "gemini-3.6-flash", no_resolve: bool = False, client: genai.Client | None = None) -> dict:
+def search_raw(query: str, model: str = "gemini-3.7-flash", no_resolve: bool = False, client: genai.Client | None = None) -> dict:
     """検索を実行し、回答本文と出典リストを辞書で返す（他スクリプトからの再利用・--json向け）。"""
     client = client or make_client()
 
@@ -91,7 +91,7 @@ def search_raw(query: str, model: str = "gemini-3.6-flash", no_resolve: bool = F
     return {"text": response.text, "sources": sources}
 
 
-def verify_claim(text: str, sources: list, client: genai.Client, model: str = "gemini-3.6-flash") -> list:
+def verify_claim(text: str, sources: list, client: genai.Client, model: str = "gemini-3.7-flash") -> list:
     """回答本文の主張を項目単位に分解し、各出典ページで裏付けられるかを並列にクロスチェックする。
 
     出典ごとのcheck_claim_raw呼び出しは互いに独立しているため、
@@ -112,7 +112,7 @@ def verify_claim(text: str, sources: list, client: genai.Client, model: str = "g
         return list(pool.map(_check_one, sources))
 
 
-def search(query: str, model: str = "gemini-3.6-flash", no_resolve: bool = False,
+def search(query: str, model: str = "gemini-3.7-flash", no_resolve: bool = False,
            as_json: bool = False, do_verify: bool = False, do_refute: bool = False) -> None:
     load_env(ENV_PATH)
     client = make_client()
@@ -159,8 +159,8 @@ def main() -> None:
     parser.add_argument("--no-resolve", action="store_true", help="出典URLのリダイレクト解決を無効化する")
     parser.add_argument("--json", action="store_true", help="結果をJSONで出力する")
     parser.add_argument(
-        "--model", default="gemini-3.6-flash",
-        help="使用するGeminiモデル（既定: gemini-3.6-flash。例: gemini-3.1-pro-preview）",
+        "--model", default="gemini-3.7-flash",
+        help="使用するGeminiモデル（既定: gemini-3.7-flash。例: gemini-3.1-pro-preview）",
     )
     parser.add_argument(
         "--verify-claim", action="store_true",

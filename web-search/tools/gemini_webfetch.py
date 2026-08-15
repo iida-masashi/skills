@@ -85,7 +85,7 @@ def make_client() -> genai.Client:
     sys.exit(1)
 
 
-def fetch_raw(url: str, instruction: str = DEFAULT_INSTRUCTION, model: str = "gemini-3.6-flash", client: genai.Client | None = None) -> dict:
+def fetch_raw(url: str, instruction: str = DEFAULT_INSTRUCTION, model: str = "gemini-3.7-flash", client: genai.Client | None = None) -> dict:
     """URLを取得しGeminiの回答本文・取得ステータスを辞書で返す（他スクリプトからの再利用向け）。"""
     client = client or make_client()
 
@@ -107,7 +107,7 @@ def fetch_raw(url: str, instruction: str = DEFAULT_INSTRUCTION, model: str = "ge
     return {"text": response.text, "statuses": statuses}
 
 
-def check_claim_raw(url: str, claim: str, model: str = "gemini-3.6-flash", client: genai.Client | None = None) -> dict:
+def check_claim_raw(url: str, claim: str, model: str = "gemini-3.7-flash", client: genai.Client | None = None) -> dict:
     """主張を項目単位に分解し、URLの内容が各項目を裏付けるか判定する（他スクリプトからの再利用向け）。"""
     instruction = CHECK_INSTRUCTION_TEMPLATE.format(claim=claim)
     result = fetch_raw(url, instruction=instruction, model=model, client=client)
@@ -118,7 +118,7 @@ def check_claim_raw(url: str, claim: str, model: str = "gemini-3.6-flash", clien
     return {"url": url, "items": items, "statuses": result["statuses"]}
 
 
-def fetch(url: str, instruction: str = DEFAULT_INSTRUCTION, model: str = "gemini-3.6-flash") -> None:
+def fetch(url: str, instruction: str = DEFAULT_INSTRUCTION, model: str = "gemini-3.7-flash") -> None:
     result = fetch_raw(url, instruction, model)
 
     print(result["text"])
@@ -129,7 +129,7 @@ def fetch(url: str, instruction: str = DEFAULT_INSTRUCTION, model: str = "gemini
             print(f"{s['status']}  {s['retrieved_url']}")
 
 
-def check(url: str, claim: str, model: str = "gemini-3.6-flash", as_json: bool = False) -> None:
+def check(url: str, claim: str, model: str = "gemini-3.7-flash", as_json: bool = False) -> None:
     result = check_claim_raw(url, claim, model=model)
 
     if as_json:
@@ -164,8 +164,8 @@ def main() -> None:
     )
     parser.add_argument("--json", action="store_true", help="結果をJSONで出力する")
     parser.add_argument(
-        "--model", default="gemini-3.6-flash",
-        help="使用するGeminiモデル（既定: gemini-3.6-flash。例: gemini-3.1-pro-preview）",
+        "--model", default="gemini-3.7-flash",
+        help="使用するGeminiモデル（既定: gemini-3.7-flash。例: gemini-3.1-pro-preview）",
     )
     args = parser.parse_args()
 
