@@ -38,6 +38,12 @@ CHECK_INSTRUCTION_TEMPLATE = """次の主張を、否定できない事実の最
 
 {{"items": [{{"claim": "分解した項目の文", "verdict": "裏付けあり|裏付けなし|不明", "detail": "根拠を1文で"}}]}}
 
+重要: もしこのページの内容を実際に取得できなかった場合（アクセスエラー、ページが空、
+無関係なエラーページしか見えない等）は、記憶や推測で判定を埋めてはいけない。
+その場合は全項目のverdictを「不明」にし、detailに「ページを取得できなかったため判定不能」と書くこと。
+ページが取得できたが単に主張と無関係な内容だった場合は「裏付けなし」を使い、
+取得できなかった場合の「不明」とは区別すること。
+
 主張: {claim}"""
 
 
@@ -115,7 +121,25 @@ def check_claim_raw(url: str, claim: str, model: str = "gemini-3.7-flash", clien
     if items is None:
         # JSON化に失敗した場合はraw textを1項目として扱う（完全なフォールバック）
         items = [{"claim": claim, "verdict": "不明", "detail": result["text"][:300]}]
-    return {"url": url, "items": items, "statuses": result["statuses"]}
+
+    # モデルの自己申告（プロンプトの指示）だけに頼らず、コード側でも取得ステータスを
+    # 強制チェックする。SUCCESS以外なのに「裏付けあり/なし」と断定してくる場合が
+    # 実際に観測されているため（Geminiが検索インデックスのキャッシュ等から
+    # それらしい判定を埋めてしまう one-off のハルシネーション）、
+    # ここで機械的に「不明」へ格下げし、理由を明記する。
+    statuses = result["statuses"]
+    fetch_ok = any(s["status"] == "URL_RETRIEVAL_STATUS_SUCCESS" for s in statuses) if statuses else False
+    if not fetch_ok:
+        status_names = ", ".join(s["status"] for s in statuses) if statuses else "ステータス不明（取得情報なし）"
+        for item in items:
+            if item.get("verdict") != "不明":
+                item["detail"] = (
+                    f"[自動格下げ: URL取得ステータスが{status_names}のため、"
+                    f"モデルの判定「{item.get('verdict')}」は採用せず不明扱いとした] " + item.get("detail", "")
+                )
+                item["verdict"] = "不明"
+
+    return {"url": url, "items": items, "statuses": statuses}
 
 
 def fetch(url: str, instruction: str = DEFAULT_INSTRUCTION, model: str = "gemini-3.7-flash") -> None:
