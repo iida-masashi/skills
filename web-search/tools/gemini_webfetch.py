@@ -142,10 +142,16 @@ def check_claim_raw(url: str, claim: str, model: str = "gemini-3.7-flash", clien
     return {"url": url, "items": items, "statuses": statuses}
 
 
-def fetch(url: str, instruction: str = DEFAULT_INSTRUCTION, model: str = "gemini-3.7-flash") -> None:
+def _truncate(text: str, max_chars: int | None) -> str:
+    if not max_chars or len(text) <= max_chars:
+        return text
+    return text[:max_chars] + f"\n...(以下{len(text) - max_chars}文字を省略。全文が必要な場合は--max-charsを外すか増やす)"
+
+
+def fetch(url: str, instruction: str = DEFAULT_INSTRUCTION, model: str = "gemini-3.7-flash", max_chars: int | None = None) -> None:
     result = fetch_raw(url, instruction, model)
 
-    print(result["text"])
+    print(_truncate(result["text"], max_chars))
 
     if result["statuses"]:
         print("\n--- 取得ステータス ---")
@@ -191,6 +197,10 @@ def main() -> None:
         "--model", default="gemini-3.7-flash",
         help="使用するGeminiモデル（既定: gemini-3.7-flash。例: gemini-3.1-pro-preview）",
     )
+    parser.add_argument(
+        "--max-chars", type=int, default=None,
+        help="回答本文をこの文字数で打ち切る（呼び出し元＝Claude側のコンテキスト消費を抑えたい時に指定。--checkには影響しない）",
+    )
     args = parser.parse_args()
 
     if args.check:
@@ -199,7 +209,7 @@ def main() -> None:
         check(args.url, args.check, model=args.model, as_json=args.json)
     else:
         instruction = " ".join(args.instruction) if args.instruction else DEFAULT_INSTRUCTION
-        fetch(args.url, instruction, model=args.model)
+        fetch(args.url, instruction, model=args.model, max_chars=args.max_chars)
 
 
 if __name__ == "__main__":

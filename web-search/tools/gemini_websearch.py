@@ -25,7 +25,7 @@ from google import genai
 from google.genai import types
 
 sys.path.insert(0, str(Path(__file__).parent))
-from gemini_webfetch import check_claim_raw, make_client  # noqa: E402
+from gemini_webfetch import _truncate, check_claim_raw, make_client  # noqa: E402
 
 ENV_PATH = Path(os.environ.get("GEMINI_SKILL_ENV_PATH", r"C:\Users\iidam\gemini\.env"))
 
@@ -113,7 +113,8 @@ def verify_claim(text: str, sources: list, client: genai.Client, model: str = "g
 
 
 def search(query: str, model: str = "gemini-3.7-flash", no_resolve: bool = False,
-           as_json: bool = False, do_verify: bool = False, do_refute: bool = False) -> None:
+           as_json: bool = False, do_verify: bool = False, do_refute: bool = False,
+           max_chars: int | None = None) -> None:
     load_env(ENV_PATH)
     client = make_client()
 
@@ -127,13 +128,13 @@ def search(query: str, model: str = "gemini-3.7-flash", no_resolve: bool = False
         checks = verify_claim(result["text"], result["sources"], client, model=model)
 
     if as_json:
-        payload = {"text": result["text"], "sources": result["sources"]}
+        payload = {"text": _truncate(result["text"], max_chars), "sources": result["sources"]}
         if checks is not None:
             payload["claim_checks"] = checks
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         return
 
-    print(result["text"])
+    print(_truncate(result["text"], max_chars))
 
     if result["sources"]:
         print("\n--- 出典 ---")
@@ -170,6 +171,10 @@ def main() -> None:
         "--refute", action="store_true",
         help="クエリを反証志向のプロンプトに変換してから検索する（否定・矛盾情報を優先的に探す）",
     )
+    parser.add_argument(
+        "--max-chars", type=int, default=None,
+        help="回答本文をこの文字数で打ち切る（呼び出し元＝Claude側のコンテキスト消費を抑えたい時に指定。出典一覧・--verify-claim結果には影響しない）",
+    )
     args = parser.parse_args()
 
     search(
@@ -179,6 +184,7 @@ def main() -> None:
         as_json=args.json,
         do_verify=args.verify_claim,
         do_refute=args.refute,
+        max_chars=args.max_chars,
     )
 
 
