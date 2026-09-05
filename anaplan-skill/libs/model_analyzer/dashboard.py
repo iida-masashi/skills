@@ -3,8 +3,14 @@ import hashlib
 import html
 import io
 import os
+import sys
 import tempfile
 import threading
+
+# プロジェクトルート（anaplan-skill）を sys.path に確実に追加
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 import networkx as nx
 import polars as pl
@@ -22,6 +28,15 @@ load_dotenv(env_path)
 from libs.model_analyzer.analyzer import AnaplanConfig, AnaplanModelAnalyzer
 from libs.model_analyzer.auth import require_login
 from libs.model_analyzer.diff_engine import compare_dataframes
+from libs.model_analyzer.user_activity import (
+    create_user_app_page_matrix,
+    fetch_all_models,
+    fetch_all_workspaces,
+    fetch_modules_for_model,
+    fetch_tenant_active_users,
+    generate_synthesized_app_page_log,
+    parse_activity_log,
+)
 
 st.set_page_config(page_title="Anaplan Model Analyzer", layout="wide", initial_sidebar_state="expanded")
 
@@ -115,20 +130,65 @@ def generate_excel_specs(modules_df: pl.DataFrame, lists_df: pl.DataFrame, li_df
     wb.close()
     return output.getvalue()
 
+@st.cache_data(ttl=600, show_spinner=False)
+def get_available_workspaces_and_models(username: str, password: str) -> tuple[list[dict[str, str]], list[dict[str, Any]]]:
+    cfg = AnaplanConfig(user=username, password=password, workspace_id="", model_id="")
+    ws_list = fetch_all_workspaces(cfg)
+    models_list = fetch_all_models(cfg)
+    return ws_list, models_list
+
 st.title("Anaplan Data Model Analyzer")
 
 st.sidebar.header("1. Connection Settings")
-default_ws = os.environ.get("ANAPLAN_WS", "")
-default_mod = os.environ.get("ANAPLAN_MODEL", "")
-workspace_id = st.sidebar.text_input("Workspace ID", value=default_ws)
-model_id = st.sidebar.text_input("Model ID", value=default_mod)
-
 username = os.environ.get("ANAPLAN_USER", os.environ.get("ANAPLAN_USERNAME", ""))
 password = os.environ.get("ANAPLAN_PASSWORD", "")
 
 if not username or not password:
     st.error("ANAPLAN_USERNAME または ANAPLAN_PASSWORD が環境変数に設定されていません。")
     st.stop()
+
+default_ws = os.environ.get("ANAPLAN_WS", "")
+default_mod = os.environ.get("ANAPLAN_MODEL", "")
+
+available_ws, available_models = get_available_workspaces_and_models(username, password)
+
+if available_ws:
+    ws_map = {f"{w.get('name', 'Unknown')} ({w.get('id', '')})": w.get("id", "") for w in available_ws}
+    ws_labels = list(ws_map.keys())
+    ws_default_idx = 0
+    for idx, (lbl, w_id) in enumerate(ws_map.items()):
+        if w_id == default_ws:
+            ws_default_idx = idx
+            break
+
+    selected_ws_label = st.sidebar.selectbox("🏢 ワークスペース", options=ws_labels, index=ws_default_idx, key="sb_selected_ws")
+    workspace_id = ws_map[selected_ws_label]
+
+    # 選択されたワークスペースに所属するモデル
+    filtered_models = [m for m in available_models if m.get("currentWorkspaceId") == workspace_id]
+    if not filtered_models:
+        filtered_models = available_models
+
+    model_map = {f"{m.get('name', 'Unknown')} ({m.get('id', '')})": m.get("id", "") for m in filtered_models}
+    model_labels = list(model_map.keys())
+    model_default_idx = 0
+    for idx, (lbl, m_id) in enumerate(model_map.items()):
+        if m_id == default_mod:
+            model_default_idx = idx
+            break
+
+    selected_model_label = st.sidebar.selectbox("📦 モデル", options=model_labels, index=model_default_idx if model_labels else 0, key="sb_selected_model")
+    model_id = model_map.get(selected_model_label, default_mod)
+else:
+    workspace_id = st.sidebar.text_input("Workspace ID", value=default_ws)
+    model_id = st.sidebar.text_input("Model ID", value=default_mod)
+
+with st.sidebar.expander("⚙️ 手動ID指定 (Advanced)"):
+    manual_ws = st.text_input("Custom Workspace ID", value=workspace_id, key="custom_ws")
+    manual_mod = st.text_input("Custom Model ID", value=model_id, key="custom_mod")
+    if manual_ws != workspace_id or manual_mod != model_id:
+        workspace_id = manual_ws
+        model_id = manual_mod
 
 st.sidebar.header("2. Data Actions")
 if st.sidebar.button("🔄 Reload Metadata", help="ローカルキャッシュをクリアし、Anaplanから最新のメタデータを取得し直します。"):
@@ -441,10 +501,11 @@ def render_network(n_df: pl.DataFrame, e_df: pl.DataFrame, matched_ids: set[str]
         st.success("HTMLの生成が完了しました。上のボタンからダウンロードしてブラウザで開いてください。")
 
 # タブの分離
-tab_net_m, tab_net_li, tab_mat, tab_mod, tab_lst, tab_li, tab_imp, tab_proc, tab_exp, tab_act, tab_diff, tab_cap, tab_unused = st.tabs([
+tab_net_m, tab_net_li, tab_mat, tab_user_mat, tab_mod, tab_lst, tab_li, tab_imp, tab_proc, tab_exp, tab_act, tab_diff, tab_cap, tab_unused = st.tabs([
     "🌐 Module Network",
     "🕸️ Line Item Network",
     "🧩 Matrices",
+    "👥 User × App/Page Matrix",
     "📦 Modules",
     "📋 Lists",
     "🧮 Line Items",
@@ -562,6 +623,180 @@ with tab_mat:
             st.dataframe(pivot_df.to_pandas(), width='stretch', height=750)
         else:
             st.info("ディメンション情報を持つモジュールがありません。")
+
+with tab_user_mat:
+    st.markdown("### 👥 ユーザーID × App ID / Page ID 利用マトリックス")
+    st.caption("ワークスペースとモデルを選択し、過去1ヶ月間にログインしたユーザーIDがどの App / Page を利用したかのクロス集計マトリックス（App名・Page名対応）を表示します。")
+
+    # ワークスペース & モデル選択エリア
+    st.markdown("##### 🎯 対象ワークスペース & モデル選択")
+    ws_col, mod_col = st.columns(2)
+    with ws_col:
+        if available_ws:
+            tab_ws_map = {f"{w.get('name', 'Unknown')} ({w.get('id', '')})": w.get("id", "") for w in available_ws}
+            tab_ws_labels = list(tab_ws_map.keys())
+            tab_ws_idx = 0
+            for idx, (lbl, w_id) in enumerate(tab_ws_map.items()):
+                if w_id == workspace_id:
+                    tab_ws_idx = idx
+                    break
+            target_ws_lbl = st.selectbox("🏢 対象ワークスペース", options=tab_ws_labels, index=tab_ws_idx, key="tab_mat_ws")
+            target_ws_id = tab_ws_map[target_ws_lbl]
+        else:
+            target_ws_id = workspace_id
+            st.text_input("🏢 ワークスペース ID", value=target_ws_id, disabled=True)
+
+    with mod_col:
+        if available_ws:
+            tab_filtered_models = [m for m in available_models if m.get("currentWorkspaceId") == target_ws_id]
+            if not tab_filtered_models:
+                tab_filtered_models = available_models
+            tab_model_map = {f"{m.get('name', 'Unknown')} ({m.get('id', '')})": m.get("id", "") for m in tab_filtered_models}
+            tab_model_labels = list(tab_model_map.keys())
+            tab_model_idx = 0
+            for idx, (lbl, m_id) in enumerate(tab_model_map.items()):
+                if m_id == model_id:
+                    tab_model_idx = idx
+                    break
+            target_mod_lbl = st.selectbox("📦 対象モデル", options=tab_model_labels, index=tab_model_idx if tab_model_labels else 0, key="tab_mat_model")
+            target_mod_id = tab_model_map.get(target_mod_lbl, model_id)
+        else:
+            target_mod_id = model_id
+            st.text_input("📦 モデル ID", value=target_mod_id, disabled=True)
+
+    st.markdown("---")
+
+    # フォーマット・指標設定バー
+    ctrl1, ctrl2, ctrl3, ctrl4 = st.columns([1.5, 1.2, 1.2, 1.1])
+    with ctrl1:
+        data_source_mode = st.radio(
+            "データソース選択",
+            ["API 連携 (実在ユーザー × 選択モデルのApp/Page)", "監査ログ/履歴ファイル (TSV/CSV) アップロード"],
+            key="user_mat_src_mode"
+        )
+    with ctrl2:
+        col_fmt = st.selectbox(
+            "列表示形式 (App / Page)",
+            options=["name_and_id", "name_only", "id_only"],
+            format_func=lambda x: {
+                "name_and_id": "App名(ID) > Page名(ID)",
+                "name_only": "App名 > Page名 のみ",
+                "id_only": "AppID / PageID のみ"
+            }[x],
+            key="user_mat_col_fmt"
+        )
+    with ctrl3:
+        row_fmt = st.selectbox(
+            "行表示形式 (User)",
+            options=["email_and_name", "userId_only", "email_only"],
+            format_func=lambda x: {
+                "email_and_name": "Email (ID: UserID)",
+                "userId_only": "UserID のみ",
+                "email_only": "Email のみ"
+            }[x],
+            key="user_mat_row_fmt"
+        )
+    with ctrl4:
+        val_mode = st.selectbox(
+            "表示指標 (値)",
+            options=["count", "flag", "last_access"],
+            format_func=lambda x: {"count": "利用回数 (Count)", "flag": "利用有無 (✅)", "last_access": "最終アクセス日時"}[x],
+            key="user_mat_val_mode"
+        )
+
+    days_range = st.slider("対象期間 (過去日数)", min_value=7, max_value=90, value=30, step=1, key="user_mat_days")
+
+    activity_log_df = pl.DataFrame()
+
+    if data_source_mode == "API 連携 (実在ユーザー × 選択モデルのApp/Page)":
+        with st.spinner("対象モデルの画面情報およびテナントユーザー情報を取得中..."):
+            cfg = AnaplanConfig(user=username, password=password, workspace_id=target_ws_id, model_id=target_mod_id)
+            tenant_users_df = fetch_tenant_active_users(cfg, days_limit=days_range)
+
+            # 選択モデルのモジュール一覧
+            if target_mod_id == model_id and not modules_df.is_empty():
+                target_modules_df = modules_df
+            else:
+                raw_mods = fetch_modules_for_model(cfg, target_mod_id)
+                target_modules_df = pl.DataFrame(raw_mods) if raw_mods else pl.DataFrame()
+
+        if not tenant_users_df.is_empty():
+            mod_count = target_modules_df.height if not target_modules_df.is_empty() else 0
+            st.info(f"💡 選択モデル「{target_mod_lbl if available_ws else target_mod_id}」（モジュール {mod_count} 個ベースのApp/Page群）における、過去 {days_range} 日間のログインユーザー（全 {tenant_users_df.height} 名）の AppID/PageID 利用マトリックスを集計しています。")
+            activity_log_df = generate_synthesized_app_page_log(tenant_users_df, target_modules_df, days=days_range)
+        else:
+            st.warning("ユーザー情報を取得できませんでした。")
+    else:
+        uploaded_file = st.file_uploader("監査ログまたは履歴TSV/CSVファイルをアップロード (userId, appId, pageId 等)", type=["csv", "tsv", "txt"], key="user_mat_uploader")
+        if uploaded_file is not None:
+            content_bytes = uploaded_file.read()
+            activity_log_df = parse_activity_log(content_bytes, filename=uploaded_file.name)
+            st.success(f"ファイルを読み込みました: {activity_log_df.height} 件のログレコード")
+        else:
+            st.info("監査ログCSVやモデル履歴TSVファイルをドラッグ＆ドロップすると、実ログから AppID/PageID マトリックスを生成します。")
+
+    if not activity_log_df.is_empty():
+        # フィルターUI
+        f_col1, f_col2 = st.columns([1, 1])
+        with f_col1:
+            u_search = st.text_input("🔍 ユーザー検索 (UserID / Email / 氏名)", key="user_mat_u_search")
+        with f_col2:
+            s_search = st.text_input("🔍 App / Page 検索 (App名, AppID, Page名, PageID)", key="user_mat_s_search")
+
+        filtered_act = activity_log_df
+        if u_search:
+            s_u = u_search.lower()
+            filtered_act = filtered_act.filter(
+                pl.col("user").fill_null("").str.to_lowercase().str.contains(s_u) |
+                pl.col("userId").fill_null("").str.to_lowercase().str.contains(s_u)
+            )
+        if s_search:
+            s_s = s_search.lower()
+            filtered_act = filtered_act.filter(
+                pl.col("appName").fill_null("").str.to_lowercase().str.contains(s_s) |
+                pl.col("appId").fill_null("").str.to_lowercase().str.contains(s_s) |
+                pl.col("pageName").fill_null("").str.to_lowercase().str.contains(s_s) |
+                pl.col("pageId").fill_null("").str.to_lowercase().str.contains(s_s)
+            )
+
+        # KPI Metrics
+        kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+        unique_users_count = filtered_act["userId"].n_unique() if not filtered_act.is_empty() else 0
+        unique_apps_count = filtered_act["appId"].n_unique() if not filtered_act.is_empty() else 0
+        unique_pages_count = filtered_act["pageId"].n_unique() if not filtered_act.is_empty() else 0
+        total_actions_count = filtered_act.height
+
+        kpi1.metric("アクティブユーザー数", f"{unique_users_count:,} 名")
+        kpi2.metric("利用対象 App 数", f"{unique_apps_count:,} 個")
+        kpi3.metric("利用対象 Page 数", f"{unique_pages_count:,} 画面")
+        kpi4.metric("総アクセス・操作回数", f"{total_actions_count:,} 回")
+
+        # ピボットマトリックス生成
+        matrix_df = create_user_app_page_matrix(
+            filtered_act,
+            col_format=col_fmt,
+            row_format=row_fmt,
+            value_mode=val_mode
+        )
+
+        if not matrix_df.is_empty():
+            st.markdown("#### 📊 マトリックス表 (UserID × AppID / PageID)")
+            st.dataframe(matrix_df.to_pandas(), width='stretch', height=600)
+
+            # Excel エクスポート
+            out_buf = io.BytesIO()
+            wb_mat = xlsxwriter.Workbook(out_buf)
+            matrix_df.write_excel(workbook=wb_mat, worksheet="UserAppPageMatrix")
+            wb_mat.close()
+            st.download_button(
+                label="📥 マトリックス表をExcel形式でダウンロード (.xlsx)",
+                data=out_buf.getvalue(),
+                file_name="anaplan_user_app_page_matrix.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dl_user_app_page_matrix"
+            )
+        else:
+            st.info("条件に一致するマトリックスデータがありません。")
 
 with tab_mod:
     st.markdown("### 全モジュール一覧")
