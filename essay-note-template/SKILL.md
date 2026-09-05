@@ -188,7 +188,7 @@ basename原則の目的は「フルパス由来の赤リンク回避」であっ
 
 ### その他
 ```bash
-pwsh -NoProfile -Command "& '<vault-verify-notes.ps1のパス>' -Notes @('basename1',...)"
+pwsh -NoProfile -Command "& '<vault-api/tools/maintenance/vault-verify-notes.ps1>' -Notes @('basename1',...)"
 ```
 - reach（ハブ到達）／outbound（赤リンク）／alias衝突
 - 改行コード：元ファイルが LF なら**LFを維持**（`uv run python` でbytes処理。Writeツールは CRLF を出すので書込後に LF 統一が要る）、BOMなし

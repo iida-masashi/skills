@@ -228,7 +228,7 @@ confidence: 1-5（5が最高）
 
 ```bash
 # 新規ノートの reach（ハブ到達）/ outbound（赤リンク）/ alias衝突 を一括検証
-pwsh -NoProfile -Command "& '<vault-verify-notes.ps1のパス>' -Notes @('作成したノートのbasename')"
+pwsh -NoProfile -Command "& '<vault-api/tools/maintenance/vault-verify-notes.ps1>' -Notes @('作成したノートのbasename')"
 ```
 
 - `vault-verify-notes.ps1` — reach + 赤リンク + alias衝突をまとめて確認（作成直後の定番）

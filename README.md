@@ -27,6 +27,8 @@ Claude Code と Gemini CLI の両方から共有して使う、自作エージ�
 | [`promo-forecast-skill`](./promo-forecast-skill/) | 販売実績から定番需要と販促リフトを分解し、LightGBMで需要予測・ROI分析・価格弾力性・What-Ifシミュレーションを行いたいとき | Python（LightGBM等）、streamlit（ダッシュボード） |
 | [`consultant-toolkit`](./consultant-toolkit/) | コンサル向け財務データ取得・SCM/財務ダッシュボード生成、企業分析レポート、ERP PMO自動化を行いたいとき | `pip install -e .`でパッケージインストール、yfinance、Prophet、streamlit。事前に`references/scripts_usage.md`を読む |
 | [`pe-market-research`](./pe-market-research/) | PE投資先候補調査（プレイヤーマップ構築→資本構造・株主確認→M&A/OEM適性評価→ファクトチェック）を業界横断で行いたいとき | Workflowツール（`market_map_workflow.js`をagent実行）、WebSearch/WebFetch相当のツールアクセス |
+| [`solution-market-research`](./solution-market-research/) | 特定機能領域（WMS/TMS/ERP/MES/CRM等）向けのソフトウェア/システムソリューションを業界横断で調査し、RFP候補一覧・ベンダー比較表・Fit/Gap適合度マトリクスを作りたいとき。AI生成の既存調査資料の裏取り・ハルシネーション（実在しない製品名等）チェックにも使う | `web-search`スキル |
+| [`value-chain-research`](./value-chain-research/) | 業界のバリューチェーン/サプライチェーン構造（組織ガバナンス、S&OP等のプロセス、企業別ITスタック、学術論文サーベイ、地域権限分界）を体系調査したいとき | `web-search`スキル |
 
 ### 開発・レビュー系
 
