@@ -17,6 +17,7 @@ import argparse
 import json
 import os
 import sys
+import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -25,7 +26,7 @@ from google import genai
 from google.genai import types
 
 sys.path.insert(0, str(Path(__file__).parent))
-from gemini_webfetch import _truncate, check_claim_raw, make_client  # noqa: E402
+from gemini_webfetch import _truncate, check_claim_raw, make_client, resolve_redirect  # noqa: E402
 
 ENV_PATH = Path(os.environ.get("GEMINI_SKILL_ENV_PATH", r"C:\Users\iidam\gemini\.env"))
 
@@ -35,16 +36,7 @@ REFUTE_TEMPLATE = (
 )
 
 MAX_VERIFY_WORKERS = 4
-
-
-def resolve_redirect(url: str, timeout: float = 10.0) -> str | None:
-    """grounding-api-redirect URLを実URLに解決する。失敗時はNone。"""
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return resp.geturl()
-    except Exception:
-        return None
+MAX_RESOLVE_WORKERS = 8
 
 
 def load_env(path: Path) -> None:
@@ -77,11 +69,28 @@ def search_raw(query: str, model: str = "gemini-3.8-flash", no_resolve: bool = F
     grounding = response.candidates[0].grounding_metadata if response.candidates else None
     chunks = getattr(grounding, "grounding_chunks", None) if grounding else None
     if chunks:
+        # 重複URIを排除して並列で実URL解決を行う
+        resolved_map: dict[str, str | None] = {}
+        if not no_resolve:
+            unique_uris = {
+                chunk.web.uri for chunk in chunks
+                if getattr(chunk, "web", None) and getattr(chunk.web, "uri", None)
+            }
+            if unique_uris:
+                with ThreadPoolExecutor(max_workers=min(MAX_RESOLVE_WORKERS, len(unique_uris))) as pool:
+                    future_to_uri = {pool.submit(resolve_redirect, uri): uri for uri in unique_uris}
+                    for fut in future_to_uri:
+                        uri = future_to_uri[fut]
+                        try:
+                            resolved_map[uri] = fut.result()
+                        except Exception:
+                            resolved_map[uri] = None
+
         for chunk in chunks:
             web = getattr(chunk, "web", None)
             if not web:
                 continue
-            resolved = resolve_redirect(web.uri) if not no_resolve else None
+            resolved = resolved_map.get(web.uri) if not no_resolve else None
             sources.append({
                 "title": web.title,
                 "url": resolved or web.uri,

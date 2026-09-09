@@ -1,11 +1,13 @@
 ---
 name: vault-publish
-description: Sync an Obsidian Vault (awa-garden, religion-garden, cosme-garden, or solution-garden) to its Quartz repo's content/, verify a local build, commit, and push to deploy the digital garden. Invoke when the user wants to publish Vault changes, deploy to the Quartz site, or update a public digital garden — for the 阿波説 (awa) Vault, the religion research Vault, the cosme (化粧品SCM) Vault, or the solution (業務ソリューション調査) Vault. Also handles sync-only/preview requests (no commit/push) via the --sync-only flag — use this skill even when the user just wants to sync or preview locally without publishing.
+description: Sync an Obsidian Vault (awa-garden, religion-garden, solution-garden, or cpg-vault) to its Quartz repo's content/, verify a local build, commit, and push to deploy the digital garden. Invoke when the user wants to publish Vault changes, deploy to the Quartz site, or update a public digital garden — for the 阿波説 (awa) Vault, the religion research Vault, the solution (業務ソリューション調査) Vault, or the cpg (CPG統合ナレッジベース／飲料・お菓子・化粧品SCM調査・cosmeを統合済み) Vault. Also handles sync-only/preview requests (no commit/push) via the --sync-only flag — use this skill even when the user just wants to sync or preview locally without publishing.
 ---
 
 # vault-publish: Vault → Quartz → 公開パイプライン
 
-Vault → Quartz → 公開ホスティングの公開フロー全体をワンステップで実行する。**4つの対象（ターゲット）を扱える**: 阿波説デジタルガーデン(awa)、宗教研究デジタルガーデン(religion)、化粧品SCM研究ガーデン(cosme)、業務ソリューション調査(solution、旧wmstms／食品・お菓子WMS/TMS調査)。awa/religionはGitHub Pages（完全公開）、**cosme/solutionはCloudflare Pages（限定公開・プライベート）**とホスティング先が異なる点に注意。
+Vault → Quartz → 公開ホスティングの公開フロー全体をワンステップで実行する。**4つの対象（ターゲット）を扱える**: 阿波説デジタルガーデン(awa)、宗教研究デジタルガーデン(religion)、業務ソリューション調査(solution、旧wmstms／食品・お菓子WMS/TMS調査)、CPG統合ナレッジベース(cpg、飲料・お菓子・化粧品SCM・SCMソリューション統合)。awa/religionはGitHub Pages（完全公開）、**solution/cpgはCloudflare Pages（限定公開・プライベート）**とホスティング先が異なる点に注意。**cpgのみ他3ターゲットと異なるアーキテクチャ**（下記「cpgターゲットの特殊性」参照）。
+
+**cosmeターゲットは廃止済み（2026-09-09）**: `D:\Vault\cosme`はcpg Vaultの`03_Cosmetics_and_Beauty/`へ統合され、独立Vault・独立Quartzリポジトリ・独立GitHub repo（cosme-garden）はいずれも現存しない。cosme関連の公開作業は`cpg`ターゲットとして扱う。
 
 ## ターゲット定義
 
@@ -13,16 +15,30 @@ Vault → Quartz → 公開ホスティングの公開フロー全体をワン�
 |---|---|---|---|---|---|---|
 | **awa**（既定） | `D:\Vault\awa` | `D:\Vault\awa\_work\_sync_to_quartz.py` | `C:\Users\iidam\quartz` | `iida-masashi/awa-garden`（public） | GitHub Pages | `https://iida-masashi.github.io/awa-garden/` |
 | **religion** | `D:\Vault\religion` | `D:\Vault\religion\_work\_sync_to_quartz_religion.py` | `C:\Users\iidam\quartz-religion` | `iida-masashi/religion-garden`（public） | GitHub Pages | `https://iida-masashi.github.io/religion-garden/` |
-| **cosme** | `D:\Vault\cosme` | `D:\Vault\cosme\_work\_sync_to_quartz_cosme.py` | `C:\Users\iidam\quartz-cosme` | `iida-masashi/cosme-garden`（**private**） | Cloudflare Pages（GitHub Actions経由でwrangler deploy） | `https://cosme-garden.pages.dev/`（Basic認証必須） |
 | **solution** | `D:\Vault\solution` | `D:\Vault\solution\_work\_sync_to_quartz_solution.py` | `C:\Users\iidam\quartz-solution` | `iida-masashi/solution-garden`（**private**、未作成） | Cloudflare Pages / Local | `https://solution-garden.pages.dev/` |
+| **cpg** | `D:\Vault\cpg`（Vault自体がQuartzリポジトリ兼gitリポジトリ） | `D:\Vault\cpg\_work\_sync_to_quartz_cpg.py`（content先はVault外） | ―（Vault自体がQuartzリポジトリ、下記参照） | `iida-masashi/cpg-vault`（**private**） | Cloudflare Pages（GitHub Actions経由でwrangler deploy） | `https://cpg-vault.pages.dev/`（Basic認証必須） |
 
-以降、選択したターゲットの行を `<vault>` `<sync-script>` `<quartz-repo>` `<gh-repo>` `<pages-url>` として読み替える。
+以降、選択したターゲットの行を `<vault>` `<sync-script>` `<quartz-repo>` `<gh-repo>` `<pages-url>` として読み替える（cpgターゲットは`<quartz-repo>` = `<vault>` = `D:\Vault\cpg`として扱う。contentミラー先だけが例外的にVault外。下記「cpgターゲットの特殊性」参照）。
+
+## cpgターゲットの特殊性（他3ターゲットとの違い）
+
+cpgは2026-09-09にawaと同じ見た目のQuartzサイトへ移行し、さらに単一リポジトリ構成に統合された。他3ターゲット（awa/religion/solution）は「Vault（非公開）→ 別リポジトリのQuartz content/へ片方向sync」という2リポジトリ構成だが、cpgは**Quartz本体（`quartz/`, `quartz.config.ts`, `quartz.layout.ts`, `package.json`）をVault直下に同居させた単一リポジトリ**である。ただしcontentミラー先だけはVault外（`C:\Users\iidam\quartz-cpg-content`）に置く——Vault内に置くとObsidianが同じノートを二重にインデックスしwikilink alias衝突を起こすため。
+
+- **Step 1 (Sync)**: `D:\Vault\cpg\_work\_sync_to_quartz_cpg.py` を実行。他ターゲットと同じくfrontmatter fix・dewikify・dataview strip・mermaid `%%`チェックの後処理が走る。全6セクション＋`sources/`（一次資料アーカイブ、ユーザー判断で公開継続）をミラー。
+- **Step 2 (Build verify)**: `cd D:\Vault\cpg && npx quartz build -d C:/Users/iidam/quartz-cpg-content`（`-d`でVault外のcontentディレクトリを明示指定する点が他ターゲットと異なる）。
+- **Step 4-5 (Commit & Push)は `D:\Vault\cpg` 直下で実行**（他ターゲットと同じく`<quartz-repo>` = ここでは`<vault>`）。
+- **旧`build_site.py`パイプラインは`deploy-legacy.yml`として残置**（`workflow_dispatch`専用、手動ロールバック手段）。通常の公開作業では使わない。
+- **CI（`deploy.yml`）はcontentミラー先を`${{ runner.temp }}/quartz-content`に置く**（`${{ github.workspace }}`配下ではない）。**理由**: Quartzの`glob()`は`globby({gitignore: true})`を使うため、`.gitignore`に一致するパスを入力ディレクトリに指定すると「Found 0 input files」＝空サイトを黙ってデプロイする重大な罠がある（2026-09-09に実際にこれで本番サイトが一時空になった）。ローカル・CIともにcontentディレクトリは**リポジトリの`.gitignore`パターンに絶対に一致させないこと**。
+- **Quartzコアに2ファイルの改変あり**（`quartz/plugins/emitters/contentIndex.tsx`, `quartz/plugins/transformers/links.ts`）。`sources/`配下の一次資料アーカイブ（SEC提出書類等、最大2.7MB）の全文テキストが検索インデックスに入ると8MBに肥大化しブラウザがOOMクラッシュする実害が出たための対処（`content`フィールドを`sources/`のみ空にする、popoverも無効化）。将来Quartzをアップグレードする際はこの2箇所の再適用が必要。
+- **デプロイはCloudflare Pages側のGit連携ではなくGitHub Actions（`.github/workflows/deploy.yml`、`cloudflare/wrangler-action`）経由**。リポジトリSecrets `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` が必須（設定済み）。
+- **ワークフロー内でsecretsをif条件に直接使えない**（GitHub Actionsの仕様上 `if: secrets.X != ''` は`Unrecognized named-value`エラーになる）。`deploy.yml`はjobレベルの`env: HAS_CLOUDFLARE_SECRETS: ${{ secrets.X != '' }}`経由でstepの`if: env.HAS_CLOUDFLARE_SECRETS == 'true'`を制御する形で実装済み。このパターンを崩さないこと。
+- **ファイル名はASCII換算255バイト以内にする**（GitHub ActionsのUbuntu/ext4ランナーはWindows/NTFSと異なり255バイト制限があり、長い日本語ファイル名でcheckoutが失敗する実例あり）。
 
 ## When to use
 
 ユーザーが以下のような表現をしたとき:
 - 「Vaultを公開して」「デジタルガーデンを更新」「Quartzをデプロイ」
-- 「awa-garden に push」「religion-garden に push」「cosme-garden に push」「solution を同期」
+- 「awa-garden に push」「religion-garden に push」「cpg-vault に push」「solution を同期」
 - 「/vault-publish」「/vault-publish religion」のように明示的に呼び出されたとき
 - 「同期だけして」「ローカルで先に見たい」「push せずに反映」「プレビューだけ」→ `--sync-only` を使う（下記「Sync-only モード」参照）
 
@@ -30,8 +46,8 @@ Vault → Quartz → 公開ホスティングの公開フロー全体をワン�
 
 1. ユーザーが `religion`／`宗教`／`religion-garden` 等を明示、または直前の会話が `D:\Vault\religion` 配下のVault操作なら **religion**。
 2. ユーザーが `阿波`／`awa`／`awa-garden` 等を明示、または直前の会話が `D:\Vault\awa` 配下のVault操作なら **awa**。
-3. ユーザーが `cosme`／`化粧品`／`cosme-garden` 等を明示、または直前の会話が `D:\Vault\cosme` 配下のVault操作なら **cosme**。
-4. ユーザーが `solution`／`WMS`／`TMS`／`食品`／`お菓子` 等を明示、または直前の会話が `D:\Vault\solution` 配下のVault操作なら **solution**。
+3. ユーザーが `solution`／`WMS`／`TMS`／`食品`／`お菓子` 等を明示、または直前の会話が `D:\Vault\solution` 配下のVault操作なら **solution**。
+4. ユーザーが `cpg`／`CPG`／`cpg-vault`／`飲料`／`化粧品`／`cosme` 等を明示、または直前の会話が `D:\Vault\cpg` 配下のVault操作なら **cpg**（`cosme`はcpgに統合済みのため cpg ターゲットとして扱う）。
 5. どれとも判断できない場合は、明示的にユーザーへ確認する（黙って awa を既定にしない — 誤ったリポジトリへ push する事故を防ぐため）。
 
 ## Pipeline (in order)
@@ -65,12 +81,11 @@ Vault → Quartz → 公開ホスティングの公開フロー全体をワン�
 
 - ターゲットを確定する（上記「ターゲットの決め方」参照）。曖昧なら先にユーザーに確認する。
 - 現在のディレクトリは関係ない(全コマンドが絶対パスを使う)
-- `<sync-script>` の存在を確認
-- `<quartz-repo>/.git` の存在を確認
+- `<sync-script>` の存在を確認、`<quartz-repo>/.git` の存在を確認（cpgは`<quartz-repo>` = `D:\Vault\cpg`）
 
 ### 2. Run sync
 
-ユーザーが `--skip-sync` を渡した場合はこのステップを飛ばす（直前に `vault-sync` 等で同じターゲットのsyncが成功済みの場合に使う）。commit message 用のサマリがない場合は「(sync skipped — 直前の実行結果を使用)」とだけ記録する。
+ユーザーが `--skip-sync` を渡した場合はこのステップを飛ばす（直前に `--sync-only` 等で同じターゲットのsyncが成功済みの場合に使う）。commit message 用のサマリがない場合は「(sync skipped — 直前の実行結果を使用)」とだけ記録する。
 
 awaターゲット:
 ```bash
@@ -82,16 +97,16 @@ religionターゲット:
 cd "D:/Vault/religion/_work" && uv run python _sync_to_quartz_religion.py
 ```
 
-cosmeターゲット:
-```bash
-cd "D:/Vault/cosme/_work" && uv run python _sync_to_quartz_cosme.py
-```
-（`uv` が無ければ `/c/Python314/python _sync_to_quartz_cosme.py` で代替可。stdlibのみで動作するので後処理スクリプトのフォールバックは不要）
-
 solutionターゲット:
 ```bash
 cd "D:/Vault/solution/_work" && python _sync_to_quartz_solution.py
 ```
+
+cpgターゲット:
+```bash
+cd "D:/Vault/cpg/_work" && python _sync_to_quartz_cpg.py
+```
+（contentミラー先はVault外の`C:/Users/iidam/quartz-cpg-content`固定。他ターゲットと違い環境変数指定は不要——ローカル実行時のデフォルト値がそのまま正しい）
 
 スクリプトの最後のサマリ(8行程度)を保持して commit message 生成に使う。失敗時(exit non-zero)は **halt して stderr を表示**。
 
@@ -100,11 +115,16 @@ cd "D:/Vault/solution/_work" && python _sync_to_quartz_solution.py
 ```bash
 cd <quartz-repo> && npx quartz build
 ```
+（awaなら `C:/Users/iidam/quartz`、religionなら `C:/Users/iidam/quartz-religion`、solutionなら `C:/Users/iidam/quartz-solution`）
 
-（awaなら `C:/Users/iidam/quartz`、religionなら `C:/Users/iidam/quartz-religion`、cosmeなら `C:/Users/iidam/quartz-cosme`、solutionなら `C:/Users/iidam/quartz-solution`）
+**cpgのみ**contentディレクトリを明示指定する:
+```bash
+cd "D:/Vault/cpg" && npx quartz build -d "C:/Users/iidam/quartz-cpg-content"
+```
 
-成功時の最終行は `Done processing N files in Xs`。
-失敗時は YAML エラーの可能性が高い。エラー出力をそのままユーザーに見せて halt する。
+成功時の最終行は `Done processing N files in Xs`。失敗時は YAML/Mermaid エラーの可能性が高い。エラー出力をそのままユーザーに見せて halt する。
+
+**cpg固有の罠**: ビルド出力に`Parsed 0 Markdown files`のような0件表示が出たら、contentディレクトリ（`-d`で指定した先）がリポジトリの`.gitignore`パターンに一致していないか確認する（Quartzの`glob()`は`gitignore: true`でglobbyを呼ぶため、gitignore対象ディレクトリは中身があっても「見えない」扱いになる）。ローカルのVault外配置はこの罠を回避済みだが、CI環境のワークフローを変更する際は特に注意。
 
 ユーザーが `--skip-build` を渡した場合のみこのステップを飛ばす。
 
@@ -113,6 +133,7 @@ cd <quartz-repo> && npx quartz build
 ```bash
 cd <quartz-repo> && git add -A && git status --short | head -5
 ```
+（cpgは`<quartz-repo>` = `D:/Vault/cpg`）
 
 変更がない場合は「No changes to publish.」と報告して終了する(push しない)。
 
@@ -130,6 +151,7 @@ cd <quartz-repo> && git commit -m "<message>"
 ```bash
 cd <quartz-repo> && git push 2>&1
 ```
+（cpgは`<quartz-repo>`の代わりに`D:/Vault/cpg`）
 
 失敗 (`Connection was reset` / `RPC failed` 等) → 一度だけ retry:
 
@@ -145,18 +167,18 @@ cd <quartz-repo> && git config http.postBuffer 524288000 && git push 2>&1
 - 公開 URL: `<pages-url>`
 - Actions URL: `https://github.com/<gh-repo>/actions`
 - 「GitHub Actions が自動でデプロイします(約 1-2 分)」
-- **cosmeターゲットのみ追加で伝える**: 「Basic認証が必要（ID/PASSはCloudflare Pages環境変数 `BASIC_AUTH_USER`/`BASIC_AUTH_PASS` で管理、リポジトリには含まれない）」。デプロイはGitHub Actions（`cloudflare/wrangler-action`）経由で `iida-masashi/cosme-garden` の Cloudflare Pages プロジェクトへ行われる。GitHub Pagesではないため `github.io` URLは存在しない。
+- **cpgターゲットのみ追加で伝える**: 「Basic認証が必要（ID/PASSはCloudflare Pages環境変数 `BASIC_AUTH_USER`/`BASIC_AUTH_PASS` で管理、リポジトリには含まれない）」。デプロイはGitHub Actions（`cloudflare/wrangler-action`）経由で対象repoの Cloudflare Pages プロジェクトへ行われる。GitHub Pagesではないため `github.io` URLは存在しない。`sources/`（一次資料アーカイブ）もpublicに含まれBasic認証保護下で公開される旨（非公開の生データではなく既にVault内で管理されている引用元アーカイブである点は明記するが、機微情報を含む場合は個別に判断）。
 
 デプロイ進行状況の確認コマンド（`<gh-repo>` と workflow ID はターゲットに応じて選ぶ）:
 - awa: `gh api repos/iida-masashi/awa-garden/actions/workflows/281917513/runs --jq '.workflow_runs[0] | {status, html_url}'`
 - religion: `gh api repos/iida-masashi/religion-garden/actions/workflows/321319403/runs --jq '.workflow_runs[0] | {status, html_url}'`
-- cosme: `gh api repos/iida-masashi/cosme-garden/actions/workflows/335035241/runs --jq '.workflow_runs[0] | {status, html_url}'`
+- cpg: `gh api repos/iida-masashi/cpg-vault/actions/workflows/336933300/runs --jq '.workflow_runs[0] | {status, conclusion, html_url}'`（cpgはconclusionがsuccessでもデプロイstepがskippedのことがある、または成功と出てもコンテンツ0件のことがあるため、`gh api repos/iida-masashi/cpg-vault/actions/runs/<id>/jobs`でstep単位の確認に加え、ログの`Parsed N Markdown files`行の数値も必ず確認する）
 
 ## Arguments
 
 | Flag | Effect |
 |---|---|
-| `awa` / `religion` / `cosme` | 対象ターゲットを明示指定（位置引数、例: `/vault-publish religion`） |
+| `awa` / `religion` / `solution` / `cpg` | 対象ターゲットを明示指定（位置引数、例: `/vault-publish religion`） |
 | `--skip-sync` | Step 2 (sync) をスキップ。直前に同じターゲットで `--sync-only` 等によりsyncが成功済みの場合に、sync出力の再実行・再表示を避ける |
 | `--skip-build` | Step 3 (build verify) をスキップ。push 速度優先 |
 | `--sync-only` | commit/push (Step 4-5) を行わず sync+build までで停止。push せずローカルプレビューしたい場合に使う |
@@ -168,7 +190,7 @@ cd <quartz-repo> && git config http.postBuffer 524288000 && git push 2>&1
 
 - Vault 側のファイルを編集(同期は片方向 Vault → content) — Vault は source of truth
 - 公開設定の変更(repo の visibility, baseUrl, ignorePatterns 等) — それらは別途手動
-- Cloudflare側の設定変更(環境変数、Pagesプロジェクト作成等、cosmeターゲット) — 別途 `wrangler` で手動
+- Cloudflare側の設定変更(環境変数、Pagesプロジェクト作成等、cpgターゲット) — 別途 `wrangler` で手動
 - watch mode / 自動定期実行 — ユーザーが明示的に呼び出した時のみ動く
 - GitHub Actions の他 workflow を停止 — 他は無害なので触らない
 - 複数ターゲットを跨いだ操作(awaとreligionを同時にpush等) — 必ず1回の呼び出しにつき1ターゲット
@@ -179,7 +201,7 @@ cd <quartz-repo> && git config http.postBuffer 524288000 && git push 2>&1
 - 同期スクリプトは idempotent(何度実行しても同じ結果)
 - Vault と content の同期は size + mtime 比較。Vault でのタイムスタンプだけ更新したファイルでも copy が走るが、内容は同じなので git diff には現れない
 - awa: `D:\Vault\awa\_work\QUARTZ_SYNC_README.md` に運用ドキュメント完備
-- cosme: `iida-masashi/cosme-garden` は **private** リポジトリ。公開先の Cloudflare Pages (`cosme-garden.pages.dev`) は `functions/_middleware.js` による Basic 認証で限定公開している。GitHub Pages workflow ではなく `cloudflare/wrangler-action` を使う点、`sources/` サブツリーが同期対象外（一次資料・.chroma_dbキャッシュのため）な点が awa/religion と異なる
+- cpg: `iida-masashi/cpg-vault` は **private**。他3ターゲットと違い2リポジトリ構成ではなく単一リポジトリ（詳細は上記「cpgターゲットの特殊性」）。公開先の Cloudflare Pages (`cpg-vault.pages.dev`) は `functions/_middleware.ts` による Basic 認証で限定公開している。`sources/`サブツリーはユーザー判断でリポジトリに含まれ、そのまま公開される（一次資料アーカイブのリンク切れ対策が目的）。`.gitignore`は`sources/**/.chroma_db/`パターンでconvMDキャッシュのみ除外
 - **ターゲットを取り違えると誤ったリポジトリに無関係な内容をpushする事故になる。** 曖昧な指示（単に「公開して」）の場合は必ずどのVaultを指すか確認してから実行する。
 
 ## Troubleshooting
@@ -194,5 +216,13 @@ cd <quartz-repo> && git config http.postBuffer 524288000 && git push 2>&1
 | sync で大量更新が出るが内容は同じ | mtime ずれが原因。挙動として正しい。git diff で実差分を確認 |
 | 公開サイトで Mermaid 図が `Syntax error in text` | **Mermaid ブロック内の `%%`** が原因。Quartz の OFM transformer が `%%…%%` を Obsidian ブロックコメントとみなし**間を全削除**するため、ノード/エッジ定義が消えて図が壊れる（`%%` は Mermaid 自身のコメント構文でもあるため作者が無意識に使う罠）。対処：**mermaid フェンス内の `%%` を全廃**（1個でも残すと次の `%%`/EOF まで食う）。`build` exit 0 ≠ 描画OK（クライアント側描画）なので、`public/<path>.html` の `data-clipboard` ペイロードを読んで図全体が残っているか確認する。sync は `_check_mermaid_comments.py` でこの `%%` を warn-only 検出する（awaのみ、religion側の対応は未確認）。 |
 | どちらのターゲットか迷う | 黙って推測せず、ユーザーに確認する。誤ったリポジトリへの push は取り消しにくい |
-| cosme: push後もサイトが更新されない/401のまま | GitHub Actions（`wrangler-action`）が失敗している可能性。`gh run list --repo iida-masashi/cosme-garden --limit 1` で確認。Cloudflare側の `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` (GitHub Secrets) または `BASIC_AUTH_USER`/`BASIC_AUTH_PASS` (Cloudflare Pages環境変数) が未設定・期限切れだと失敗する |
+| cpg: push後もサイトが更新されない/401のまま | GitHub Actions（`wrangler-action`）が失敗している可能性。`gh run list --repo iida-masashi/cpg-vault --limit 1` で確認。Cloudflare側の `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` (GitHub Secrets) または `BASIC_USERNAME`/`BASIC_PASSWORD` (Cloudflare Pages環境変数、未設定時は`functions/_middleware.ts`内のデフォルト値が使われる) が未設定・期限切れだと失敗する |
+| cpg: Actions run が success でもサイトが更新されない | `conclusion: success` は `Deploy to Cloudflare Pages` stepが`skipped`でも成立する（他のstepが全部successならjob全体もsuccess扱いになるため）。`gh api repos/iida-masashi/cpg-vault/actions/runs/<id>/jobs`でstep単位のconclusionを必ず確認する。Secretsが1件も無いと毎回skippedになる |
+| cpg: Actions run が success で全step successでもコンテンツが空/激減している | **最重要の罠（2026-09-09に実際に本番サイトが一時空になった）**。ビルドログの`Parsed N Markdown files`行を必ず確認する。`N`が想定より大幅に少ない・0の場合、`-d`で指定したcontentディレクトリがリポジトリの`.gitignore`パターンに一致している可能性が高い。Quartzの`glob()`は`globby({gitignore: true})`を使うため、gitignore対象ディレクトリは中身があっても「見えない」扱いになりビルドが静かに空サイトを生成する。緊急時は`gh workflow run deploy-legacy.yml --repo iida-masashi/cpg-vault`で旧`build_site.py`パイプラインを手動実行し一時復旧できる |
+| cpg: `Deploy to Cloudflare Pages`のif条件が機能しない | GitHub Actionsは`secrets`コンテキストをjob/stepの`if:`式で直接参照できない（`Unrecognized named-value: 'secrets'`でworkflow file自体がparse失敗しjob数0件になる）。job-levelの`env:`に一度代入してからstepの`if: env.X == 'true'`で参照する形にする（`.github/workflows/deploy.yml`は対応済み、崩さないこと） |
+| cpg: `Deploy to Cloudflare Pages`が`[code: 7003]`で失敗 | `CLOUDFLARE_ACCOUNT_ID`が不正（コピー時の文字欠落等）。Cloudflare Account IDは32文字の16進数文字列。`echo -n "$ID" \| wc -c`で長さ確認を促す |
+| cpg: `Deploy to Cloudflare Pages`が`Authentication error [code: 10000]`で失敗 | `CLOUDFLARE_API_TOKEN`の権限不足、またはAccount Resourcesが対象アカウントに紐付いていない。`curl -s https://api.cloudflare.com/client/v4/user/tokens/verify -H "Authorization: Bearer <token>"`でトークン自体の有効性を確認し、`curl -s https://api.cloudflare.com/client/v4/accounts/<account-id>/pages/projects/cpg-vault -H "Authorization: Bearer <token>"`でプロジェクトへのアクセス権を確認する |
+| cpg: `actions/checkout`が`File name too long`で失敗 | GitHub ActionsのUbuntuランナー（ext4、255バイト制限）とWindows/NTFS（文字数ベース制限）の差。日本語ファイル名は1文字3バイトになるため、Windows上では作成できてもpush後のActions checkoutで失敗する。`python3 -c "print(len('<filename>'.encode('utf-8')))"`で事前確認し、255バイトを超える場合は短縮する |
+| cpg: ローカルプレビュー中にブラウザがメモリ不足でクラッシュする | `sources/`配下の一次資料アーカイブ（SEC提出書類等、最大2.7MB）の全文が検索インデックス（`contentIndex.json`）に含まれ肥大化するのが原因（2026-09-09に実害あり、修正済み）。`quartz/plugins/emitters/contentIndex.tsx`の`sources/`向けcontent空化パッチが外れていないか確認する。`ls -la public/static/contentIndex.json`が数MB以上あれば要注意 |
+| cpg: 旧build_site.py（`deploy-legacy.yml`）を使う場面 | Quartzパイプライン（`deploy.yml`）に問題が起きた際の緊急ロールバックのみ。通常運用では使わない。`gh workflow run deploy-legacy.yml --repo iida-masashi/cpg-vault`で手動起動、`--project-name=cpg-vault`は同一なので同じCloudflare Pagesプロジェクトを上書きする点に注意（Quartz版に戻す際は改めて`deploy.yml`側をpushし直す） |
 | Bashツールで `uv: command not found` | `uv`がPATHに乗っていない環境（WinGet配下等にインストール済みでも）で起きる。`_sync_to_quartz*.py`自体はstdlibのみで動くので `/c/Python314/python <sync-script>` のように system python で直接叩けば1〜3のミラー処理は完走する。ただしスクリプト内部で `_fix_quartz_frontmatter.py` / `_dewikify_broken.py` / `_strip_dataview.py` / `_check_mermaid_comments.py` を `subprocess.run(["uv", "run", "python", ...])` 経由で呼ぶ設計のため、そこで同じエラーが出て後処理が止まる。後処理4スクリプトもいずれも標準ライブラリのみに依存しているため、`_work/` 配下から同様に system python で1本ずつ直接実行すれば代替できる（実行順: frontmatter fix → dewikify → dataview strip → mermaid check）。`npx quartz build` はNode.js経由なのでこの問題の影響を受けない。 |

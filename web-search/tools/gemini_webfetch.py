@@ -24,6 +24,8 @@ import json
 import os
 import re
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 from google import genai
@@ -31,6 +33,50 @@ from google.genai import types
 
 ENV_PATH = Path(os.environ.get("GEMINI_SKILL_ENV_PATH", r"C:\Users\iidam\gemini\.env"))
 DEFAULT_INSTRUCTION = "このページの内容を詳しく要約して"
+
+
+class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """302/301リダイレクトを自動追従せず、Locationヘッダーをキャプチャするハンドラ。"""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def resolve_redirect(url: str, timeout: float = 5.0) -> str | None:
+    """grounding-api-redirect URLを実URLに解決する。失敗時はNone。
+    
+    Googleのgrounding-api-redirectはHTTP 302 Foundで実URLを返す。
+    リダイレクト先サイトへの接続・ページダウンロードを行わずにLocationヘッダーのみを取得することで、
+    相手先サーバーの403ブロックや巨大PDFダウンロードによるタイムアウトを回避する。
+    """
+    if not url:
+        return None
+    if "grounding-api-redirect" not in url:
+        return url
+
+    opener = urllib.request.build_opener(NoRedirectHandler)
+    req = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        },
+    )
+    try:
+        resp = opener.open(req, timeout=timeout)
+        return resp.geturl()
+    except urllib.error.HTTPError as e:
+        if e.code in (301, 302, 303, 307, 308):
+            location = e.headers.get("Location")
+            if location:
+                return location
+        return None
+    except Exception:
+        return None
+
 
 CHECK_INSTRUCTION_TEMPLATE = """次の主張を、否定できない事実の最小単位ごとに箇条書きに分解し、
 このページの内容が各項目を裏付けるか判定して。判定は「裏付けあり」「裏付けなし」「不明」の
@@ -93,6 +139,11 @@ def make_client() -> genai.Client:
 
 def fetch_raw(url: str, instruction: str = DEFAULT_INSTRUCTION, model: str = "gemini-3.8-flash", client: genai.Client | None = None) -> dict:
     """URLを取得しGeminiの回答本文・取得ステータスを辞書で返す（他スクリプトからの再利用向け）。"""
+    if "grounding-api-redirect" in url:
+        resolved = resolve_redirect(url)
+        if resolved:
+            url = resolved
+
     client = client or make_client()
 
     response = client.models.generate_content(
