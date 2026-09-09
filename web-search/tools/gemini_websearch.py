@@ -14,6 +14,7 @@ APIキー/Vertex AI設定は既定で C:/Users/iidam/gemini/.env から読み込
 """
 
 import argparse
+from datetime import datetime
 import json
 import os
 import sys
@@ -39,6 +40,66 @@ MAX_VERIFY_WORKERS = 4
 MAX_RESOLVE_WORKERS = 8
 
 
+def get_system_instruction() -> str:
+    today = datetime.now().strftime("%Y-%m-%d")
+    return (
+        f"あなたは厳格な事実調査アシスタントです。現在の基準日は {today} です。\n"
+        "【絶対規律】\n"
+        "1. 提供されたGoogle検索結果（Grounding情報）に明確に記載されている事実・数値のみを回答してください。\n"
+        "2. 検索結果に書かれていない数値を、あなたの事前学習知識や推測で補完・創作することは厳禁です。\n"
+        "3. 検索結果に記載がない場合は『検索結果に記載なし』と正直に回答してください。\n"
+        "4. 金額、増減率、年度（3月期/12月期等）、企業名は検索結果の表記を正確に反映してください。"
+    )
+
+
+def audit_grounding(text: str, grounding_supports: list, sources: list) -> dict:
+    """テキストとgrounding_supportsを突合し、文単位の裏付け状態を監査する。"""
+    segments = []
+    if not grounding_supports:
+        return {
+            "verified_segments": [],
+            "ungrounded_snippets": [],
+            "is_fully_grounded": False,
+        }
+
+    for s in grounding_supports:
+        seg = getattr(s, "segment", None)
+        if not seg or not getattr(seg, "text", None):
+            continue
+        indices = getattr(s, "grounding_chunk_indices", []) or []
+        ref_sources = [
+            {"index": idx + 1, "title": sources[idx]["title"], "url": sources[idx]["url"]}
+            for idx in indices if idx < len(sources)
+        ]
+        segments.append({
+            "text": seg.text.strip(),
+            "has_grounding": bool(indices),
+            "sources": ref_sources,
+        })
+
+    # 未裏付け文（Un-grounded text）の検出
+    ungrounded_snippets = []
+    lines = [
+        line.strip() for line in text.splitlines()
+        if line.strip() and not line.strip().startswith("#") and not line.strip().startswith("---")
+    ]
+    boilerplate_patterns = ("以下のとおり", "以下の通り", "下記のとおり", "下記の通り", "まとめました", "紹介します", "まとめは以下")
+    for line in lines:
+        if len(line) < 15:  # 短い見出しや箇条書きマーカーのみは除外
+            continue
+        if any(bp in line for bp in boilerplate_patterns):
+            continue
+        is_covered = any(line in s["text"] or s["text"] in line for s in segments if s["has_grounding"])
+        if not is_covered:
+            ungrounded_snippets.append(line)
+
+    return {
+        "verified_segments": segments,
+        "ungrounded_snippets": ungrounded_snippets,
+        "is_fully_grounded": len(ungrounded_snippets) == 0,
+    }
+
+
 def load_env(path: Path) -> None:
     if not path.exists():
         return
@@ -53,21 +114,38 @@ def load_env(path: Path) -> None:
             os.environ[key] = value
 
 
-def search_raw(query: str, model: str = "gemini-3.8-flash", no_resolve: bool = False, client: genai.Client | None = None) -> dict:
-    """検索を実行し、回答本文と出典リストを辞書で返す（他スクリプトからの再利用・--json向け）。"""
+def search_raw(
+    query: str,
+    model: str = "gemini-3.8-flash",
+    no_resolve: bool = False,
+    client: genai.Client | None = None,
+    no_audit: bool = False,
+    thinking_budget: int | None = None,
+) -> dict:
+    """検索を実行し、回答本文・出典リスト・検索クエリ・裏付け監査を辞書で返す。"""
     client = client or make_client()
+
+    config_kwargs = {
+        "tools": [types.Tool(google_search=types.GoogleSearch())],
+        "system_instruction": get_system_instruction(),
+        "temperature": 0.0,
+    }
+    if thinking_budget is not None:
+        config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=thinking_budget)
 
     response = client.models.generate_content(
         model=model,
         contents=query,
-        config=types.GenerateContentConfig(
-            tools=[types.Tool(google_search=types.GoogleSearch())],
-        ),
+        config=types.GenerateContentConfig(**config_kwargs),
     )
 
     sources = []
+    search_queries = []
     grounding = response.candidates[0].grounding_metadata if response.candidates else None
     chunks = getattr(grounding, "grounding_chunks", None) if grounding else None
+    if grounding:
+        search_queries = getattr(grounding, "web_search_queries", []) or []
+
     if chunks:
         # 重複URIを排除して並列で実URL解決を行う
         resolved_map: dict[str, str | None] = {}
@@ -97,7 +175,17 @@ def search_raw(query: str, model: str = "gemini-3.8-flash", no_resolve: bool = F
                 "resolved": bool(resolved),
             })
 
-    return {"text": response.text, "sources": sources}
+    audit_result = None
+    if not no_audit and grounding:
+        supports = getattr(grounding, "grounding_supports", []) or []
+        audit_result = audit_grounding(response.text, supports, sources)
+
+    return {
+        "text": response.text,
+        "sources": sources,
+        "search_queries": search_queries,
+        "supports_audit": audit_result,
+    }
 
 
 def verify_claim(text: str, sources: list, client: genai.Client, model: str = "gemini-3.8-flash") -> list:
@@ -121,23 +209,44 @@ def verify_claim(text: str, sources: list, client: genai.Client, model: str = "g
         return list(pool.map(_check_one, sources))
 
 
-def search(query: str, model: str = "gemini-3.8-flash", no_resolve: bool = False,
-           as_json: bool = False, do_verify: bool = False, do_refute: bool = False,
-           max_chars: int | None = None) -> None:
+def search(
+    query: str,
+    model: str = "gemini-3.8-flash",
+    no_resolve: bool = False,
+    as_json: bool = False,
+    do_verify: bool = False,
+    do_refute: bool = False,
+    max_chars: int | None = None,
+    no_audit: bool = False,
+    thinking_budget: int | None = None,
+) -> None:
     load_env(ENV_PATH)
     client = make_client()
 
     if do_refute:
         query = REFUTE_TEMPLATE.format(claim=query)
 
-    result = search_raw(query, model=model, no_resolve=no_resolve, client=client)
+    result = search_raw(
+        query,
+        model=model,
+        no_resolve=no_resolve,
+        client=client,
+        no_audit=no_audit,
+        thinking_budget=thinking_budget,
+    )
 
     checks = None
     if do_verify and result["sources"]:
         checks = verify_claim(result["text"], result["sources"], client, model=model)
 
     if as_json:
-        payload = {"text": _truncate(result["text"], max_chars), "sources": result["sources"]}
+        payload = {
+            "text": _truncate(result["text"], max_chars),
+            "sources": result["sources"],
+            "search_queries": result["search_queries"],
+        }
+        if result["supports_audit"] is not None:
+            payload["supports_audit"] = result["supports_audit"]
         if checks is not None:
             payload["claim_checks"] = checks
         print(json.dumps(payload, ensure_ascii=False, indent=2))
@@ -145,11 +254,29 @@ def search(query: str, model: str = "gemini-3.8-flash", no_resolve: bool = False
 
     print(_truncate(result["text"], max_chars))
 
+    if result["search_queries"]:
+        print("\n--- 検索クエリ (web_search_queries) ---")
+        for q in result["search_queries"]:
+            print(f"- {q}")
+
     if result["sources"]:
         print("\n--- 出典 ---")
         for i, src in enumerate(result["sources"], 1):
             suffix = "" if src["resolved"] or no_resolve else " (解決失敗、リダイレクトURLのまま)"
             print(f"[{i}] {src['title']} - {src['url']}{suffix}")
+
+    audit = result.get("supports_audit")
+    if audit is not None:
+        print("\n--- 文単位の裏付け監査 (Grounding Audit) ---")
+        if audit["is_fully_grounded"]:
+            print("Status: OK (すべての主要文章がWeb出典に基づいています)")
+        else:
+            print("Status: WARNING (Web出典で裏付けられていない文が含まれています)")
+
+        if audit["ungrounded_snippets"]:
+            print("\n⚠️ 【Web出典の裏付けなし（モデル推測・事前知識の可能性）】:")
+            for s in audit["ungrounded_snippets"]:
+                print(f"  * {s}")
 
     if checks is not None:
         print("\n--- 出典の裏付けチェック（--verify-claim、主張を項目単位に分解して判定） ---")
@@ -184,7 +311,21 @@ def main() -> None:
         "--max-chars", type=int, default=None,
         help="回答本文をこの文字数で打ち切る（呼び出し元＝Claude側のコンテキスト消費を抑えたい時に指定。出典一覧・--verify-claim結果には影響しない）",
     )
+    parser.add_argument(
+        "--no-audit", action="store_true",
+        help="文単位の裏付け監査（grounding_supports突合）を無効化する（既定は有効）",
+    )
+    parser.add_argument(
+        "--thinking", action="store_true",
+        help="思考プロセス（Thinking）を有効化して論理・数理の突合精度を高める（既定バジェット 1024）",
+    )
+    parser.add_argument(
+        "--thinking-budget", type=int, default=None,
+        help="思考プロセス（Thinking）のトークンバジェットを指定する（例: 2048）",
+    )
     args = parser.parse_args()
+
+    budget = args.thinking_budget if args.thinking_budget is not None else (1024 if args.thinking else None)
 
     search(
         " ".join(args.query),
@@ -194,8 +335,11 @@ def main() -> None:
         do_verify=args.verify_claim,
         do_refute=args.refute,
         max_chars=args.max_chars,
+        no_audit=args.no_audit,
+        thinking_budget=budget,
     )
 
 
 if __name__ == "__main__":
     main()
+
