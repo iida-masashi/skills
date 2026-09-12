@@ -166,8 +166,8 @@ cd <quartz-repo> && git config http.postBuffer 524288000 && git push 2>&1
 成功時、ユーザーに以下を伝える:
 - 公開 URL: `<pages-url>`
 - Actions URL: `https://github.com/<gh-repo>/actions`
-- 「GitHub Actions が自動でデプロイします(約 1-2 分)」
-- **cpgターゲットのみ追加で伝える**: 「Basic認証が必要（ID/PASSはCloudflare Pages環境変数 `BASIC_AUTH_USER`/`BASIC_AUTH_PASS` で管理、リポジトリには含まれない）」。デプロイはGitHub Actions（`cloudflare/wrangler-action`）経由で対象repoの Cloudflare Pages プロジェクトへ行われる。GitHub Pagesではないため `github.io` URLは存在しない。`sources/`（一次資料アーカイブ）もpublicに含まれBasic認証保護下で公開される旨（非公開の生データではなく既にVault内で管理されている引用元アーカイブである点は明記するが、機微情報を含む場合は個別に判断）。
+- 「GitHub Actions が自動でデプロイします(約 1-2 分)」（**cpgターゲットは除く**、下記参照）
+- **cpgターゲットのみ追加で伝える**: 「Basic認証が必要（ID/PASSはCloudflare Pages環境変数 `BASIC_AUTH_USER`/`BASIC_AUTH_PASS` で管理、リポジトリには含まれない）」。デプロイはGitHub Actions（`cloudflare/wrangler-action`）経由で対象repoの Cloudflare Pages プロジェクトへ行われる。GitHub Pagesではないため `github.io` URLは存在しない。`sources/`（一次資料アーカイブ）もpublicに含まれBasic認証保護下で公開される旨（非公開の生データではなく既にVault内で管理されている引用元アーカイブである点は明記するが、機微情報を含む場合は個別に判断）。**cpgは所要時間が他ターゲットと大きく異なり、実測で10〜15分以上（一度は15分超）かかることが常態**。「約1-2分」ではなく「約10-15分、それ以上かかることもある」と案内し、一度の確認で完了しないことを前提に複数回のポーリングを促す。**進行中か停止しているかの判断は、job全体のstatusだけでなくstep単位のconclusion（`gh api .../jobs`）と、runの`updated_at`タイムスタンプが直近で更新され続けているかを併用する**。「Build Quartz」ステップが完了済みで「Deploy to Cloudflare Pages」だけがin_progressのまま長時間続いていても、それ自体は正常な範囲（ハングではない）というのがこのrepoでの実測パターン。
 
 デプロイ進行状況の確認コマンド（`<gh-repo>` と workflow ID はターゲットに応じて選ぶ）:
 - awa: `gh api repos/iida-masashi/awa-garden/actions/workflows/281917513/runs --jq '.workflow_runs[0] | {status, html_url}'`
