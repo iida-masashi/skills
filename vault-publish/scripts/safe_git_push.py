@@ -41,6 +41,6 @@ def run_git_push(repo_path: str, max_retries: int = 5, delay: float = 3.0) -> bo
     return False
 
 if __name__ == "__main__":
-    target_repo = sys.argv[1] if len(sys.argv) > 1 else r"C:\Users\iidam\quartz-cosme"
+    target_repo = sys.argv[1] if len(sys.argv) > 1 else "."
     success = run_git_push(target_repo)
     sys.exit(0 if success else 1)
