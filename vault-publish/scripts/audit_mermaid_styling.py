@@ -12,9 +12,7 @@ def audit_mermaid_styling(vault_path: str) -> int:
     md_files = sorted([f for f in vault.rglob("*.md") if not any(x in str(f) for x in [".git", ".trash", "sources"])])
     
     issues_found = 0
-    pattern_block = re.compile(r"```mermaid
-(.*?)
-```", re.DOTALL)
+    pattern_block = re.compile(r"```mermaid\s*\n(.*?)\n```", re.DOTALL)
     node_pattern = re.compile(r'^\s*([A-Za-z0-9_]+)\["([^"]+)"\]', re.MULTILINE)
     
     for f in md_files:

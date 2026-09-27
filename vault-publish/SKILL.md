@@ -52,19 +52,49 @@ cpgは2026-09-09にawaと同じ見た目のQuartzサイトへ移行し、さら�
 
 ## Pipeline (in order)
 
-1. **Sync & Mermaid Lint**: `<sync-script>` を実行
-   - **Mermaid自動構文検査 (`mermaid_validator.py`)**: 同期開始前に全Markdown内のMermaid構文（矢印・クォート・サブグラフ整合性）を自動検証。エラー時は安全に同期停止。
-   - Mirror Vault subtrees → `<quartz-repo>/content/`
-   - Apply frontmatter fix(YAML 不正対応)
-   - Apply dewikify(broken wikilink を外部 URL / プレーンテキスト化)
+0. **Vault Hygiene & Pre-flight Audits (保守・事前監査)**:
+   - **赤リンク・異体字監査 (`scripts/audit_vault_links.py`)**:
+     ```bash
+     python scripts/audit_vault_links.py --vault <vault> --check-redlinks --top 30
+     python scripts/audit_vault_links.py --vault <vault> --find-variants
+     python scripts/audit_vault_links.py --vault <vault> --fix-variants [--apply]
+     ```
+     Vault内の未作成ノートへのリンク（赤リンク）を検出。特に「売↔賣」「弥↔彌」「島↔嶋」「高↔髙」などの漢字の表記揺れ（異体字）を自動検出し、`--apply` で安全に一括正規化。
+   - **タグ監査＆正規化 (`scripts/audit_vault_tags.py`)**:
+     ```bash
+     python scripts/audit_vault_tags.py --vault <vault> --audit
+     python scripts/audit_vault_tags.py --vault <vault> --normalize [--apply]
+     ```
+     Frontmatter内のタグ集計、`阿波忌部` vs `氏族/阿波忌部` などの階層表記揺れを可視化し、5:1ルールで自動正規化。
+
+1. **Sync & Sanitization**: `<sync-script>` を実行
+   - **Mermaid自動構文・コントラスト検査 (`mermaid-hygiene` / `validate_mermaid.py`)**: 同期開始前に全Markdown内のMermaid構文（矢印・クォート・サブグラフ記号・暗色背景コントラスト）を自動検証。エラー時は安全に同期停止。
+   - **Mirror Vault subtrees** → `<quartz-repo>/content/`
+   - **一括サニタイズ (`scripts/sanitize_quartz_content.py`)**:
+     1. Frontmatter修正 (YAML不正・未クォートwikilink対応)
+     2. Dataviewブロック除去 (静的プレースホルダー化)
+     3. 壊れたwikilink除去 (404赤リンク防止・プレーンテキスト化 / Shrine-heritager・Web_Archives元URLスマート解決)
+     4. AI編集ログ・更新履歴の脱色除去 (読者向けクリーン化)
+     5. 改行コード正規化 (LF統一)
+
 2. **Build verify** (default ON、`--skip-build` で skip 可):
    - `cd <quartz-repo> && npx quartz build` を実行
    - YAML エラーなど発生時は **halt して詳細表示**(ユーザーが Vault を直す必要がある)
-3. **`--sync-only` ならここで停止**（下記「Sync-only モード」参照）。commit/push は行わない。
-4. **Pre-Commit 監査 & 承認確認（重要規律）**:
+
+3. **Post-Build Internal Link Audit (事後監査・検証)**:
+   - **Quartzリンク切れ監査 (`scripts/audit_quartz_links.py`)**:
+     ```bash
+     python scripts/audit_quartz_links.py --public-dir <quartz-repo>/public [--report-file report.md]
+     ```
+     生成されたHTML群を走査し、ブラウザ上で404になる内部リンクが存在しないかを完全検証。
+
+4. **`--sync-only` ならここで停止**（下記「Sync-only モード」参照）。commit/push は行わない。
+
+5. **Pre-Commit 監査 & 承認確認（重要規律）**:
    - `python scripts/audit_mermaid_styling.py <vault>` でダイアグラムのアクセシビリティを検証。
    - **必ずユーザーに変更ファイル一覧、変更概要、コミットメッセージ案を提示し、明示的な承認指示を待つ（自動コミット・自動プッシュ厳禁）。**
-5. **Commit & Push**: ユーザー承認後、安全に実行
+
+6. **Commit & Push**: ユーザー承認後、安全に実行
    - `python scripts/safe_git_push.py <quartz-repo>` を実行（接続リセット等の一時エラー時に指数バックオフで最大5回自動リトライ）。
 
 ## Sync-only モード（push なしプレビュー）
