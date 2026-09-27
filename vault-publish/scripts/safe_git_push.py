@@ -14,7 +14,11 @@ def run_git_push(repo_path: str, max_retries: int = 5, delay: float = 3.0) -> bo
         print(f"Error: Repository path '{repo_path}' does not exist.", file=sys.stderr)
         return False
     
-    cmd = ["git", "-C", str(repo), "push", "origin", "main"]
+    # Detect current branch dynamically
+    branch_res = subprocess.run(["git", "-C", str(repo), "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True)
+    branch = branch_res.stdout.strip() if branch_res.returncode == 0 and branch_res.stdout.strip() else "main"
+    
+    cmd = ["git", "-C", str(repo), "push", "origin", branch]
     
     for attempt in range(1, max_retries + 1):
         print(f"--- Git Push Attempt {attempt}/{max_retries} ---")
