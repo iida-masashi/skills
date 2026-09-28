@@ -411,6 +411,7 @@ def search(
     do_refute: bool = False,
     max_chars: int | None = None,
     no_audit: bool = False,
+    no_sources: bool = False,
     thinking_level: str | None = None,
 ) -> None:
     load_env(ENV_PATH)
@@ -442,10 +443,11 @@ def search(
     if as_json:
         payload = {
             "text": _truncate(result["text"], max_chars),
-            "sources": result["sources"],
             "search_queries": result["search_queries"],
             "grounded": result["grounded"],
         }
+        if not no_sources:
+            payload["sources"] = result["sources"]
         if not result["grounded"]:
             payload["warnings"] = ["検索未実行または出典0件：回答は事前学習知識のみの可能性があります"]
         if result["supports_audit"] is not None:
@@ -467,11 +469,13 @@ def search(
         for q in result["search_queries"]:
             print(f"- {q}")
 
-    if result["sources"]:
+    if result["sources"] and not no_sources:
         print("\n--- 出典 ---")
         for i, src in enumerate(result["sources"], 1):
             suffix = "" if src["resolved"] or no_resolve else " (解決失敗、リダイレクトURLのまま)"
             print(f"[{i}] {src['title']} - {src['url']}{suffix}")
+    elif result["sources"] and no_sources:
+        print(f"\n--- 出典 --- ({len(result['sources'])}件、--no-sourcesのため省略)")
 
     audit = result.get("supports_audit")
     if audit is not None:
@@ -534,6 +538,11 @@ def main() -> None:
         help="文単位の裏付け監査（grounding_supports突合）を無効化する（既定は有効）",
     )
     parser.add_argument(
+        "--no-sources", action="store_true",
+        help="出典URL一覧の表示を省略する（コンテキスト節約。一次資料として記録する予定がない一般検索向け。"
+             "--verify-claim併用時の出典URL内訳には影響しない）",
+    )
+    parser.add_argument(
         "--thinking-level", choices=["minimal", "low", "medium", "high"], default=None,
         help="思考プロセス（Thinking）の深さを指定する（既定: モデルごとのデフォルト。gemini-3.8-flashはMEDIUM）。"
              "複雑な論理・数理の突合精度を高めたい場合はhigh推奨",
@@ -549,6 +558,7 @@ def main() -> None:
         do_refute=args.refute,
         max_chars=args.max_chars,
         no_audit=args.no_audit,
+        no_sources=args.no_sources,
         thinking_level=args.thinking_level,
     )
 

@@ -39,6 +39,7 @@ cd claude-gemini-skills/web-search && uv run python tools/gemini_websearch.py "�
 - `--no-audit` — 文単位の裏付け監査（`grounding_supports`突合）の出力を省略する（軽量化したい場合）。
 - `--thinking-level {minimal,low,medium,high}` — 思考プロセス（Thinking）の深さを指定する（既定はモデル既定値。`gemini-3.8-flash`は既定でMEDIUM）。legacyな`thinking_budget`とは同時指定できないため`thinking_level`のみをサポートする。
 - `--no-resolve` — 出典URLのリダイレクト実URL逆引き解決を無効化する。
+- `--no-sources` — 出典URL一覧（`--- 出典 ---`）の表示を省略し件数のみ表示する（コンテキスト節約。`--json`時は`sources`キー自体を省く）。`--verify-claim`の出典URL内訳表示には影響しない。
 - `--verify-claim` — 回答本文中でgrounding済みの文をclaim単位とし、その出典URLごとに1回だけ問い合わせて構造化出力（JSON Schema）で判定する。「裏付けあり」判定には原文引用（quote）を必須とし、quoteが空なら自動格下げする。同じURLに複数claimが帰属していてもURLあたり1回にまとめるため、`text[:500]`のような回答の打ち切りは発生しない。claimごとの最終判定は複数出典の結果を集約する（1出典でも裏付けあり→裏付けあり、全出典が裏付けなし→裏付けなし、それ以外→不明）。出典URLへの問い合わせは並列実行（最大4並列）。
 - `--refute` — クエリを「この主張を否定・反証する情報がないか」という反証志向のプロンプトに自動変換してから検索する。「AとBに関係がある」のような一文の真偽を疑うときに使う。
 - `--model MODEL` — 使用するGeminiモデルを指定する（既定: `gemini-3.8-flash`）。`--verify-claim`の裏付けチェックにも同じモデルが使われる。
