@@ -107,27 +107,36 @@ class MermaidValidator:
     ) -> list[MermaidLintIssue]:
         issues: list[MermaidLintIssue] = []
 
-        # Rule 2: subgraph / end mismatch
-        subgraph_count = 0
-        end_count = 0
+        # Rule 2: subgraph / end mismatch (Applicable to flowchart / graph)
+        first_line = ""
         for line in lines:
-            stripped = line.strip()
-            if stripped.startswith("subgraph"):
-                subgraph_count += 1
-            elif stripped == "end":
-                end_count += 1
+            s = line.strip()
+            if s and not s.startswith("%%"):
+                first_line = s
+                break
 
-        if subgraph_count != end_count:
-            issues.append(
-                MermaidLintIssue(
-                    file=file,
-                    line_number=start_line,
-                    severity="ERROR",
-                    rule="SUBGRAPH_MISMATCH",
-                    message=f"subgraph の開始数 ({subgraph_count}) と end の数 ({end_count}) が一致しません",
-                    snippet=f"subgraphs: {subgraph_count}, ends: {end_count}",
+        is_sequence = first_line.startswith("sequenceDiagram")
+        if not is_sequence:
+            subgraph_count = 0
+            end_count = 0
+            for line in lines:
+                stripped = line.strip()
+                if stripped.startswith("subgraph"):
+                    subgraph_count += 1
+                elif stripped == "end":
+                    end_count += 1
+
+            if subgraph_count != end_count:
+                issues.append(
+                    MermaidLintIssue(
+                        file=file,
+                        line_number=start_line,
+                        severity="ERROR",
+                        rule="SUBGRAPH_MISMATCH",
+                        message=f"subgraph の開始数 ({subgraph_count}) と end の数 ({end_count}) が一致しません",
+                        snippet=f"subgraphs: {subgraph_count}, ends: {end_count}",
+                    )
                 )
-            )
 
         for line_no, line in enumerate(lines, start=start_line + 1):
             stripped = line.strip()

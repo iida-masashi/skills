@@ -8,7 +8,7 @@ import time
 import sys
 from pathlib import Path
 
-def run_git_push(repo_path: str, max_retries: int = 5, delay: float = 3.0) -> bool:
+def run_git_push(repo_path: str, max_retries: int = 8, delay: float = 4.0) -> bool:
     repo = Path(repo_path)
     if not repo.exists():
         print(f"Error: Repository path '{repo_path}' does not exist.", file=sys.stderr)
