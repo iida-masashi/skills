@@ -52,10 +52,10 @@ flowchart TD
     classDef neutral fill:#374151,stroke:#ffffff,stroke-width:1px,color:#ffffff;
 
     subgraph 宗派系統["宗派・分派系統図"]
-        A["宗祖・根本本部"]:::root
-        B["正統本流・管長"]:::main
-        C["除名・破門・分立"]:::expelled
-        D["信徒連合・外郭団体"]:::lay
+        A["<div style='color:#ffffff;'>宗祖・根本本部</div>"]:::root
+        B["<div style='color:#ffffff;'>正統本流・管長</div>"]:::main
+        C["<div style='color:#ffffff;'>除名・破門・分立</div>"]:::expelled
+        D["<div style='color:#ffffff;'>信徒連合・外郭団体</div>"]:::lay
     end
 
     A --> B

@@ -364,9 +364,15 @@ class MermaidValidator:
 
     def run(self, fix: bool = False) -> list[MermaidLintIssue]:
         issues: list[MermaidLintIssue] = []
+        def _is_excluded(path: Path) -> bool:
+            return any(
+                part.startswith(".") or part in {".git", ".venv", "__pycache__", "_work", "node_modules"}
+                for part in path.parts
+            )
+
         md_files = [self.target_path] if self.target_path.is_file() else [
             p for p in self.target_path.rglob("*.md")
-            if not any(x in p.parts for x in [".git", ".venv", "__pycache__", "_work", "node_modules"])
+            if not _is_excluded(p)
         ]
 
         if fix:
@@ -437,7 +443,7 @@ def validate_vault(vault_dir: Path, fail_on_error: bool = True) -> bool:
     warnings = [i for i in issues if i.severity == "WARNING"]
 
     if not errors:
-        count = len(list(p for p in vault_dir.rglob("*.md") if not any(x in p.parts for x in [".git", ".venv", "__pycache__", "_work"])))
+        count = len(list(p for p in vault_dir.rglob("*.md") if not any(x.startswith(".") or x in {"_work", "node_modules", "__pycache__"} for x in p.parts)))
         print(f"  [PASS] Checked {count} markdown files. 0 Mermaid syntax issues found!")
         if warnings:
             print(f"  [INFO] {len(warnings)} non-fatal warning(s) detected (e.g. %% comments).")
