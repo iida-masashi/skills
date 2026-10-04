@@ -33,6 +33,11 @@ cpgは2026-09-09にawaと同じ見た目のQuartzサイトへ移行し、さら�
 - **デプロイはCloudflare Pages側のGit連携ではなくGitHub Actions（`.github/workflows/deploy.yml`、`cloudflare/wrangler-action`）経由**。リポジトリSecrets `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` が必須（設定済み）。
 - **ワークフロー内でsecretsをif条件に直接使えない**（GitHub Actionsの仕様上 `if: secrets.X != ''` は`Unrecognized named-value`エラーになる）。`deploy.yml`はjobレベルの`env: HAS_CLOUDFLARE_SECRETS: ${{ secrets.X != '' }}`経由でstepの`if: env.HAS_CLOUDFLARE_SECRETS == 'true'`を制御する形で実装済み。このパターンを崩さないこと。
 - **ファイル名はASCII換算255バイト以内にする**（GitHub ActionsのUbuntu/ext4ランナーはWindows/NTFSと異なり255バイト制限があり、長い日本語ファイル名でcheckoutが失敗する実例あり）。
+- **新しいトップレベルフォルダ（ドメイン）を公開する前のチェック**（04/07/99_Sushiで毎回踏んだ）:
+  1. `_work/_sync_to_quartz_cpg.py` の `MIRROR_SUBTREES` に `("<フォルダ>", "<フォルダ>")` を追加する。ハードコードのリストなので、追加しないとエラーなしで公開対象から漏れる。sync後に `C:/Users/iidam/quartz-cpg-content/<フォルダ>` へ実際に来ているか確認する。
+  2. フォルダ内にconvMDの `primary_sources/` がある場合、`.gitignore` の `.chroma_db` 除外は `sources/**/.chroma_db/` 限定なので `<フォルダ>/**/.chroma_db/` を追記する。`git add --dry-run <フォルダ> | grep -E 'chroma|\.db'` で0件を確認する。
+  3. Gemini等が生成した解説書は mermaid に `%%{init: ...}%%` を入れがち。`validate_mermaid.py <フォルダ>` で MERMAID_COMMENT_HAZARD が出たら init ブロックを除去する。
+  4. 作業ツリーには `.obsidian/plugins/` の更新など無関係な未コミット変更が残っていることが多い。Step 4 の `git add -A` は使わず、今回の対象パスだけを明示してステージする。
 
 ## When to use
 
