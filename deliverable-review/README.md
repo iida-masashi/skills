@@ -8,7 +8,7 @@ AIチェック 定性レビュー用JSONを生成する。
 - **Web UI (ローカル)**: `webui/app.py`
 - **Web UI (Cloud Run)**: <https://deliverable-review-wecljomxda-an.a.run.app>（main への push で自動デプロイ。下記「デプロイ」参照）
 - **ドキュメント**: [SKILL.md](SKILL.md) / [CHECKS.md](CHECKS.md) / [ARCHITECTURE.md](ARCHITECTURE.md) / [DEPLOYMENT.md](DEPLOYMENT.md)
-- **定性レビューのモデル**: Gemini 3.8 Flash (`gemini-3.8-flash`、Gemini Developer API / `google-genai` SDK、既定OFF)
+- **定性レビューのモデル**: Gemini 3.8 Flash (`gemini-3.8-flash`、Gemini Developer API / `google-genai` SDK、Web UI では既定ON)
 
 ### デプロイの現状
 
@@ -164,7 +164,7 @@ GitHub > Actions > "Deploy to Cloud Run" > **Run workflow** ボタン
 - [ ] **VPC内限定化**: 社内VPNからのみアクセス可能に
 - [ ] **容量制限**: Cloud Run のリクエスト上限 32MB を超えるファイルへの対応（Cloud Storage 経由のアップロード等）
 - [ ] **OCR対応**: 画像化スライド（テキスト抽出不可）の Tesseract / Vision API 経由チェック
-- [ ] **AIチェック 自動実行**: Claude API 統合（現在は Claude Code が JSON を読んで自分でレビューする運用。Web UI には Gemini 3.8 Flash 経由の定性レビューあり・既定OFF）
+- [ ] **AIチェック 自動実行**: Claude API 統合（現在は Claude Code が JSON を読んで自分でレビューする運用。Web UI には Gemini 3.8 Flash 経由の定性レビューあり・既定ON）
 - [ ] **URLの秘匿運用**: 現在は完全公開のため、URLを公開しないように注意喚起する仕組み（デプロイ後にURLをSlack等に自動投稿しない等）
 
 ---
@@ -176,7 +176,7 @@ GitHub > Actions > "Deploy to Cloud Run" > **Run workflow** ボタン
 - アップロードファイルは Cloud Run インスタンスのメモリ上で処理され、Cloud Storage 等へは保存されない（`tempfile` 経由、プロセス終了時に破棄）
 - コンテナが再起動すると一時ファイルは消える（永続化なし）
 - サービスアカウントキー `gcp-key.json` は**絶対に git に commit しない**（`.gitignore` で除外済み）
-- Web UI の「Gemini 3.8 Flash 定性レビュー」を有効にした場合のみ、スライド本文が Google Gemini API に送信される（Cloud Run には Secret Manager 経由で `GOOGLE_API_KEY` が設定済みのため機能自体は常に呼び出し可能。既定は OFF）。機密資料では OFF のまま使用すること
+- Web UI の「Gemini 3.8 Flash 定性レビュー」は**既定ON**で、有効な間はスライド本文が Google Gemini API に送信される（Cloud Run には Secret Manager 経由で `GOOGLE_API_KEY` を設定済み）。公開URLのため、アップロードのたびにこのキーで課金される。機密資料ではサイドバーで OFF にしてから使用すること
 
 ---
 

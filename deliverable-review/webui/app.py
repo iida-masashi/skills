@@ -57,10 +57,10 @@ st.caption(
         "アップロードされたファイルは処理中のみコンテナの一時領域に展開され、"
         "レスポンス返却後に破棄されます（永続保存なし）。"
         if _ON_CLOUD_RUN else
-        "このPC上でローカル実行しています（ファイルは外部に送信されません）。"
+        "このPC上でローカル実行しています（ファイル自体は外部に送信されません）。"
     )
-    + "Gemini 定性レビューを有効にした場合のみ、本文が Gemini API"
-    "（Google）に送信されます。機密資料の取り扱いは利用者の責任で判断してください。"
+    + "Gemini 定性レビュー（既定ON）が有効な間は、本文が Gemini API"
+    "（Google）に送信されます。機密資料ではサイドバーでOFFにしてください。"
 )
 
 
@@ -73,8 +73,8 @@ with st.sidebar:
 
     st.subheader("チェック項目")
 
-    # デフォルトOFFにしたいチェッカー（ネット通信/重い処理）
-    DEFAULT_OFF = {"url-liveness"}
+    # デフォルトOFFのチェッカー（URL死活=ネット通信、メタデータ・著作権=ユーザー指定で既定OFF）
+    DEFAULT_OFF = {"url-liveness", "metadata", "copyright"}
 
     # カテゴリ別に10チェッカーをグルーピング
     CHECKER_CATEGORIES = [
@@ -105,10 +105,10 @@ with st.sidebar:
     )
     enable_llm_review = st.checkbox(
         "Gemini 3.8 Flash で定性レビュー（MECE・ピラミッド原則・So What?）",
-        value=False,
+        value=True,
         key="chk_llm_review",
         help="⚠️ スライド本文をGoogle Gemini APIに送信します。機密資料では注意。"
-             " 既定OFF。APIキーは環境変数 GOOGLE_API_KEY（または GEMINI_API_KEY）"
+             " 既定ON（機密資料ではOFFにする）。APIキーは環境変数 GOOGLE_API_KEY（または GEMINI_API_KEY）"
              "、もしくは .env ファイル（カレント/スキル直下/ユーザーホーム、環境変数 "
              "DELIVERABLE_REVIEW_ENV_FILE で明示指定可）を使用。"
              " 💡 Claude Code から Skill として使う場合はこのチェックをONにする必要はありません"
