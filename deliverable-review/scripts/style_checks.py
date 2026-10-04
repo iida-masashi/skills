@@ -223,6 +223,8 @@ def check_prohibited_expressions(doc) -> List[Finding]:
     findings = []
     # Keihyo-ho (景表法) risks: flag each occurrence as MEDIUM
     for u in doc.units:
+        if u.kind == "hyperlink":
+            continue
         for p, label in _KEIHYO_PATTERNS:
             for m in p.finditer(u.text):
                 findings.append(Finding(

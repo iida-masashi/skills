@@ -14,14 +14,15 @@
            │
            ▼
      Document オブジェクト
-       ├── units: List[TextUnit]   (shape/paragraph 単位のテキスト)
+       ├── units: List[TextUnit]   (shape/paragraph 単位のテキスト + ハイパーリンク先URL)
        ├── location_text: dict      (場所idx → テキスト集計)
        ├── location_flags: dict     (場所idx → has_image/has_table/label)
-       └── raw: Presentation/Document (python-pptx等のオブジェクト)
+       ├── raw: Presentation/Document (python-pptx等のオブジェクト)
+       └── extra: dict              (形式別の補助情報。docx: table_loc)
            │
            ▼
 ┌─────────────────────────┐
-│ checkers.run_all(doc)   │   10 チェッカーを順次実行
+│ checkers.run_all(doc)   │   10 チェッカー + 戦略ルールを順次実行
 └──────────┬──────────────┘
            │
            ▼
@@ -52,19 +53,21 @@
 - 各フェーズの呼び出し順序制御
 - Markdownレポート生成（サマリ表、チェッカー別詳細）
 - コンソールサマリ表示
+- 終了コード: `--fail-on LEVEL` 指定時に該当以上の指摘があれば 1、入力エラー・依存不足・サニタイズ結果破損は 2
 
 ### `extractors.py` — テキスト抽出
 
 | 関数 | 責務 |
 |---|---|
 | `extract(path)` | 拡張子でディスパッチ |
-| `extract_pptx(path)` | python-pptx で shape → TextUnit |
-| `extract_docx(path)` | python-docx で paragraph → TextUnit |
-| `extract_pdf(path)` | pdfplumber で page → TextUnit |
+| `extract_pptx(path)` | python-pptx で shape → TextUnit（run/図形/表セルのハイパーリンク先も `kind="hyperlink"` で追加） |
+| `extract_docx(path)` | python-docx で本文を出現順に走査し paragraph/table cell → TextUnit。場所は見出しで区切ったセクション（見出しが無ければ 10 段落ごとのブロック） |
+| `extract_pdf(path)` | pdfplumber で page → TextUnit（リンク注釈の URI も `kind="hyperlink"`） |
 
 **重要な不変条件**:
 - `Document.location_flags[idx]` は必ず `has_image`/`has_table`/`label` キーを持つ
 - `TextUnit.has_image_on_page`/`has_table_on_page` は extract時にlocation_flagsから転写される
+- `kind="hyperlink"` の TextUnit は URL 文字列だけを持つ。URL汚染・URL死活以外のチェッカーはスキップする（`location_text` にも入れない）
 - PowerPointのグループ化されたシェイプは `extractors.iter_shapes_recursive` 経由で**再帰展開済み**。ネストしたGroupShape内のテキスト・表・チャート・画像も全チェッカーが走査できる
 
 ### `patterns.py` — 正規表現集約
@@ -84,7 +87,7 @@
 - `Finding` dataclass（全チェッカー共通の結果型）
 - Severity 定数 (`SEVERITY_HIGH` 等)
 - `check_url_contamination`, `check_ai_traces`, `check_copyright`, `check_url_liveness`, `check_verifiable_claims`
-- `run_all(doc, skip_liveness)` — 10 チェッカーを順次呼ぶ
+- `run_all(doc, skip_liveness, strategy=True)` — 10 チェッカー + `strategy_checks` を順次呼ぶ（CLI・Web UI 共通）
 
 ### `numeric_integrity.py` — 数値整合性
 
@@ -94,18 +97,21 @@
 
 ### `metadata.py` — メタデータ
 
-- **検出** (`check_metadata`): pptx/docx は core properties、pptx は hidden slide、docx は `word/comments.xml` と tracked changes、pdf は pdfplumber の metadata
+- **検出** (`check_metadata`): pptx/docx は core properties・`app.xml`（Company/Manager/HyperlinkBase）・`custom.xml`、docx は `word/comments.xml` と全ストーリーパーツの tracked changes、pdf は pdfplumber の metadata。非表示スライドは internal_content 側のみ
 - **サニタイズ** (`sanitize`):
   - python-pptx/docx で core properties をクリア
-  - zipfile を手動で開いて `docProps/app.xml` の Company/Manager/HyperlinkBase を空に、TotalTime/Revision を 0 に
-  - docx は `word/comments*.xml`/`people.xml` を削除、`document.xml` の `<w:ins>/<w:del>` を accept、relationships と ContentTypes から comments 参照を除去
-  - pdf は pypdf で /Info を空に、/Metadata を削除
+  - パッケージ内 XML は **lxml で編集**（正規表現置換はしない）。`app.xml` の Company/Manager/HyperlinkBase を空に、TotalTime/Revision を 0 に。`custom.xml` は `MSIP_Label_*` 以外のプロパティを削除
+  - docx: `word/comments*.xml`/`people.xml` を削除し、本文・ヘッダ・フッタ・脚注の変更履歴を受け入れ（`_accept_tracked_changes`）
+  - pptx: `ppt/comments/*`・`commentAuthors.xml`・`authors.xml` を削除
+  - 削除パーツを指す relationship（全 `.rels` の Target を解決して判定）と `[Content_Types].xml` Override を除去
+  - pdf は pypdf で /Info を丸ごと削除、/Metadata を削除
+  - 最後に `verify_sanitized` で出力を再オープン・再検出。開けなければ RuntimeError、残存は actions に `verify: 残存あり` として返す
 
 ### `internal_content.py` — 内部コンテンツ
 
 - PPTスピーカーノート、非表示スライド、PPT/Wordコメント
-- 危険ワード（`_DANGER_PATTERNS`）ヒット時は Severity を HIGH に昇格
-- PPTコメントは zipfile で `ppt/comments/commentN.xml` を直接パース（python-pptx未対応）
+- `_grade`: 危険ワード（`_DANGER_PATTERNS`）→ HIGH、要注意ワード（`_CAUTION_PATTERNS`）→ MEDIUM、それ以外は既定 Severity
+- PPTコメントは各スライドの relationship（reltype が `/comments` で終わるもの）から旧形式・新形式（modernComment）とも取得する。`commentN.xml` の N はスライド番号ではない
 
 ### `style_checks.py` — コンサル作法(文体) Phase 1
 
@@ -140,10 +146,10 @@
 ```python
 @dataclass
 class TextUnit:
-    kind: str               # "text" | "table-cell" | ...
+    kind: str               # "text" | "table-cell" | "hyperlink"
     text: str
-    location_label: str     # "Slide 3", "Page 2", "Para 12"
-    location_index: int     # slide idx / page idx / doc-level 1
+    location_label: str     # "Slide 3", "Page 2", "Para 12", "Table 1 R2C3"
+    location_index: int     # slide idx / page idx / docx section idx (0 = file-level)
     has_image_on_page: bool
     has_table_on_page: bool
     source_handle: Optional[Any]  # shape/cell/paragraph等への参照
@@ -160,6 +166,7 @@ class Document:
     location_text: dict       # idx -> "集計テキスト"
     location_flags: dict      # idx -> {"has_image": bool, "has_table": bool, "label": str}
     raw: Any                  # Presentation / DocxDocument / None
+    extra: dict               # docx: {"table_loc": {table_no: location_index}}
 ```
 
 ### `checkers.Finding`
@@ -239,6 +246,7 @@ class Finding:
 | `pdfplumber` | .pdf テキスト/表抽出 | ≥ 0.10.0 |
 | `requests` | URL 死活チェック | ≥ 2.31.0 |
 | `pypdf` | PDF サニタイズ（/Info 削除）| ≥ 4.0.0 |
+| `lxml` | OOXML サニタイズ（python-pptx/docx の依存として導入済み） | ≥ 4.9 |
 
 Tesseract / OCR は **未導入**（画像化資料の扱いは別フェーズの検討事項）。
 
@@ -251,4 +259,13 @@ py scripts/_smoke_make_sample.py /tmp/sample.pptx
 py scripts/review.py /tmp/sample.pptx --sanitize --ai-check-json
 ```
 
-回帰テストは実際の提案書ファイルでの件数差分を追う（結果は保存しないが、大きな件数変動があればパターン修正の副作用を疑う）。
+自動テスト（外部通信なし）:
+
+```bash
+py -m pytest -q tests
+```
+
+- `tests/test_smoke.py`: モジュール構成・CLI・戦略ルールのスモーク
+- `tests/test_regressions.py`: 過去に見つかった不具合の再現テスト（docx サニタイズ破損、変更履歴受け入れでの本文消失、リンク先 utm、©フッター、全角括弧URL、表合計の誤検知、危険ワード、pptx コメントのスライド対応、docx/pdf の Gemini 送信内容 等）。誤検知・見落としを直すときはまずここに再現ケースを足す
+
+実際の提案書ファイルでの件数差分も併せて確認する（大きな件数変動があればパターン修正の副作用を疑う）。

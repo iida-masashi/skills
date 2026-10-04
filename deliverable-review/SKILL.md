@@ -23,9 +23,9 @@ description: Use when a management consultant is about to deliver a PowerPoint/W
 
 | # | チェッカー | キー内容 | Severity |
 |---|---|---|---|
-| 1 | **メタデータ** | 作成者・会社名・最終更新者・題目・キーワード等、Wordコメント、変更履歴、PDF /Info | HIGH/MEDIUM |
-| 2 | **内部コンテンツ** | スピーカーノート（危険ワード検出付）、非表示スライド、PPT/Wordコメント | HIGH/MEDIUM/INFO |
-| 3 | **URL汚染** | `utm_source=chatgpt.com` 等AI由来クエリ、AIツール会話URL、`fbclid`/`gclid` 等一般トラッキング | HIGH/MEDIUM |
+| 1 | **メタデータ** | 作成者・会社名(app.xml Company)・最終更新者・題目・キーワード等、ユーザー設定プロパティ(custom.xml)、Wordコメント、変更履歴、PDF /Info | HIGH/MEDIUM |
+| 2 | **内部コンテンツ** | スピーカーノート（危険ワード→HIGH／要注意ワード→MEDIUM）、非表示スライド、PPTコメント（旧形式・新形式）/Wordコメント | HIGH/MEDIUM/INFO |
+| 3 | **URL汚染** | `utm_source=chatgpt.com` 等AI由来クエリ、AIツール会話URL、`fbclid`/`gclid` 等一般トラッキング。表示文字の裏のリンク先URLも対象 | HIGH/MEDIUM |
 | 4 | **AI生成痕跡** | 日英AI定型句、knowledge cutoff言及、Markdown残骸（複数バレット）、絵文字過多 | HIGH/MEDIUM/LOW |
 | 5 | **数値整合性** | 円グラフ合計≠100%、100%積上げ合計、単位混在（億円/百万円）、%/pp混在、表の行・列合計の再計算 | HIGH/MEDIUM |
 | 6 | **コンサル作法(文体)** | タイトル体言止め、表記ゆれ、景表法リスク表現、曖昧表現多用、敬体/常体混在、日付書式混在、全半角混在 | MEDIUM/LOW/INFO |
@@ -33,6 +33,10 @@ description: Use when a management consultant is about to deliver a PowerPoint/W
 | 8 | **著作権リスク** | 100文字以上の本文で出典記載なし／画像・表で出典記載なし | MEDIUM/LOW |
 | 9 | **URL死活** | 全URLをHEAD(→GET fallback)で到達確認（5秒タイムアウト、並列10本） | HIGH/MEDIUM |
 | 10 | **検証要主張** | 出典記載のない箇所の数値・日付・ランキング主張を抽出（人間レビュー補助） | INFO |
+
+加えて **戦略コンサル品質ルール**（`strategy_checks.py`、下記）を CLI・Web UI とも既定で実行する（CLI は `--no-strategy` で無効化）。
+
+「場所」の単位は pptx=スライド、pdf=ページ、docx=見出しで区切ったセクション（見出しが無ければ10段落ごと）。出典の有無などはこの単位で判定する。
 
 詳細な検出パターンと Severity 判定ルールは [CHECKS.md](CHECKS.md) を参照。
 
@@ -64,9 +68,9 @@ description: Use when a management consultant is about to deliver a PowerPoint/W
 
 加えて資料全体の **overall_assessment** を出力: key_question（再構成された中心問い）／ answer_clarity ／ story_line_summary ／ top_strengths ／ top_weaknesses ／ client_readiness（提出可/要修正/大幅手直し必要）／ estimated_grade（A〜D）／ partner_one_liner（MDが新人に投げる現場感ある一言）。
 
-Web UI では上記2経路で自動化:
+機械判定と Web UI の自動化経路:
 
-1. **戦略コンサル品質チェック（ローカルルール・既定ON）** — `scripts/strategy_checks.py`
+1. **戦略コンサル品質チェック（ローカルルール・CLI/Web UI とも既定ON）** — `scripts/strategy_checks.py`
    以下10観点を機械判定。外部送信なし:
    - タイトル長過ぎ / タイトル複数文 / 曖昧・主語なしタイトル
    - バレット過多（Miller's Law: 7±2）
@@ -135,8 +139,10 @@ py -m streamlit run ~/.claude/skills/deliverable-review/webui/app.py
 |---|---|
 | `--skip-liveness` | URL死活チェックをスキップ（ネット不可時・高速化） |
 | `--out-dir DIR` | 出力先ディレクトリ（既定: 入力と同じ） |
-| `--sanitize` | `<stem>_sanitized.<ext>` を別途生成（core/app properties、変更履歴、Wordコメント、PDF /Infoを自動削除）。**非表示スライド・スピーカーノートは削除しない** — 意図的な場合があるため検出のみ |
+| `--sanitize` | `<stem>_sanitized.<ext>` を別途生成（core/app properties、ユーザー設定プロパティ（秘密度ラベル `MSIP_Label_*` は保持）、変更履歴の受け入れ、Word/PPTコメント、PDF /Infoを自動削除）。生成後に再オープン・再検出して `verify: OK` / `verify: 残存あり` を表示し、開けない場合はエラー終了。**非表示スライド・スピーカーノートは削除しない** — 意図的な場合があるため検出のみ |
 | `--ai-check-json` | `<stem>_aicheck.json`（構造データ）と `<stem>_aicheck_prompt.md`（レビュー手順書）を生成 |
+| `--no-strategy` | 戦略コンサル品質ルールを実行しない |
+| `--fail-on LEVEL` | `HIGH`/`MEDIUM`/`LOW`/`INFO` 以上の指摘があれば終了コード 1（既定は指摘があっても 0。入力エラー・依存不足は 2） |
 
 ### 4. 出力ファイル
 
@@ -157,11 +163,11 @@ py -m streamlit run ~/.claude/skills/deliverable-review/webui/app.py
 
 ユーザーから資料のパスを受け取ったら:
 
-1. **依存関係の確認** — 初回実行なら `pip install -r requirements.txt` を案内
+1. **依存関係の確認** — 初回実行なら `py -m pip install -r requirements.txt`。不足時は review.py が不足パッケージ名とインストールコマンドを表示して終了コード 2 で止まる
 2. **基本チェック＋AIチェック構造抽出を同時実行** — `py scripts/review.py <path> --ai-check-json` を起動。
    これで `<stem>_review.md`（機械判定レポート）と `<stem>_aicheck.json` / `<stem>_aicheck_prompt.md`（Claude が読む定性レビュー用データ）が生成される。
 3. **機械判定の報告** — HIGH/MEDIUM 件数を強調、生成ファイルパスを提示。
-4. **Claude による定性レビュー実施** — `Read` ツールで `<stem>_aicheck.json` と `<stem>_aicheck_prompt.md` を読み込み、手順書の **15観点**（pyramid / mece / so-what / issue-tree / logic-leap / data-rigor / framework / action / feasibility / balance / client-view / alternatives / premise / story-line / risk-scenario）を**網羅レビュー**（観点ごとに最低1件の指摘または「該当なし」宣言、黙ってスキップ不可）。各指摘は8フィールド（severity / category / slide / quote / issue / why_it_matters / suggestion / rewrite_example）。`overall_assessment`（A〜D評価、提出可否、Partner一言、強み/弱み）も書き出す。
+4. **Claude による定性レビュー実施** — `Read` ツールで `<stem>_aicheck.json` と `<stem>_aicheck_prompt.md` を読み込み（docx は `paragraphs`、pdf は `pages` 構造。「Slide」は見出し位置/ページ番号で読み替える）、手順書の **15観点**（pyramid / mece / so-what / issue-tree / logic-leap / data-rigor / framework / action / feasibility / balance / client-view / alternatives / premise / story-line / risk-scenario）を**網羅レビュー**（観点ごとに最低1件の指摘または「該当なし」宣言、黙ってスキップ不可）。各指摘は8フィールド（severity / category / slide / quote / issue / why_it_matters / suggestion / rewrite_example）。`overall_assessment`（A〜D評価、提出可否、Partner一言、強み/弱み）も書き出す。
    - 必要に応じて `<stem>_aicheck_review.md` として保存
    - 指摘は必ずスライド番号を添える
    - 外部APIは呼ばない（Gemini / Claude API 等を使う `llm_review.py` は **使用しない**）
@@ -176,8 +182,8 @@ py -m streamlit run ~/.claude/skills/deliverable-review/webui/app.py
 
 | 重要度 | 意味 | 典型例 |
 |---|---|---|
-| **HIGH** | 提出前に必ず修正 | 作成者メタデータ、`utm_source=chatgpt.com`、死亡URL、AI定型句、危険ワード入りスピーカーノート、円グラフ合計≠100% |
-| **MEDIUM** | 要確認 | 一般トラッキング、knowledge cutoff言及、出典欠如、表記ゆれ、極小文字(8pt未満)、フォント3種以上 |
+| **HIGH** | 提出前に必ず修正 | 作成者・会社名メタデータ、`utm_source=chatgpt.com`、死亡URL、AI定型句、危険ワード入りスピーカーノート/コメント、円グラフ合計≠100%、表の合計/小計不一致 |
+| **MEDIUM** | 要確認 | 一般トラッキング、knowledge cutoff言及、出典欠如、表記ゆれ、ユーザー設定プロパティ、要注意ワード入りノート、極小文字(8pt未満)、フォント3種以上 |
 | **LOW** | 軽微 | Markdown残骸、タイトル体言止め、日付書式混在、敬体/常体混在、小さい文字(10pt未満) |
 | **INFO** | 参考 | 検証要主張リスト、曖昧表現多用（裏取り補助） |
 
@@ -193,7 +199,7 @@ deliverable-review/
     review.py           # CLIエントリ、レポート生成、パイプライン制御
     extractors.py       # pptx/docx/pdf → TextUnit/Document
     patterns.py         # 正規表現パターン一覧
-    checkers.py         # 基本5チェッカー + Finding型 + run_all()
+    checkers.py         # 基本5チェッカー + Finding型 + run_all()（戦略ルール含む）
     numeric_integrity.py # 数値整合性チェック
     metadata.py         # メタデータ検出＋サニタイズ
     internal_content.py # ノート/非表示/コメント抽出
@@ -207,6 +213,7 @@ deliverable-review/
     app.py              # Streamlit Web UI (アップロード → レビュー → DL)
   tests/
     test_smoke.py       # pytest スモーク (外部API不要)
+    test_regressions.py # 不具合の再現テスト (外部API不要)
 ```
 
 ## Notes / Limitations
@@ -220,3 +227,6 @@ deliverable-review/
 - **AIチェック JSON 生成** 自体は外部API送信なし。Claude Code や他のLLMが JSON を読む前提。
 - **Gemini 3.1 Pro レビュー（Web UI 案B、既定OFF）** を有効にした場合のみ、スライド本文が Google Gemini API に送信される。機密資料では既定OFFのまま使用すること。
 - **フォント統一チェック** は python-pptx の `run.font.name` に依存。テーマ継承で `None` になる場合、カウント外。
+- **©・Copyright 表記は出典扱いしない**。自社テンプレートのフッターにある © で出典チェックが素通りするのを防ぐため。
+- **変更履歴の受け入れ（docx）** で段落記号の削除は「マーカーのみ削除」（段落の結合はしない）。体裁が気になる場合は Word で「すべての変更を承諾」してから再チェックする。
+- **Gemini API**: `google-genai` SDK 経由で Gemini Developer API（`vertexai=False`、SDK既定の `v1beta` エンドポイント）を呼ぶ。モデルは `gemini-3.1-pro-preview`。temperature は指定せず既定値（Gemini 3 系推奨の 1.0）を使う。

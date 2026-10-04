@@ -4,8 +4,8 @@
 MECE/ピラミッド原則/So What? の厳密判定はLLM（llm_review.py）に任せ、
 ここでは正規表現・カウントで判定できる周辺ルールのみ扱う。
 
-Findings は checker="consulting-layout" で発行し、
-category="strategy/*" で分類する（既存パイプラインとの統合容易性のため）。
+Findings は checker="strategy" で発行し、category="strategy/*" で分類する。
+checkers.run_all(strategy=True) から CLI / Web UI 共通で呼ばれる。
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from checkers import Finding, SEVERITY_MEDIUM, SEVERITY_LOW, SEVERITY_INFO
 from extractors import iter_shapes_recursive
 
 
-CHECKER = "consulting-layout"
+CHECKER = "strategy"
 
 # タイトル長の上限（目安: 1行に収まる範囲）
 TITLE_MAX_CHARS = 40

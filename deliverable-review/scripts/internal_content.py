@@ -10,34 +10,54 @@ from xml.etree import ElementTree as ET
 from checkers import Finding, SEVERITY_HIGH, SEVERITY_MEDIUM, SEVERITY_LOW, SEVERITY_INFO
 
 
-# Words that suggest "don't show this to client"
+# Words that clearly mean "don't show this to client" → HIGH
 _DANGER_PATTERNS = [
     re.compile(r"(?:クライアント|顧客|先方|お客様?)に(?:は)?(?:言わない|伝えない|見せない|触れない|共有しない)"),
     re.compile(r"(?:ここ|これ|この話|この件)は(?:内輪|社内|オフレコ|NG|伏せ)"),
     re.compile(r"(?:社内|内部)(?:限り|のみ|用|向け|マター)"),
     re.compile(r"オフレコ"),
     re.compile(r"伏せ(?:て|る|ます)"),
-    re.compile(r"(?:避ける|スルー|スキップ)"),
     re.compile(r"\bTODO\b", re.IGNORECASE),
     re.compile(r"\bFIXME\b", re.IGNORECASE),
     re.compile(r"\bXXX\b"),
-    re.compile(r"\bNOTE[:：]"),
     re.compile(r"\bconfidential\b", re.IGNORECASE),
-    re.compile(r"\binternal(?:\s+only)?\b", re.IGNORECASE),
+    re.compile(r"\binternal\s+only\b", re.IGNORECASE),
     re.compile(r"\bdo not share\b", re.IGNORECASE),
-    re.compile(r"\bdraft\b", re.IGNORECASE),
-    re.compile(r"(?:仮|暫定|未確定|検討中|要確認|確認中)"),
-    re.compile(r"(?:値引き|ディスカウント|赤字|原価|利益率|マージン|採算)"),
     re.compile(r"(?:competitor|ライバル|他社|競合).{0,10}(?:の話|には)"),
 ]
 
+# Words that merely deserve a look (common in legitimate notes) → MEDIUM
+_CAUTION_PATTERNS = [
+    re.compile(r"(?:暫定|未確定|検討中|要確認|確認中|仮置き|仮値|仮の(?:数字|数値|値))"),
+    re.compile(r"(?:値引き|ディスカウント|赤字|原価|利益率|マージン|採算)"),
+    re.compile(r"(?:スルー|スキップ)"),
+    re.compile(r"\bNOTE[:：]"),
+    re.compile(r"\binternal\b", re.IGNORECASE),
+    re.compile(r"\bdraft\b", re.IGNORECASE),
+]
+
+
+def _hits(patterns, text: str) -> List[str]:
+    return [m.group(0) for p in patterns for m in p.finditer(text)]
+
 
 def _has_danger(text: str) -> List[str]:
-    hits = []
-    for p in _DANGER_PATTERNS:
-        for m in p.finditer(text):
-            hits.append(m.group(0))
-    return hits
+    return _hits(_DANGER_PATTERNS, text)
+
+
+def _has_caution(text: str) -> List[str]:
+    return _hits(_CAUTION_PATTERNS, text)
+
+
+def _grade(text: str, base: str):
+    """Return (severity, note_suffix) for internal text."""
+    danger = _has_danger(text)
+    if danger:
+        return SEVERITY_HIGH, f" 危険ワード検出: {', '.join(sorted(set(danger)))[:100]}"
+    caution = _has_caution(text)
+    if caution:
+        return SEVERITY_MEDIUM, f" 要注意ワード: {', '.join(sorted(set(caution)))[:100]}"
+    return base, ""
 
 
 # ------------------------------------------------------------
@@ -53,12 +73,9 @@ def _pptx_speaker_notes(doc) -> List[Finding]:
         note_text = (note_tf.text or "").strip()
         if not note_text:
             continue
-        danger = _has_danger(note_text)
-        sev = SEVERITY_HIGH if danger else SEVERITY_INFO
+        sev, suffix = _grade(note_text, SEVERITY_INFO)
         evidence = note_text[:300] + ("…" if len(note_text) > 300 else "")
-        note = "スピーカーノートが含まれています。"
-        if danger:
-            note += f" 危険ワード検出: {', '.join(set(danger))[:100]}"
+        note = "スピーカーノートが含まれています。" + suffix
         findings.append(Finding(
             checker="internal-content",
             severity=sev,
@@ -97,55 +114,60 @@ def _pptx_hidden_slides(doc) -> List[Finding]:
     return findings
 
 
-def _pptx_comments(doc) -> List[Finding]:
-    """PPT comments live under ppt/comments/commentN.xml + ppt/commentAuthors.xml"""
-    findings = []
-    ns = {"p": "http://schemas.openxmlformats.org/presentationml/2006/main"}
+def _localname(tag) -> str:
+    return tag.rsplit("}", 1)[-1] if isinstance(tag, str) else ""
+
+
+def _pptx_comment_authors(path: str) -> dict:
+    """authorId -> name from legacy ppt/commentAuthors.xml and modern ppt/authors.xml."""
+    authors = {}
     try:
-        with zipfile.ZipFile(doc.path) as z:
-            names = z.namelist()
-            # Build authorId -> name map
-            authors = {}
-            if "ppt/commentAuthors.xml" in names:
-                try:
-                    root = ET.fromstring(z.read("ppt/commentAuthors.xml"))
-                    for a in root.findall("p:cmAuthor", ns):
-                        aid = a.get("id", "")
-                        name = a.get("name", "") or a.get("initials", "")
-                        authors[aid] = name
-                except Exception:
-                    pass
-            # Iterate comment files
-            for n in names:
-                m = re.match(r"ppt/comments/comment(\d+)\.xml", n)
-                if not m:
+        with zipfile.ZipFile(path) as z:
+            for part in ("ppt/commentAuthors.xml", "ppt/authors.xml"):
+                if part not in z.namelist():
                     continue
-                slide_idx = int(m.group(1))
-                try:
-                    root = ET.fromstring(z.read(n))
-                except Exception:
-                    continue
-                for c in root.findall("p:cm", ns):
-                    aid = c.get("authorId", "")
-                    author = authors.get(aid, aid)
-                    date = c.get("dt", "")
-                    text_el = c.find("p:text", ns)
-                    text = text_el.text if text_el is not None and text_el.text else ""
-                    danger = _has_danger(text)
-                    sev = SEVERITY_HIGH if danger else SEVERITY_MEDIUM
-                    findings.append(Finding(
-                        checker="internal-content",
-                        severity=sev,
-                        category="pptx-comment",
-                        location_label=f"Slide {slide_idx}",
-                        location_index=slide_idx,
-                        evidence=f"[{author} {date}] {text[:200]}",
-                        note="PPTコメントが残っています。削除してください。" + (
-                            f" 危険ワード: {', '.join(set(danger))[:80]}" if danger else ""
-                        ),
-                    ))
+                root = ET.fromstring(z.read(part))
+                for a in root:
+                    if _localname(a.tag) in ("cmAuthor", "author"):
+                        authors[a.get("id", "")] = a.get("name", "") or a.get("initials", "")
     except Exception:
         pass
+    return authors
+
+
+def _pptx_comments(doc) -> List[Finding]:
+    """Legacy (ppt/comments/commentN.xml) and modern (modernComment_*.xml)
+    comments, mapped to slides via each slide's relationships — the N in
+    commentN.xml is NOT the slide number."""
+    findings = []
+    authors = _pptx_comment_authors(doc.path)
+    for slide_idx, slide in enumerate(doc.raw.slides, start=1):
+        for rel in slide.part.rels.values():
+            if rel.is_external or not rel.reltype.endswith("/comments"):
+                continue
+            try:
+                root = ET.fromstring(rel.target_part.blob)
+            except Exception:
+                continue
+            for c in root.iter():
+                if _localname(c.tag) != "cm":
+                    continue
+                aid = c.get("authorId", "")
+                author = authors.get(aid, aid)
+                date = c.get("dt", "") or c.get("created", "")
+                text = "".join(
+                    (t.text or "") for t in c.iter() if _localname(t.tag) in ("text", "t")
+                )
+                sev, suffix = _grade(text, SEVERITY_MEDIUM)
+                findings.append(Finding(
+                    checker="internal-content",
+                    severity=sev,
+                    category="pptx-comment",
+                    location_label=f"Slide {slide_idx}",
+                    location_index=slide_idx,
+                    evidence=f"[{author} {date}] {text[:200]}",
+                    note="PPTコメントが残っています。--sanitize で削除可能。" + suffix,
+                ))
     return findings
 
 
@@ -173,18 +195,15 @@ def _docx_comments(doc) -> List[Finding]:
                     if t.text:
                         parts.append(t.text)
                 text = "".join(parts)
-                danger = _has_danger(text)
-                sev = SEVERITY_HIGH if danger else SEVERITY_MEDIUM
+                sev, suffix = _grade(text, SEVERITY_MEDIUM)
                 findings.append(Finding(
                     checker="internal-content",
                     severity=sev,
                     category="docx-comment",
                     location_label="Document",
-                    location_index=1,
+                    location_index=0,
                     evidence=f"[{author} {date}] {text[:200]}",
-                    note="Wordコメントが残っています。削除してください。" + (
-                        f" 危険ワード: {', '.join(set(danger))[:80]}" if danger else ""
-                    ),
+                    note="Wordコメントが残っています。--sanitize で削除可能。" + suffix,
                 ))
     except Exception:
         pass

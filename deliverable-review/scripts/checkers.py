@@ -1,4 +1,4 @@
-"""Five checkers for deliverable-review.
+"""Five basic checkers for deliverable-review + run_all() orchestration.
 
 Each checker consumes a Document and returns a list of Finding records.
 """
@@ -33,8 +33,12 @@ class Finding:
 
 def check_url_contamination(doc) -> List[Finding]:
     findings = []
+    seen = set()  # same URL as visible text + hyperlink target → report once
     for u in doc.units:
         for category, evidence in P.find_url_contamination(u.text):
+            if (u.location_index, evidence) in seen:
+                continue
+            seen.add((u.location_index, evidence))
             sev = SEVERITY_HIGH if category != "general-tracking-param" else SEVERITY_MEDIUM
             findings.append(Finding(
                 checker="url-contamination",
@@ -56,6 +60,8 @@ def check_url_contamination(doc) -> List[Finding]:
 def check_ai_traces(doc) -> List[Finding]:
     findings = []
     for u in doc.units:
+        if u.kind == "hyperlink":
+            continue
         for category, evidence in P.find_ai_traces(u.text):
             sev = SEVERITY_HIGH if category in ("AI-phrase-ja", "AI-phrase-en") else SEVERITY_MEDIUM
             if category == "markdown-remnant":
@@ -194,6 +200,8 @@ def check_url_liveness(doc, timeout: float = 5.0, max_workers: int = 10) -> List
 def check_verifiable_claims(doc) -> List[Finding]:
     findings = []
     for u in doc.units:
+        if u.kind == "hyperlink":
+            continue
         # Skip units whose location has a citation — those claims are nominally sourced
         loc_text = doc.location_text.get(u.location_index, "")
         if P.has_citation(loc_text):
@@ -217,7 +225,7 @@ def check_verifiable_claims(doc) -> List[Finding]:
 # Orchestration
 # ------------------------------------------------------------
 
-def run_all(doc, skip_liveness: bool = False) -> List[Finding]:
+def run_all(doc, skip_liveness: bool = False, strategy: bool = True) -> List[Finding]:
     import numeric_integrity
     import metadata as metadata_mod
     import internal_content
@@ -236,4 +244,7 @@ def run_all(doc, skip_liveness: bool = False) -> List[Finding]:
     findings.extend(internal_content.run_internal_content(doc))
     findings.extend(style_checks.run_style_checks(doc))
     findings.extend(layout_checks.run_layout_checks(doc))
+    if strategy:
+        import strategy_checks
+        findings.extend(strategy_checks.run_strategy_checks(doc))
     return findings

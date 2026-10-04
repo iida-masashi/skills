@@ -34,7 +34,7 @@ pip install -r requirements.txt pytest
 pytest tests/ -v
 ```
 
-外部APIを叩かないスモークテスト。Gemini 3.1 Pro レビューは別途手動で検証。
+外部APIを叩かないスモークテスト＋不具合の再現テスト（`tests/test_regressions.py`）。Gemini 3.1 Pro レビューは別途手動で検証。
 
 ---
 
@@ -198,5 +198,6 @@ deliverable-review/
 ├── webui/
 │   └── app.py           # Streamlit UI
 └── tests/
-    └── test_smoke.py    # pytest スモーク
+    ├── test_smoke.py        # pytest スモーク
+    └── test_regressions.py  # 不具合の再現テスト
 ```

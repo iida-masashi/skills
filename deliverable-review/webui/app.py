@@ -7,12 +7,18 @@ The app uploads a .pptx / .docx / .pdf, runs the same checks as the CLI,
 and offers downloads for the Markdown report, marked copy, sanitized
 copy, and AIチェック JSON.
 
-Everything runs locally — no external API calls are made except the
-optional URL-liveness HEAD requests (disabled by default in the UI).
+Run locally, nothing leaves the machine except the optional URL-liveness
+HEAD requests and the optional Gemini review. When deployed to Cloud Run
+(K_SERVICE is set) the caption says so.
+
+Results are cached in st.session_state keyed by (file hash, options), so
+changing a filter does not re-run the pipeline (or re-call Gemini).
 """
 import sys
 import io
+import os
 import json
+import hashlib
 import tempfile
 from pathlib import Path
 from collections import Counter, defaultdict
@@ -42,14 +48,19 @@ st.set_page_config(
 )
 
 st.title("📋 Deliverable Review")
+_ON_CLOUD_RUN = bool(os.getenv("K_SERVICE"))
 st.caption(
     "顧客提出前のコンサル資料 (.pptx / .docx / .pdf) を10観点の機械チェック + "
     "戦略コンサル品質チェック（ローカルルール）でレビューします。"
-    "本サービスは Google Cloud Run（asia-northeast1）上で動作しており、"
-    "アップロードされたファイルは処理中のみコンテナの一時領域に展開され、"
-    "レスポンス返却後に破棄されます（永続保存なし）。"
-    "Gemini 定性レビューを有効にした場合のみ、スライド本文が Gemini API"
-    "（Google）にも送信されます。機密資料の取り扱いは利用者の責任で判断してください。"
+    + (
+        "本サービスは Google Cloud Run 上で動作しており、"
+        "アップロードされたファイルは処理中のみコンテナの一時領域に展開され、"
+        "レスポンス返却後に破棄されます（永続保存なし）。"
+        if _ON_CLOUD_RUN else
+        "このPC上でローカル実行しています（ファイルは外部に送信されません）。"
+    )
+    + "Gemini 定性レビューを有効にした場合のみ、本文が Gemini API"
+    "（Google）に送信されます。機密資料の取り扱いは利用者の責任で判断してください。"
 )
 
 
@@ -150,98 +161,121 @@ if not uploaded:
 # Run pipeline
 # ------------------------------------------------------------
 
-with tempfile.TemporaryDirectory() as tmpdir:
-    tmpdir = Path(tmpdir)
-    ext = Path(uploaded.name).suffix.lower()
-    stem = Path(uploaded.name).stem
+def run_pipeline(file_bytes: bytes, filename: str, opts: dict) -> dict:
+    """Run every check once and return plain results (bytes / findings)."""
+    ext = Path(filename).suffix.lower()
+    stem = Path(filename).stem
+    out = {"ext": ext, "stem": stem, "marked_bytes": None, "marked_name": None,
+           "sanitized_bytes": None, "sanitized_name": None, "sanitize_actions": [],
+           "ai_check_json_bytes": None, "ai_check_prompt_bytes": None,
+           "ai_check_json_name": None, "ai_check_prompt_name": None,
+           "llm_error": None, "llm_findings": []}
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+        input_path = tmpdir / Path(filename).name
+        input_path.write_bytes(file_bytes)
 
-    input_path = tmpdir / uploaded.name
-    input_path.write_bytes(uploaded.getvalue())
+        st.write("テキスト抽出...")
+        doc = extractors.extract(str(input_path))
+        st.write(f"- テキストユニット: {len(doc.units)} / 場所: {len(doc.location_flags)}")
 
+        st.write("チェッカー実行...")
+        all_findings = checkers.run_all(doc, skip_liveness=not opts["liveness"],
+                                        strategy=opts["strategy"])
+        active = set(opts["checkers"]) | ({"strategy"} if opts["strategy"] else set())
+        findings = [f for f in all_findings if f.checker in active]
+        st.write(f"- 指摘件数: {len(findings)} (除外: {len(all_findings) - len(findings)})")
+
+        # AIチェック JSON（LLMレビューの前提でもある）
+        ai_check_json_path = None
+        if opts["ai_check"]:
+            ai_check_json_path = tmpdir / f"{stem}_aicheck.json"
+            prompt_path = tmpdir / f"{stem}_aicheck_prompt.md"
+            ai_check_extract.write_ai_check_json(str(input_path), str(ai_check_json_path))
+            ai_check_extract.write_prompt_hint(str(prompt_path))
+            out["ai_check_json_bytes"] = ai_check_json_path.read_bytes()
+            out["ai_check_prompt_bytes"] = prompt_path.read_bytes()
+            out["ai_check_json_name"] = ai_check_json_path.name
+            out["ai_check_prompt_name"] = prompt_path.name
+            st.write("- AIチェック JSON 生成")
+
+        # 案B: LLM定性レビュー（Gemini 3.1 Pro）
+        if opts["llm"] and ai_check_json_path:
+            st.write("Gemini 3.1 Pro に定性レビュー依頼中... (数十秒かかります)")
+            import llm_review
+            llm_findings, llm_error = llm_review.run_llm_review(str(ai_check_json_path))
+            out["llm_error"] = llm_error
+            if llm_error:
+                st.warning(f"LLMレビューエラー: {llm_error}")
+            else:
+                out["llm_findings"] = llm_findings
+                findings.extend(llm_findings)
+                st.write(f"- LLM指摘: {len(llm_findings)}件")
+
+        st.write("Markdownレポート生成...")
+        out["report_md"] = build_report(doc, findings, filename)
+
+        if ext in (".pptx", ".docx"):
+            dst = tmpdir / f"{stem}_marked{ext}"
+            mark = markers.mark_pptx if ext == ".pptx" else markers.mark_docx
+            mark(str(input_path), str(dst), findings)
+            out["marked_bytes"] = dst.read_bytes()
+            out["marked_name"] = dst.name
+            st.write(f"- マーキング付き {ext} 生成")
+
+        if opts["sanitize"]:
+            dst = tmpdir / f"{stem}_sanitized{ext}"
+            out["sanitize_actions"] = metadata_mod.sanitize(str(input_path), str(dst), ext)
+            out["sanitized_bytes"] = dst.read_bytes()
+            out["sanitized_name"] = dst.name
+            st.write(f"- サニタイズ版生成: {len(out['sanitize_actions'])} アクション")
+
+    # python-pptx handles point into the deleted temp file — keep plain data only
+    for f in findings:
+        f.source_handle = None
+    out["findings"] = findings
+    return out
+
+
+file_bytes = uploaded.getvalue()
+opts = {
+    "checkers": sorted(c for c, on in enabled_checkers.items() if on),
+    "liveness": enable_liveness,
+    "strategy": enable_strategy_rules,
+    "llm": enable_llm_review,
+    "ai_check": enable_ai_check,
+    "sanitize": enable_sanitize,
+}
+cache_key = (hashlib.sha256(file_bytes).hexdigest(), uploaded.name,
+             json.dumps(opts, sort_keys=True))
+
+if st.session_state.get("result_key") != cache_key:
     status = st.status("チェック実行中...", expanded=False)
     try:
         with status:
-            st.write("テキスト抽出...")
-            doc = extractors.extract(str(input_path))
-            st.write(f"- テキストユニット: {len(doc.units)} / 場所: {len(doc.location_flags)}")
-
-            st.write("チェッカー実行...")
-            all_findings = checkers.run_all(doc, skip_liveness=not enable_liveness)
-            active = {c for c, on in enabled_checkers.items() if on}
-            findings = [f for f in all_findings if f.checker in active]
-            st.write(f"- 指摘件数: {len(findings)} (除外: {len(all_findings) - len(findings)})")
-
-            # 案A: 戦略コンサル品質（機械ルール）
-            if enable_strategy_rules:
-                st.write("戦略コンサル品質チェック（機械ルール）...")
-                import strategy_checks
-                sf = strategy_checks.run_strategy_checks(doc)
-                findings.extend(sf)
-                st.write(f"- 追加指摘: {len(sf)}件")
-
-            # AIチェック JSON（LLMレビューの前提でもある）
-            ai_check_json_bytes = None
-            ai_check_prompt_bytes = None
-            ai_check_json_name = None
-            ai_check_prompt_name = None
-            ai_check_json_path = None
-            if enable_ai_check:
-                ai_check_json_path = tmpdir / f"{stem}_aicheck.json"
-                prompt_path = tmpdir / f"{stem}_aicheck_prompt.md"
-                ai_check_extract.write_ai_check_json(str(input_path), str(ai_check_json_path))
-                ai_check_extract.write_prompt_hint(str(prompt_path))
-                ai_check_json_bytes = ai_check_json_path.read_bytes()
-                ai_check_prompt_bytes = prompt_path.read_bytes()
-                ai_check_json_name = ai_check_json_path.name
-                ai_check_prompt_name = prompt_path.name
-                st.write(f"- AIチェック JSON 生成")
-
-            # 案B: LLM定性レビュー（Gemini 3.1 Pro）
-            llm_error = None
-            llm_findings = []
-            if enable_llm_review and ai_check_json_path:
-                st.write("Gemini 3.1 Pro に定性レビュー依頼中... (数十秒かかります)")
-                import llm_review
-                llm_findings, llm_error = llm_review.run_llm_review(str(ai_check_json_path))
-                if llm_error:
-                    st.warning(f"LLMレビューエラー: {llm_error}")
-                else:
-                    findings.extend(llm_findings)
-                    st.write(f"- LLM指摘: {len(llm_findings)}件")
-
-            st.write("Markdownレポート生成...")
-            report_md = build_report(doc, findings, str(input_path))
-
-            marked_bytes = None
-            marked_name = None
-            if ext == ".pptx":
-                dst = tmpdir / f"{stem}_marked.pptx"
-                markers.mark_pptx(str(input_path), str(dst), findings)
-                marked_bytes = dst.read_bytes()
-                marked_name = dst.name
-                st.write(f"- マーキング付き .pptx 生成")
-            elif ext == ".docx":
-                dst = tmpdir / f"{stem}_marked.docx"
-                markers.mark_docx(str(input_path), str(dst), findings)
-                marked_bytes = dst.read_bytes()
-                marked_name = dst.name
-                st.write(f"- マーキング付き .docx 生成")
-
-            sanitized_bytes = None
-            sanitized_name = None
-            sanitize_actions = []
-            if enable_sanitize:
-                dst = tmpdir / f"{stem}_sanitized{ext}"
-                sanitize_actions = metadata_mod.sanitize(str(input_path), str(dst), ext)
-                sanitized_bytes = dst.read_bytes()
-                sanitized_name = dst.name
-                st.write(f"- サニタイズ版生成: {len(sanitize_actions)} アクション")
-
+            result = run_pipeline(file_bytes, uploaded.name, opts)
         status.update(label="完了", state="complete")
     except Exception as e:
         status.update(label=f"エラー: {e}", state="error")
         st.exception(e)
         st.stop()
+    st.session_state["result_key"] = cache_key
+    st.session_state["result"] = result
+
+result = st.session_state["result"]
+ext = result["ext"]
+stem = result["stem"]
+findings = result["findings"]
+llm_findings = result["llm_findings"]
+llm_error = result["llm_error"]
+report_md = result["report_md"]
+marked_bytes, marked_name = result["marked_bytes"], result["marked_name"]
+sanitized_bytes, sanitized_name = result["sanitized_bytes"], result["sanitized_name"]
+sanitize_actions = result["sanitize_actions"]
+ai_check_json_bytes = result["ai_check_json_bytes"]
+ai_check_json_name = result["ai_check_json_name"]
+ai_check_prompt_bytes = result["ai_check_prompt_bytes"]
+ai_check_prompt_name = result["ai_check_prompt_name"]
 
 
 # ------------------------------------------------------------
@@ -274,53 +308,56 @@ if enable_llm_review:
     elif not llm_findings:
         st.info("Gemini からの指摘はありませんでした。")
     else:
-        # カテゴリ別にグルーピング
         cat_label = {
             "llm/pyramid": "📐 ピラミッド原則",
             "llm/mece": "🧩 MECE",
             "llm/so-what": "💡 So What? / Why So?",
+            "llm/issue-tree": "🌳 Issue Tree / Key Question",
+            "llm/logic-leap": "🔗 ロジック飛躍",
+            "llm/data-rigor": "🔢 数値の出所と粒度",
+            "llm/framework": "🧱 フレームワーク整合",
             "llm/action": "🎯 アクションの具体性",
+            "llm/feasibility": "🚀 実行可能性",
             "llm/balance": "⚖️ 構成バランス",
             "llm/client-view": "👤 顧客視点",
-            "llm/quality": "✨ コンサル品質",
-            "llm/logic-leap": "🔗 ロジック飛躍",
-            "llm/framework": "🧱 フレームワーク整合",
-            "llm/feasibility": "🚀 実行可能性",
+            "llm/alternatives": "🔀 代替案の提示",
+            "llm/premise": "📎 前提・限界の開示",
+            "llm/story-line": "📖 Story Line",
+            "llm/risk-scenario": "🌪 リスクシナリオ",
         }
-        llm_sev_counts = Counter(f.severity for f in llm_findings)
+        sev_order = {"HIGH": 0, "MEDIUM": 1, "LOW": 2, "INFO": 3}
+        sev_icon = {"HIGH": "🔴", "MEDIUM": "🟡", "LOW": "🔵", "INFO": "⚪"}
+
+        # 総評（評価グレード・提出可否）を最上部に常時表示
+        for f in llm_findings:
+            if f.category == "llm/overall-assessment":
+                st.info("**総評** — " + f.note.replace(" | ", "  \n"))
+
+        detail = [f for f in llm_findings if f.category != "llm/overall-assessment"]
+        llm_sev_counts = Counter(f.severity for f in detail)
         lc = st.columns(4)
         lc[0].metric("HIGH", llm_sev_counts.get("HIGH", 0))
         lc[1].metric("MEDIUM", llm_sev_counts.get("MEDIUM", 0))
         lc[2].metric("LOW", llm_sev_counts.get("LOW", 0))
         lc[3].metric("INFO", llm_sev_counts.get("INFO", 0))
 
-        # カテゴリでグルーピング表示
         by_cat = defaultdict(list)
-        for f in llm_findings:
+        for f in detail:
             by_cat[f.category].append(f)
 
-        sev_order = {"HIGH": 0, "MEDIUM": 1, "LOW": 2, "INFO": 3}
-        sev_icon = {"HIGH": "🔴", "MEDIUM": "🟡", "LOW": "🔵", "INFO": "⚪"}
-
-        for cat_key in ["llm/pyramid", "llm/mece", "llm/so-what",
-                        "llm/action", "llm/balance", "llm/client-view", "llm/quality",
-                        "llm/logic-leap", "llm/framework", "llm/feasibility"]:
-            items = by_cat.get(cat_key, [])
+        for cat_key, cat_name in cat_label.items():
+            items = sorted(by_cat.get(cat_key, []), key=lambda f: sev_order.get(f.severity, 99))
             if not items:
                 continue
-            items.sort(key=lambda f: sev_order.get(f.severity, 99))
-            with st.expander(f"{cat_label.get(cat_key, cat_key)} ({len(items)}件)", expanded=True):
+            has_issue = any(f.severity != "INFO" for f in items)
+            with st.expander(f"{cat_name} ({len(items)}件)", expanded=has_issue):
                 for f in items:
                     st.markdown(
                         f"{sev_icon.get(f.severity, '⚪')} **{f.severity}** "
                         f"| {f.location_label} — {f.note}"
                     )
 
-        # その他カテゴリ
-        known = {"llm/pyramid", "llm/mece", "llm/so-what", "llm/action",
-                 "llm/balance", "llm/client-view", "llm/quality",
-                 "llm/logic-leap", "llm/framework", "llm/feasibility"}
-        other = [f for f in llm_findings if f.category not in known]
+        other = [f for f in detail if f.category not in cat_label]
         if other:
             with st.expander(f"その他 ({len(other)}件)", expanded=False):
                 for f in other:

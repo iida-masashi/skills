@@ -2,6 +2,10 @@
 
 Usage:
   python review.py <path/to/file.pptx|.docx|.pdf> [--skip-liveness] [--out-dir DIR]
+                   [--sanitize] [--ai-check-json] [--no-strategy] [--fail-on LEVEL]
+
+Exit code: 0 normally; 1 when --fail-on is given and a finding at or above
+that severity exists; 2 on input errors.
 
 Outputs (next to input file unless --out-dir given):
   <stem>_review.md        — Markdown report (always)
@@ -18,9 +22,15 @@ from datetime import datetime
 # Local imports (scripts dir on sys.path)
 sys.path.insert(0, str(Path(__file__).parent))
 
-import extractors
-import checkers
-import markers
+try:
+    import extractors
+    import checkers
+    import markers
+except ImportError as e:  # e.g. python-docx missing in the active interpreter
+    req = Path(__file__).resolve().parent.parent / "requirements.txt"
+    print(f"ERROR: 依存パッケージ不足 ({e.name})。`{Path(sys.executable).name} -m pip install -r \"{req}\"` を実行してください。",
+          file=sys.stderr)
+    sys.exit(2)
 
 
 SEVERITY_ORDER = {"HIGH": 0, "MEDIUM": 1, "LOW": 2, "INFO": 3}
@@ -36,6 +46,8 @@ CHECKER_LABEL = {
     "internal-content": "内部コンテンツ",
     "consulting-style": "コンサル作法(文体)",
     "consulting-layout": "コンサル作法(体裁)",
+    "strategy": "戦略コンサル品質",
+    "llm-review": "AI定性レビュー(Gemini)",
 }
 
 CHECKER_ORDER = [
@@ -46,6 +58,8 @@ CHECKER_ORDER = [
     "numeric-integrity",
     "consulting-style",
     "consulting-layout",
+    "strategy",
+    "llm-review",
     "copyright",
     "url-liveness",
     "verifiable-claim",
@@ -83,9 +97,9 @@ def build_report(doc, findings, input_path):
     # Severity legend
     lines.append("## 重要度の目安")
     lines.append("")
-    lines.append("- **HIGH**: 顧客提出前に必ず修正すべき (AIツール由来URLや死亡リンク等)")
-    lines.append("- **MEDIUM**: 要確認 (トラッキングパラメータ、AI定型句、出典欠如)")
-    lines.append("- **LOW**: 軽微 (Markdown残骸、表の出典記載等)")
+    lines.append("- **HIGH**: 顧客提出前に必ず修正すべき (作成者/会社名メタデータ、AIツール由来URL、AI定型句、死亡リンク、合計不一致等)")
+    lines.append("- **MEDIUM**: 要確認 (トラッキングパラメータ、knowledge cutoff言及、出典欠如、表記ゆれ等)")
+    lines.append("- **LOW**: 軽微 (Markdown残骸、体言止め、表の出典記載等)")
     lines.append("- **INFO**: 参考情報 (検証要主張リスト - 人間による裏取り用)")
     lines.append("")
 
@@ -140,6 +154,10 @@ def main():
                     help="Also produce <stem>_aicheck.json (structured slide/page content) "
                          "and <stem>_aicheck_prompt.md (review instructions) for an LLM "
                          "to perform qualitative consulting review (pyramid / MECE / So What?).")
+    ap.add_argument("--no-strategy", dest="strategy", action="store_false",
+                    help="Skip strategy-consulting rule checks (title length, missing summary, etc.)")
+    ap.add_argument("--fail-on", choices=["HIGH", "MEDIUM", "LOW", "INFO"], default=None,
+                    help="Exit with code 1 if any finding at or above this severity exists.")
     args = ap.parse_args()
 
     input_path = Path(args.input).resolve()
@@ -161,7 +179,7 @@ def main():
     print(f"      {len(doc.units)} text units, {len(doc.location_flags)} locations")
 
     print(f"[2/4] Running checkers (skip_liveness={args.skip_liveness})...")
-    findings = checkers.run_all(doc, skip_liveness=args.skip_liveness)
+    findings = checkers.run_all(doc, skip_liveness=args.skip_liveness, strategy=args.strategy)
     print(f"      {len(findings)} findings")
 
     print(f"[3/4] Writing Markdown report...")
@@ -185,7 +203,11 @@ def main():
         print(f"[+] Sanitizing metadata...")
         import metadata as metadata_mod
         san_path = out_dir / f"{stem}_sanitized{ext}"
-        actions = metadata_mod.sanitize(str(input_path), str(san_path), ext)
+        try:
+            actions = metadata_mod.sanitize(str(input_path), str(san_path), ext)
+        except RuntimeError as e:
+            print(f"ERROR: {e}", file=sys.stderr)
+            sys.exit(2)
         print(f"      {san_path}")
         for a in actions:
             print(f"       - {a}")
@@ -211,6 +233,11 @@ def main():
     print("Summary:", dict(sev_counts))
     if sev_counts.get("HIGH", 0) > 0:
         print("[!] HIGH-severity findings present - review before delivery.")
+
+    if args.fail_on:
+        threshold = SEVERITY_ORDER[args.fail_on]
+        if any(SEVERITY_ORDER.get(f.severity, 99) <= threshold for f in findings):
+            sys.exit(1)
 
 
 if __name__ == "__main__":

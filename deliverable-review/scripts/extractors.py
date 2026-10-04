@@ -11,7 +11,7 @@ from typing import List, Optional, Any
 
 @dataclass
 class TextUnit:
-    kind: str                      # "text" | "table-cell" | "image-caption-slot"
+    kind: str                      # "text" | "table-cell" | "hyperlink" (text = link target URL)
     text: str
     location_label: str            # human-readable, e.g. "Slide 3", "Page 2", "Para 12"
     location_index: int            # slide idx (pptx), page idx (pdf), para idx (docx)
@@ -32,6 +32,8 @@ class Document:
     location_flags: dict = field(default_factory=dict)
     # Raw handle to the underlying library object (python-pptx Presentation etc.)
     raw: Any = None
+    # Format-specific extras (docx: "table_loc" = {table_no: location_index})
+    extra: dict = field(default_factory=dict)
 
 
 # ------------------------------------------------------------
@@ -59,6 +61,33 @@ def iter_shapes_recursive(shapes):
                 pass
         else:
             yield shape
+
+
+def _pptx_hyperlinks(shape) -> List[str]:
+    """Link targets hidden behind display text (run hyperlinks, shape click
+    actions, table-cell runs). `run.text` alone never shows them."""
+    urls = []
+    try:
+        addr = shape.click_action.hyperlink.address
+        if addr:
+            urls.append(addr)
+    except Exception:
+        pass
+    frames = []
+    if getattr(shape, "has_text_frame", False) and shape.has_text_frame:
+        frames.append(shape.text_frame)
+    if getattr(shape, "has_table", False) and shape.has_table:
+        frames.extend(cell.text_frame for row in shape.table.rows for cell in row.cells)
+    for tf in frames:
+        for para in tf.paragraphs:
+            for run in para.runs:
+                try:
+                    addr = run.hyperlink.address
+                except Exception:
+                    addr = None
+                if addr:
+                    urls.append(addr)
+    return urls
 
 
 def extract_pptx(path: str) -> Document:
@@ -107,6 +136,14 @@ def extract_pptx(path: str) -> Document:
                             location_index=slide_idx,
                             source_handle=shape,
                         ))
+            for url in _pptx_hyperlinks(shape):
+                doc.units.append(TextUnit(
+                    kind="hyperlink",
+                    text=url,
+                    location_label=f"Slide {slide_idx}",
+                    location_index=slide_idx,
+                    source_handle=shape,
+                ))
 
         doc.location_flags[slide_idx] = {
             "has_image": has_image,
@@ -128,63 +165,119 @@ def extract_pptx(path: str) -> Document:
 # DOCX
 # ------------------------------------------------------------
 
+DOCX_BLOCK_PARAGRAPHS = 10  # 見出しが無い文書の区切り（段落数、ページ相当）
+
+
+def _is_heading(para) -> bool:
+    try:
+        name = (para.style.name or "") if para.style is not None else ""
+    except Exception:
+        name = ""
+    return name.startswith(("Heading", "見出し", "Title", "表題"))
+
+
+def _docx_para_links(para) -> List[str]:
+    try:
+        return [h.url for h in para.hyperlinks if h.url]
+    except Exception:
+        return []
+
+
 def extract_docx(path: str) -> Document:
+    """Locations are heading-delimited sections (or blocks of
+    DOCX_BLOCK_PARAGRAPHS paragraphs when the document has no headings), so
+    that per-location checks (citation, unit mixing, 敬体/常体) don't treat a
+    whole report as one page."""
     from docx import Document as DocxDocument
+    from docx.table import Table
 
     d = DocxDocument(path)
     doc = Document(path=path, ext=".docx", raw=d)
 
-    # Detect images / tables at document level
-    has_image = False
-    try:
-        # python-docx exposes inline shapes
-        if len(d.inline_shapes) > 0:
-            has_image = True
-    except Exception:
-        pass
-    has_table = len(d.tables) > 0
+    blocks = list(d.iter_inner_content())  # Paragraph / Table in body order
+    use_headings = any(
+        not isinstance(b, Table) and _is_heading(b) and (b.text or "").strip() for b in blocks
+    )
 
-    # DOCX doesn't have natural "pages"; we treat the whole doc as location index 1
-    # but track paragraph index for reporting.
-    loc_idx = 1
-    texts = []
+    loc_idx = 0
+    texts: dict = {}
+    labels: dict = {}
+    has_table: dict = {}
+    has_image: dict = {}
+    paras_in_loc = 0
 
-    for p_idx, para in enumerate(d.paragraphs, start=1):
-        t = para.text or ""
-        if t.strip():
-            texts.append(t)
-            doc.units.append(TextUnit(
-                kind="text",
-                text=t,
-                location_label=f"Para {p_idx}",
-                location_index=loc_idx,
-                source_handle=para,
-            ))
+    def new_loc(label: str):
+        nonlocal loc_idx, paras_in_loc
+        loc_idx += 1
+        paras_in_loc = 0
+        texts[loc_idx] = []
+        labels[loc_idx] = label
+        has_table[loc_idx] = False
+        has_image[loc_idx] = False
 
-    for t_idx, tbl in enumerate(d.tables, start=1):
-        for r_idx, row in enumerate(tbl.rows, start=1):
-            for c_idx, cell in enumerate(row.cells, start=1):
-                t = cell.text or ""
-                if t.strip():
-                    texts.append(t)
-                    doc.units.append(TextUnit(
-                        kind="table-cell",
-                        text=t,
-                        location_label=f"Table {t_idx} R{r_idx}C{c_idx}",
-                        location_index=loc_idx,
-                        source_handle=cell,
-                    ))
+    def add_links(urls, label):
+        for url in urls:
+            doc.units.append(TextUnit(kind="hyperlink", text=url,
+                                      location_label=label, location_index=loc_idx))
 
-    doc.location_flags[loc_idx] = {
-        "has_image": has_image,
-        "has_table": has_table,
-        "label": "Document",
-    }
-    doc.location_text[loc_idx] = "\n".join(texts)
+    p_idx = 0
+    t_idx = 0
+    for b in blocks:
+        if isinstance(b, Table):
+            if loc_idx == 0:
+                new_loc("Sec 1" if use_headings else "Block 1")
+            t_idx += 1
+            has_table[loc_idx] = True
+            doc.extra.setdefault("table_loc", {})[t_idx] = loc_idx
+            for r_idx, row in enumerate(b.rows, start=1):
+                for c_idx, cell in enumerate(row.cells, start=1):
+                    label = f"Table {t_idx} R{r_idx}C{c_idx}"
+                    t = cell.text or ""
+                    if t.strip():
+                        texts[loc_idx].append(t)
+                        doc.units.append(TextUnit(
+                            kind="table-cell", text=t, location_label=label,
+                            location_index=loc_idx, source_handle=cell,
+                        ))
+                    for para in cell.paragraphs:
+                        add_links(_docx_para_links(para), label)
+            continue
+
+        p_idx += 1
+        t = b.text or ""
+        if not t.strip():
+            continue
+        if use_headings:
+            if loc_idx == 0 or _is_heading(b):
+                new_loc(f"Sec {loc_idx + 1}: {t.strip()[:20]}" if _is_heading(b) else "Sec 1")
+        elif loc_idx == 0 or paras_in_loc >= DOCX_BLOCK_PARAGRAPHS:
+            new_loc(f"Block {loc_idx + 1} (Para {p_idx}〜)")
+        paras_in_loc += 1
+        texts[loc_idx].append(t)
+        if b._p.xpath(".//w:drawing | .//w:pict"):
+            has_image[loc_idx] = True
+        label = f"Para {p_idx}"
+        doc.units.append(TextUnit(
+            kind="text", text=t, location_label=label,
+            location_index=loc_idx, source_handle=b,
+        ))
+        add_links(_docx_para_links(b), label)
+
+    if loc_idx == 0:
+        new_loc("Document")
+
+    for i in texts:
+        doc.location_flags[i] = {
+            "has_image": has_image[i],
+            "has_table": has_table[i],
+            "label": labels[i],
+        }
+        doc.location_text[i] = "\n".join(texts[i])
 
     for u in doc.units:
-        u.has_image_on_page = has_image
-        u.has_table_on_page = has_table
+        flags = doc.location_flags.get(u.location_index, {})
+        u.has_image_on_page = flags.get("has_image", False)
+        u.has_table_on_page = flags.get("has_table", False)
 
     return doc
 
@@ -225,6 +318,23 @@ def extract_pdf(path: str) -> Document:
                     doc.units.append(TextUnit(
                         kind="text",
                         text=para,
+                        location_label=f"Page {page_idx}",
+                        location_index=page_idx,
+                        has_image_on_page=has_image,
+                        has_table_on_page=has_table,
+                    ))
+
+            # Link annotations (URL behind display text)
+            try:
+                links = page.hyperlinks or []
+            except Exception:
+                links = []
+            for link in links:
+                uri = link.get("uri")
+                if uri:
+                    doc.units.append(TextUnit(
+                        kind="hyperlink",
+                        text=uri,
                         location_label=f"Page {page_idx}",
                         location_index=page_idx,
                         has_image_on_page=has_image,

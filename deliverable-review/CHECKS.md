@@ -1,7 +1,11 @@
 # Checks Catalog — deliverable-review
 
 10 チェッカー × 全カテゴリ × Severity 判定ルールのリファレンス。
-実装は `scripts/*.py` を参照。
+実装は `scripts/*.py` を参照。戦略コンサル品質ルール（checker=`strategy`、CLI/Web UI とも既定ON、`--no-strategy` で無効化）は `scripts/strategy_checks.py` と SKILL.md を参照。
+
+**「場所」の単位**: pptx=スライド、pdf=ページ、docx=見出し（Heading/見出し スタイル）で区切ったセクション。見出しが無い docx は 10 段落ごとのブロック。出典判定・単位混在・敬体/常体混在などの「場所ごと」チェックはこの単位で行う。
+
+**リンク先URL**: 表示文字の裏にあるハイパーリンク先（pptx の run/図形リンク、docx のハイパーリンク、pdf のリンク注釈）も URL汚染・URL死活の対象。
 
 ## 目次
 
@@ -33,15 +37,22 @@
 | `core-category` | MEDIUM | pptx/docx | 同 category が非空 |
 | `core-subject` | MEDIUM | pptx/docx | 同 subject が非空 |
 | `core-title` | MEDIUM | pptx/docx | 同 title が非空 |
-| `hidden-slide` | HIGH | pptx | `<sld show="0">` 属性 |
+| `app-company` | HIGH | pptx/docx | `docProps/app.xml` の Company が非空 |
+| `app-manager` / `app-hyperlinkbase` | MEDIUM | pptx/docx | 同 Manager / HyperlinkBase が非空 |
+| `custom-properties` | MEDIUM | pptx/docx | `docProps/custom.xml` にユーザー設定プロパティ（秘密度ラベル `MSIP_Label_*` 以外）がある |
 | `docx-comments` | HIGH | docx | `word/comments.xml` が存在 |
-| `docx-tracked-changes` | HIGH | docx | document.xml に `<w:ins>` または `<w:del>` |
+| `docx-tracked-changes` | HIGH | docx | 本文/ヘッダ/フッタ/脚注に `<w:ins>` `<w:del>` `<w:moveFrom>` `<w:moveTo>` `<w:rPrChange>` `<w:pPrChange>` |
+
+非表示スライドは内部コンテンツ (`internal-content/hidden-slide`) で1回だけ報告する。
 | `pdf-author` / `pdf-lastmodifiedby` / `pdf-company` | HIGH | pdf | PDF /Info の該当フィールド非空 |
 | `pdf-creator` / `pdf-producer` / `pdf-title` / `pdf-subject` / `pdf-keywords` | MEDIUM | pdf | 同上、識別性は低いが漏洩源 |
 
 ### サニタイズ動作 (`--sanitize`)
 
-- **自動削除**: core properties全て、`docProps/app.xml` の Company/Manager/HyperlinkBase/TotalTime/Revision、Word の `comments*.xml`/`people.xml`、`<w:ins>/<w:del>` 受け入れ処理、PDF /Info と /Metadata (XMP)
+- **自動削除**: core properties全て、`docProps/app.xml` の Company/Manager/HyperlinkBase（TotalTime/Revision は 0 に）、`docProps/custom.xml` のユーザー設定プロパティ（`MSIP_Label_*` 秘密度ラベルは保持）、Word の `comments*.xml`/`people.xml`、PowerPoint のコメント（旧形式 `comments/commentN.xml`・新形式 `modernComment_*.xml`・作成者一覧）、PDF /Info と /Metadata (XMP)
+- **変更履歴の受け入れ（docx）**: 本文・ヘッダ・フッタ・脚注/文末脚注で `<w:ins>`/`<w:moveTo>` は中身を残して外す、`<w:del>`/`<w:moveFrom>` は中身ごと削除、書式変更履歴（`*PrChange`）は削除。段落記号の削除マーカー（`<w:rPr><w:del/>`）はマーカーのみ削除（段落の結合はしない）、削除行（`<w:trPr><w:del/>`）は行ごと削除
+- 削除したパーツを指す relationship と `[Content_Types].xml` の Override も除去する。XML は lxml で編集（正規表現置換はしない）
+- **事後検証**: 出力ファイルを再オープンして再検出し、残存があれば `verify: 残存あり → ...` を出す。開けなければエラー終了
 - **検出のみ（残す）**: 非表示スライド、スピーカーノート — 意図的に残している可能性があるため
 
 ---
@@ -52,23 +63,27 @@
 
 ### 検出カテゴリ
 
-| カテゴリ | 通常 Severity | 危険ワード含有時 | 対象 |
-|---|:---:|:---:|---|
-| `speaker-note` | INFO | **HIGH** | pptx |
-| `hidden-slide` | HIGH | HIGH | pptx |
-| `pptx-comment` | MEDIUM | **HIGH** | pptx |
-| `docx-comment` | MEDIUM | **HIGH** | docx |
+| カテゴリ | 通常 Severity | 要注意ワード含有時 | 危険ワード含有時 | 対象 |
+|---|:---:|:---:|:---:|---|
+| `speaker-note` | INFO | MEDIUM | **HIGH** | pptx |
+| `hidden-slide` | HIGH | HIGH | HIGH | pptx |
+| `pptx-comment` | MEDIUM | MEDIUM | **HIGH** | pptx（旧形式・新形式。スライドとの対応はスライドの relationship で解決） |
+| `docx-comment` | MEDIUM | MEDIUM | **HIGH** | docx |
 
-### 危険ワード（HIGH昇格トリガー）
-
-正規表現で検出（`_DANGER_PATTERNS`）:
+### 危険ワード（HIGH昇格、`_DANGER_PATTERNS`）
 
 - **秘匿系**: 「クライアント/顧客/先方/お客様に(は)?(言わない/伝えない/見せない/触れない/共有しない)」「オフレコ」「伏せる」「内輪」「社内/内部(限り/のみ/用/向け/マター)」
-- **作業メモ**: `TODO` / `FIXME` / `XXX` / `NOTE:`「仮」「暫定」「未確定」「検討中」「要確認」「確認中」
-- **機密英語**: `confidential` / `internal only` / `do not share` / `draft`
-- **数字の裏事情**: 「値引き」「ディスカウント」「赤字」「原価」「利益率」「マージン」「採算」
+- **作業メモ**: `TODO` / `FIXME` / `XXX`
+- **機密英語**: `confidential` / `internal only` / `do not share`
 - **競合**: 「competitor」「ライバル」「他社/競合...の話/には」
-- **スルー指示**: 「避ける」「スルー」「スキップ」
+
+### 要注意ワード（MEDIUM、`_CAUTION_PATTERNS`）
+
+ノートに普通に書かれうる語。「仮説」「仮想」等の一般語を拾わないよう「仮」単独は対象外。
+
+- **作業状態**: 「暫定」「未確定」「検討中」「要確認」「確認中」「仮置き」「仮値」「仮の数字/数値/値」、`NOTE:` / `internal` / `draft`
+- **数字の裏事情**: 「値引き」「ディスカウント」「赤字」「原価」「利益率」「マージン」「採算」
+- **スルー指示**: 「スルー」「スキップ」
 
 ---
 
@@ -100,7 +115,7 @@ ChatGPT/OpenAI, Claude/Anthropic, Perplexity, Gemini/Bard, Copilot/BingChat, Gro
 |---|:---:|---|
 | `AI-phrase-ja` | HIGH | 「申し訳ございませんが、AIとして」「AIアシスタントとして」「言語モデルとして」「ご質問ありがとうございます」「以下に〜を示します」「要点をまとめると」「総括すると」「結論/まとめとして」 |
 | `AI-phrase-en` | HIGH | `As an AI`, `As a language model`, `I'm an AI`, `I apologize, but`, `I cannot (provide/generate/assist)`, `I don't have (access to/the ability)`, `Certainly!`, `I'd be happy to`, `Here's a (brief/detailed/comprehensive)` |
-| `knowledge-cutoff-mention` | MEDIUM | 「2024年N月時点」「2023年12月までの情報」`as of my last update`, `knowledge cutoff`, `my training data`, `up to March 2024` |
+| `knowledge-cutoff-mention` | MEDIUM | 「2023年4月時点の知識」「私の知識は2023」`as of my last update`, `knowledge cutoff`, `my training data`, `up to March 2024`（「2024年3月時点の売上」のような業務表現は対象外） |
 | `markdown-remnant` | LOW | `**bold**`, `` `code` ``, `# heading`, `[text](url)` |
 | `markdown-remnant-bullets` | LOW | 同一テキストユニット内に **2行以上** のバレット行 `- X` / `1. X` （単独は誤検知を避けるため除外） |
 | `excessive-emoji` | MEDIUM | 1ユニット内に絵文字3個以上 |
@@ -122,8 +137,11 @@ ChatGPT/OpenAI, Claude/Anthropic, Perplexity, Gemini/Bard, Copilot/BingChat, Gro
 |---|:---:|---|---|
 | `pie-sum-not-100` | HIGH | pptx (native chart) | PIE系チャートの値合計が 100±1 にも 1.0±0.01 にもならない |
 | `stacked100-sum-not-100` | HIGH | pptx (native chart) | 100% 積上げ系のカテゴリ合計が 100±1 または 1±0.01 から外れる |
-| `table-row-total-mismatch` | HIGH | pptx/docx/pdf | 表のヘッダ行に「合計/Total」列があり、その列の値が手前の数値行合計と一致しない（許容誤差: max(0.5, 0.5%)) |
-| `table-col-total-mismatch` | HIGH | pptx/docx/pdf | 表の「合計/Total」行と上の数値行の合計が不一致 |
+| `table-row-total-mismatch` | HIGH | pptx/docx/pdf | 見出し行に「合計/Total」列があり、その値が同じ行の他の数値列の合計と一致しない（構成比・%・YoY 等の比率列は除外）。許容誤差: max(0.5, 0.5%) |
+| `table-col-total-mismatch` | HIGH | pptx/docx/pdf | 「合計/Total」行が、上の小計行＋小計に含まれないデータ行の合計と不一致（小計を二重計上しない） |
+| `table-subtotal-mismatch` | HIGH | pptx/docx/pdf | 「小計」行が、直前の小計以降のデータ行の合計と不一致 |
+
+表の判定ルール: 1行目は見出し、1列目は行ラベルとして**合算しない**（「2023年」等の年度見出しの混入防止）。合計/小計ラベルはセル全体で判定（「計画策定」「会計」等を合計行と誤認しない）。`▲120` `△120` `−120` `(120)` は負数、全角数字は半角として読む。
 | `currency-unit-mixing` | MEDIUM | 全形式 | 同一スライド/ページ内に金額単位2種以上（兆円/億円/百万円/万円/千円/円） |
 | `percent-pp-mixing` | MEDIUM | 全形式 | 同一スライド/ページ内に % と pp/ポイント が両方出現 |
 | `chart-read-error` | INFO | pptx | python-pptx でチャートデータ読み取り失敗（画像化チャート等） |
@@ -221,8 +239,8 @@ slash-ymd (`2024/3/13`) / hyphen-ymd (`2024-3-13`) / ja-ymd (`2024年3月13日`)
 
 - 日本語: 出典 / 出所 / 参考(文献/資料/URL)? / 引用(元)? / 参照 / ソース / 典拠 / 根拠
 - 英語: Source(s)? / Reference(s)? / Citation(s)? / See / Ref. / via
-- 著作権記号: © / Ⓒ / (c) / Copyright / All rights reserved / 無断転載 / 著作権
 - あるいは任意の `http(s)://...` URL
+- ©・Copyright 等の著作権表示は出典扱い**しない**（自社テンプレートのフッターに常在し、全スライドの判定を素通りさせるため）
 
 ---
 
@@ -232,7 +250,7 @@ slash-ymd (`2024/3/13`) / hyphen-ymd (`2024-3-13`) / ja-ymd (`2024年3月13日`)
 
 ### 動作
 
-1. 全テキストから `https?://[^\s<>"'\)\]\}、。]+` で URL を抽出
+1. 全テキストとハイパーリンク先から URL を抽出（空白・引用符・半角/全角の括弧類・句読点で区切る。`（出典: https://…）` の `）` は含めない）
 2. User-Agent `Mozilla/5.0 deliverable-review` で **HEAD** リクエスト（タイムアウト5秒）
 3. 4xx/5xx なら **GET** でリトライ（stream=True, 即 close）
 4. 並列10スレッド
@@ -251,7 +269,7 @@ slash-ymd (`2024/3/13`) / hyphen-ymd (`2024-3-13`) / ja-ymd (`2024年3月13日`)
 
 **実装**: `scripts/patterns.py` → `extract_verifiable_claims`
 
-出典記載のない箇所からのみ抽出（出典記載のあるスライド/ページはスキップ）。
+出典記載のない箇所からのみ抽出（出典記載のあるスライド/ページ/docxセクションはスキップ）。
 
 ### 検出カテゴリ
 

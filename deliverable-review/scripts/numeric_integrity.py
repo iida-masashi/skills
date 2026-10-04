@@ -7,6 +7,7 @@ Detects:
 - Image charts: best-effort using data labels found as nearby text (lower precision)
 """
 import re
+import unicodedata
 from dataclasses import dataclass
 from typing import List, Optional, Any
 
@@ -24,7 +25,25 @@ _NUM_WITH_UNIT_RE = re.compile(
     r"(?P<unit>億円|百万円|千円|万円|兆円|円|%|％|pp|ポイント|件|人|社|個)?"
 )
 
-_TOTAL_KEYWORDS = ("合計", "計", "小計", "総計", "Total", "total", "TOTAL", "Sum", "sum")
+# 合計/小計ラベルはセル全体で判定する（部分一致だと「計画」「会計」「summary」を誤認）
+_TOTAL_LABEL_RE = re.compile(
+    r"^(?:.{0,8}(?:合計|総計)|計|total|grand\s*total|sum)$", re.IGNORECASE
+)
+_SUBTOTAL_LABEL_RE = re.compile(r"^(?:.{0,8}小計|sub-?\s*total)$", re.IGNORECASE)
+# 行合計の対象外にする比率系の列見出し
+_RATIO_HEADER_RE = re.compile(r"(?:%|％|比|率|シェア|share|yoy|cagr)", re.IGNORECASE)
+
+
+def _norm_label(s: str) -> str:
+    return re.sub(r"\s+", "", unicodedata.normalize("NFKC", s or ""))
+
+
+def _is_total_label(s: str) -> bool:
+    return bool(_TOTAL_LABEL_RE.match(_norm_label(s)))
+
+
+def _is_subtotal_label(s: str) -> bool:
+    return bool(_SUBTOTAL_LABEL_RE.match(_norm_label(s)))
 
 
 def _to_float(s: str) -> Optional[float]:
@@ -186,21 +205,38 @@ def check_native_charts_pptx(doc) -> List[Finding]:
 # Table integrity: row/column totals
 # ------------------------------------------------------------
 
+_NUM_CELL_RE = re.compile(r"^(?P<neg>[-−▲△])?\s*(?P<paren>\()?\s*(?P<num>\d+(?:[.,]\d+)*)\s*(?P<close>\))?")
+
+
 def _parse_numeric_cell(s: str) -> Optional[float]:
-    s = s.strip()
+    """Leading number of a cell. Handles ▲/△/−/- and (123) as negative,
+    full-width digits (NFKC), trailing units."""
+    s = unicodedata.normalize("NFKC", s or "").strip()
     if not s:
         return None
-    # Strip trailing units
-    m = re.match(r"^-?\d+(?:[.,]\d+)*", s)
+    m = _NUM_CELL_RE.match(s)
     if not m:
         return None
-    return _to_float(m.group(0))
+    v = _to_float(m.group("num"))
+    if v is None:
+        return None
+    if m.group("neg") or (m.group("paren") and m.group("close")):
+        v = -v
+    return v
+
+
+def _within_tolerance(computed: float, labeled: float) -> bool:
+    return abs(computed - labeled) <= max(0.5, abs(labeled) * 0.005)
 
 
 def _check_table_totals(rows_raw, label: str, loc_idx: int, source: str) -> List[Finding]:
-    """rows_raw: 2D list of raw cell strings.
-    Check: if any row header says 合計/Total, verify row sum matches header.
-           if any column header says 合計/Total, verify col sum matches.
+    """rows_raw: 2D list of raw cell strings. Row 0 is the header, column 0
+    holds row labels — neither is ever summed (年度見出し「2023年」等の混入防止).
+
+    - 小計 row: equals the sum of data rows since the previous 小計
+    - 合計 row: equals the sum of 小計 rows + remaining data rows (no double count)
+    - 合計 column: equals the sum of the other value columns in the row,
+      excluding ratio columns (構成比/%/YoY 等)
     """
     findings = []
     if not rows_raw or len(rows_raw) < 2:
@@ -208,68 +244,64 @@ def _check_table_totals(rows_raw, label: str, loc_idx: int, source: str) -> List
 
     nrows = len(rows_raw)
     ncols = max(len(r) for r in rows_raw)
-
-    # Normalize: pad short rows
     grid = [list(r) + [""] * (ncols - len(r)) for r in rows_raw]
 
-    # Find total-row (any row where first cell contains a total keyword)
-    for r_idx, row in enumerate(grid):
-        first = (row[0] or "").strip()
-        if any(k in first for k in _TOTAL_KEYWORDS):
-            # For each numeric column c>=1, sum rows above (r < r_idx) that are numeric
-            for c in range(1, ncols):
-                labeled_total = _parse_numeric_cell(row[c])
-                if labeled_total is None:
-                    continue
-                numeric_col = []
-                for rr in range(r_idx):
-                    # skip header row (row 0) only if it's non-numeric
-                    v = _parse_numeric_cell(grid[rr][c])
-                    if v is not None:
-                        numeric_col.append(v)
-                if not numeric_col:
-                    continue
-                computed = sum(numeric_col)
-                if abs(computed - labeled_total) > max(0.5, abs(labeled_total) * 0.005):
-                    findings.append(Finding(
-                        checker="numeric-integrity",
-                        severity=SEVERITY_HIGH,
-                        category="table-col-total-mismatch",
-                        location_label=label,
-                        location_index=loc_idx,
-                        evidence=f"col {c+1}: labeled={labeled_total}, computed={computed}",
-                        note=f"表({source})の列合計が一致しません。",
-                    ))
+    def mismatch(category, evidence, what):
+        findings.append(Finding(
+            checker="numeric-integrity",
+            severity=SEVERITY_HIGH,
+            category=category,
+            location_label=label,
+            location_index=loc_idx,
+            evidence=evidence,
+            note=f"表({source})の{what}が一致しません。",
+        ))
 
-    # Find total-column (any column where header says 合計/Total)
+    # ---- total / subtotal rows (column direction) ----
+    for c in range(1, ncols):
+        segment: List[float] = []      # data rows since last subtotal
+        subtotals: List[float] = []
+        for r in range(1, nrows):
+            first = grid[r][0] or ""
+            v = _parse_numeric_cell(grid[r][c])
+            if _is_subtotal_label(first):
+                if v is not None and segment and not _within_tolerance(sum(segment), v):
+                    mismatch("table-subtotal-mismatch",
+                             f"row {r+1} col {c+1}: labeled={v}, computed={sum(segment)}", "小計")
+                if v is not None:
+                    subtotals.append(v)
+                segment = []
+            elif _is_total_label(first):
+                parts = subtotals + segment
+                if v is not None and parts and not _within_tolerance(sum(parts), v):
+                    mismatch("table-col-total-mismatch",
+                             f"col {c+1}: labeled={v}, computed={sum(parts)}", "列合計")
+                segment, subtotals = [], []
+            elif v is not None:
+                segment.append(v)
+
+    # ---- total column (row direction) ----
     header = grid[0]
-    for c_idx, cell in enumerate(header):
-        if any(k in (cell or "") for k in _TOTAL_KEYWORDS):
-            for r in range(1, nrows):
-                row = grid[r]
-                labeled_total = _parse_numeric_cell(row[c_idx] if c_idx < len(row) else "")
-                if labeled_total is None:
-                    continue
-                numeric_row = []
-                for cc in range(ncols):
-                    if cc == c_idx:
-                        continue
-                    v = _parse_numeric_cell(row[cc])
-                    if v is not None:
-                        numeric_row.append(v)
-                if not numeric_row:
-                    continue
-                computed = sum(numeric_row)
-                if abs(computed - labeled_total) > max(0.5, abs(labeled_total) * 0.005):
-                    findings.append(Finding(
-                        checker="numeric-integrity",
-                        severity=SEVERITY_HIGH,
-                        category="table-row-total-mismatch",
-                        location_label=label,
-                        location_index=loc_idx,
-                        evidence=f"row {r+1}: labeled={labeled_total}, computed={computed}",
-                        note=f"表({source})の行合計が一致しません。",
-                    ))
+    value_cols = [c for c in range(1, ncols) if not _RATIO_HEADER_RE.search(header[c] or "")]
+    for c_idx in range(1, ncols):
+        if not _is_total_label(header[c_idx]):
+            continue
+        for r in range(1, nrows):
+            labeled_total = _parse_numeric_cell(grid[r][c_idx])
+            if labeled_total is None:
+                continue
+            numeric_row = [
+                v for cc in value_cols
+                if cc != c_idx and not _is_total_label(header[cc])
+                and "%" not in (grid[r][cc] or "") and "％" not in (grid[r][cc] or "")
+                and (v := _parse_numeric_cell(grid[r][cc])) is not None
+            ]
+            if not numeric_row:
+                continue
+            computed = sum(numeric_row)
+            if not _within_tolerance(computed, labeled_total):
+                mismatch("table-row-total-mismatch",
+                         f"row {r+1}: labeled={labeled_total}, computed={computed}", "行合計")
     return findings
 
 
@@ -298,8 +330,9 @@ def check_tables_docx(doc) -> List[Finding]:
         rows = []
         for row in tbl.rows:
             rows.append([cell.text for cell in row.cells])
+        loc = doc.extra.get("table_loc", {}).get(t_idx, 1)
         findings.extend(_check_table_totals(
-            rows, f"Table {t_idx}", 1, "docx"
+            rows, f"Table {t_idx}", loc, "docx"
         ))
     return findings
 

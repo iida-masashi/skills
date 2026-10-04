@@ -53,7 +53,7 @@ URL_GENERAL_TRACKING_PATTERNS = [
 
 # Generic URL extraction (for URL liveness check)
 URL_GENERIC_PATTERN = re.compile(
-    r"https?://[^\s<>\"'\)\]\}、。]+",
+    r"https?://[^\s<>\"'\)\]\}、。，．（）「」『』【】〈〉《》＜＞　]+",
     re.IGNORECASE,
 )
 
@@ -108,7 +108,8 @@ AI_PHRASE_PATTERNS_EN = [
 
 # Knowledge cutoff references
 AI_CUTOFF_PATTERNS = [
-    re.compile(r"(?:20\d{2})年\s*\d{1,2}\s*月(?:時点|現在|まで)(?:の(?:情報|データ|知識))?"),
+    # 「2024年3月時点の売上」等の業務表現は対象外。知識/学習への言及があるときだけ
+    re.compile(r"(?:20\d{2})年\s*\d{1,2}\s*月(?:時点|現在|まで)の(?:私の)?(?:知識|学習(?:データ)?)"),
     re.compile(r"(?:私の)?(?:知識|学習データ|トレーニングデータ)(?:は|の)(?:20\d{2})"),
     re.compile(r"\bas of (?:my (?:last|knowledge) )?(?:update|cutoff|training)\b", re.IGNORECASE),
     re.compile(r"\bknowledge cut[- ]?off\b", re.IGNORECASE),
@@ -175,11 +176,12 @@ def find_ai_traces(text: str):
 # Citation / source markers (presence indicates "has source")
 # ============================================================
 
+# ©/Copyright 表記は自社テンプレートのフッターに常在するため出典扱いしない
+# （出典扱いすると、ほぼ全スライドの検証要主張・著作権チェックが素通りする）。
 CITATION_MARKERS_RE = re.compile(
     r"(?:"
     r"出典|出所|参考(?:文献|資料|URL)?|引用(?:元)?|参照|ソース|引用元|典拠|根拠|"
-    r"\bSource[s]?\b|\bReference[s]?\b|\bCitation[s]?\b|\bSee\b|\bRef\.?\b|\bvia\b|"
-    r"©|Ⓒ|\(c\)|Copyright|All rights reserved|無断転載|著作権"
+    r"\bSource[s]?\b|\bReference[s]?\b|\bCitation[s]?\b|\bSee\b|\bRef\.?\b|\bvia\b"
     r")",
     re.IGNORECASE,
 )

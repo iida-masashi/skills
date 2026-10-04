@@ -226,9 +226,11 @@ _CLAUDE_CODE_ADDENDUM = """\
 以下のルールに従ってください:
 
 ## 入力
-同フォルダ内の `*_aicheck.json` を `Read` ツールで読み込み、`slides[*]` と
-`table_of_contents` を全量見ること。bullets/body/tables/speaker_notes を全部
-読む（要約しない）。
+同フォルダ内の `*_aicheck.json` を `Read` ツールで読み込み、全量見ること（要約しない）。
+`format` によって構造が異なる:
+- `pptx`: `slides[*]`（title/body_paragraphs/bullets/tables/speaker_notes）と `table_of_contents`
+- `docx`: `paragraphs[*]`（is_heading/level で章構成）と `tables`。「Slide」は見出し/段落位置で読み替える
+- `pdf`: `pages[*]`（text/tables）。「Slide」はページ番号で読み替える
 
 ## 出力
 レビュー結果は `*_aicheck_review.md` として書き出すこと。フォーマットは

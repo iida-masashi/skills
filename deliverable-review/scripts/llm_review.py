@@ -6,7 +6,7 @@
 送信内容: ai_check_extract.write_ai_check_json で抽出したスライド構造JSON
 （本文テキストを含む）。**外部送信されるため機密資料は注意**。
 
-Finding は checker="consulting-layout" で category="llm/*" として発行。
+Finding は checker="llm-review" で category="llm/*" として発行。
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from typing import List, Optional
 from checkers import Finding, SEVERITY_HIGH, SEVERITY_MEDIUM, SEVERITY_LOW, SEVERITY_INFO
 
 
-CHECKER = "consulting-layout"
+CHECKER = "llm-review"
 DEFAULT_MODEL = "gemini-3.1-pro-preview"
 
 SEV_MAP = {
@@ -203,6 +203,25 @@ def _compact_slide(s: dict, compress_appendix: bool) -> dict:
     }
 
 
+def _build_document_prompt(ai_check_data: dict) -> str:
+    """docx / pdf の AIチェックJSON（paragraphs / pages 構造）を全量渡す。"""
+    fmt = ai_check_data.get("format", "")
+    if fmt == "docx":
+        body = {"paragraphs": ai_check_data.get("paragraphs") or [],
+                "tables": ai_check_data.get("tables") or []}
+        unit = "見出し・段落（is_heading/level で章構成を判断）"
+    else:
+        body = {"pages": ai_check_data.get("pages") or []}
+        unit = "ページ（slide 番号にはページ番号を入れる）"
+    return (
+        f"以下は提出前のクライアント向け資料（{fmt}）の構造データです。単位は{unit}。\n"
+        "Tier-1 戦略コンサルの MD/Partner として赤入れレベルのレビューを行ってください。\n\n"
+        f"# 本文\n{json.dumps(body, ensure_ascii=False, indent=2)}\n\n"
+        "上記を 15 観点で網羅レビューし、指示どおりの JSON オブジェクト"
+        "（overall_assessment + findings）のみを返してください。"
+    )
+
+
 def _build_user_prompt(ai_check_data: dict) -> str:
     """AIチェックJSONを LLM に渡すプロンプトに整形。
 
@@ -211,6 +230,8 @@ def _build_user_prompt(ai_check_data: dict) -> str:
     圧縮する。総文字数が一定を超える場合のみ appendix を圧縮するヒューリス
     ティクスを採用。
     """
+    if ai_check_data.get("format") in ("docx", "pdf"):
+        return _build_document_prompt(ai_check_data)
     slides = ai_check_data.get("slides") or []
     toc = ai_check_data.get("table_of_contents") or []
 
@@ -357,7 +378,7 @@ def run_llm_review(
             contents=user_prompt,
             config=genai_types.GenerateContentConfig(
                 system_instruction=SYSTEM_PROMPT,
-                temperature=0.2,
+                # temperature は指定しない（Gemini 3 系は既定 1.0 推奨。下げるとループ・劣化）
                 response_mime_type="application/json",
             ),
         )
