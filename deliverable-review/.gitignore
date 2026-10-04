@@ -19,7 +19,6 @@ dist/
 *.egg-info/
 
 # Dev helpers
-scripts/_smoke_make_sample.py
 /tmp/
 
 # Editors / IDEs
