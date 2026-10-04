@@ -18,6 +18,7 @@ AIチェック 定性レビュー用JSONを生成する。
 - **トリガー**: main への push のうち `deliverable-review/**` かワークフロー自身が変わったとき、または手動（Actions > "Deploy deliverable-review to Cloud Run" > Run workflow）
 - **流れ**: pytest（外部API不要）→ Docker ビルド・Artifact Registry へ push → Cloud Run デプロイ。テストが落ちたらデプロイしない
 - **認証**: Workload Identity Federation（リポジトリ Secrets `GCP_WIF_PROVIDER` / `GCP_DEPLOYER_SA`、anaplan-skill と共通）。サービスアカウントキー（`GCP_SA_KEY`）は使わない
+- **実行アカウント**: `deliverable-review-runtime`（権限は Secret `GEMINI_API_KEY` の読み取りのみ）。デプロイ用アカウント `anaplan-skill-deployer` にその使用権限（`roles/iam.serviceAccountUser`）を付与済み
 - **URL**: Actions 実行結果のサマリに表示される
 
 ---

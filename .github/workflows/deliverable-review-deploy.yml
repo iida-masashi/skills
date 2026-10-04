@@ -110,6 +110,7 @@ jobs:
             GOOGLE_API_KEY=GEMINI_API_KEY:latest
           flags: >-
             --allow-unauthenticated
+            --service-account=deliverable-review-runtime@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
             --memory=1Gi
             --cpu=1
             --timeout=300
