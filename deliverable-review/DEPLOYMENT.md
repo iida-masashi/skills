@@ -52,7 +52,7 @@ GET /_stcore/health  → 200 "ok"  (267ms)
 
 ### Secret Manager (Gemini APIキー)
 
-Cloud Run ランタイムで `GOOGLE_API_KEY` 環境変数として Gemini 3.1 Pro 定性レビューに使用。
+Cloud Run ランタイムで `GOOGLE_API_KEY` 環境変数として Gemini 3.8 Flash 定性レビューに使用。
 
 | 項目 | 値 |
 |---|---|

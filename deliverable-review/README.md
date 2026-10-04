@@ -4,13 +4,19 @@
 Markdownレポート・マーキング付きコピー・サニタイズ済みファイル・
 AIチェック 定性レビュー用JSONを生成する。
 
-- 🌐 **Web UI (稼働中)**: <https://deliverable-review-wecljomxda-an.a.run.app>
 - **CLI**: `scripts/review.py`
 - **Web UI (ローカル)**: `webui/app.py`
+- **Web UI (Cloud Run)**: <https://deliverable-review-wecljomxda-an.a.run.app> — 2026-04-22 に旧構成からデプロイした版。**現在の自動デプロイ対象ではない**（下記「デプロイの現状」参照）
 - **ドキュメント**: [SKILL.md](SKILL.md) / [CHECKS.md](CHECKS.md) / [ARCHITECTURE.md](ARCHITECTURE.md) / [DEPLOYMENT.md](DEPLOYMENT.md)
+- **定性レビューのモデル**: Gemini 3.8 Flash (`gemini-3.8-flash`、Gemini Developer API / `google-genai` SDK、既定OFF)
 
-このリポジトリは [`<your-org>/<your-repo>`](https://github.com/<your-org>/<your-repo>) で管理され、
-GitHub Actions により Google Cloud Run (`asia-northeast1`) へ自動デプロイされる。
+### デプロイの現状
+
+このフォルダは共有スキル集リポジトリ（`claude-gemini-skills`）のサブフォルダとして管理している。
+GitHub Actions はリポジトリ直下の `.github/workflows/` しか実行しないため、
+`deliverable-review/.github/workflows/deploy.yml` は**動かない**。main への push では Cloud Run は更新されない。
+Cloud Run を更新するには、ワークフローをリポジトリ直下へ移す（`paths: deliverable-review/**` で絞る）か、
+`gcloud run deploy --source deliverable-review` で手動デプロイする。手動デプロイの前に認証方針（IAP 等）を決めること。
 
 ---
 
@@ -20,7 +26,11 @@ GitHub Actions により Google Cloud Run (`asia-northeast1`) へ自動デプロ
 ```bash
 pip install -r requirements.txt
 python scripts/review.py path/to/file.pptx
+# サニタイズ版＋AIチェックJSONも生成し、HIGHがあれば終了コード1
+python scripts/review.py path/to/file.docx --sanitize --ai-check-json --fail-on HIGH
 ```
+
+依存は requirements.txt の下限（2026-10 時点の最新版）で動作確認済み。Python 3.14。
 
 ### Web UI
 ```bash
@@ -34,7 +44,7 @@ pip install -r requirements.txt pytest
 pytest tests/ -v
 ```
 
-外部APIを叩かないスモークテスト＋不具合の再現テスト（`tests/test_regressions.py`）。Gemini 3.1 Pro レビューは別途手動で検証。
+外部APIを叩かないスモークテスト＋不具合の再現テスト（`tests/test_regressions.py`）。Gemini 3.8 Flash レビューは別途手動で検証。
 
 ---
 
@@ -105,7 +115,7 @@ gcloud iam service-accounts keys create gcp-key.json \
 cat gcp-key.json   # ← この JSON をまるごとコピー
 ```
 
-Gemini 3.1 Pro 定性レビュー（Web UI）を使う場合は Secret Manager に `GOOGLE_API_KEY` の設定が別途必要。手順は [DEPLOYMENT.md](DEPLOYMENT.md) の「Secret Manager (Gemini APIキー)」を参照。
+Gemini 3.8 Flash 定性レビュー（Web UI）を使う場合は Secret Manager に `GOOGLE_API_KEY` の設定が別途必要。手順は [DEPLOYMENT.md](DEPLOYMENT.md) の「Secret Manager (Gemini APIキー)」を参照。
 
 ### GitHub リポジトリ設定
 
@@ -130,6 +140,8 @@ Gemini 3.1 Pro 定性レビュー（Web UI）を使う場合は Secret Manager �
 
 ### デプロイ
 
+> ⚠ 以下は単独リポジトリとして運用していた時の手順。現在は「デプロイの現状」のとおり push しても自動デプロイされない。
+
 - `main` ブランチへの push で自動デプロイ
 - GitHub リポジトリ > Actions タブでビルドログ確認
 - 完了後、Actions 実行結果のサマリにサービス URL が表示される
@@ -149,7 +161,7 @@ GitHub > Actions > "Deploy to Cloud Run" > **Run workflow** ボタン
 - [ ] **VPC内限定化**: 社内VPNからのみアクセス可能に
 - [ ] **容量制限**: Cloud Run のリクエスト上限 32MB を超えるファイルへの対応（Cloud Storage 経由のアップロード等）
 - [ ] **OCR対応**: 画像化スライド（テキスト抽出不可）の Tesseract / Vision API 経由チェック
-- [ ] **AIチェック 自動実行**: Claude API 統合（現在は Claude Code が JSON を読んで自分でレビューする運用。Web UI には Gemini 3.1 Pro 経由の定性レビューあり・既定OFF）
+- [ ] **AIチェック 自動実行**: Claude API 統合（現在は Claude Code が JSON を読んで自分でレビューする運用。Web UI には Gemini 3.8 Flash 経由の定性レビューあり・既定OFF）
 - [ ] **URLの秘匿運用**: 現在は完全公開のため、URLを公開しないように注意喚起する仕組み（デプロイ後にURLをSlack等に自動投稿しない等）
 
 ---
@@ -161,7 +173,7 @@ GitHub > Actions > "Deploy to Cloud Run" > **Run workflow** ボタン
 - アップロードファイルは Cloud Run インスタンスのメモリ上で処理され、Cloud Storage 等へは保存されない（`tempfile` 経由、プロセス終了時に破棄）
 - コンテナが再起動すると一時ファイルは消える（永続化なし）
 - サービスアカウントキー `gcp-key.json` は**絶対に git に commit しない**（`.gitignore` で除外済み）
-- Web UI の「Gemini 3.1 Pro 定性レビュー」を有効にした場合のみ、スライド本文が Google Gemini API に送信される（Cloud Run には Secret Manager 経由で `GOOGLE_API_KEY` が設定済みのため機能自体は常に呼び出し可能。既定は OFF）。機密資料では OFF のまま使用すること
+- Web UI の「Gemini 3.8 Flash 定性レビュー」を有効にした場合のみ、スライド本文が Google Gemini API に送信される（Cloud Run には Secret Manager 経由で `GOOGLE_API_KEY` が設定済みのため機能自体は常に呼び出し可能。既定は OFF）。機密資料では OFF のまま使用すること
 
 ---
 

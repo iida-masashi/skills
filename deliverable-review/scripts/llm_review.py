@@ -1,4 +1,4 @@
-"""LLM-powered qualitative review via Gemini 3.1 Pro.
+"""LLM-powered qualitative review via Gemini 3.8 Flash.
 
 案B: ピラミッド原則 / MECE / So What? / Why So? / 構成バランス / 顧客視点
 を Gemini API に自動レビューさせる。
@@ -20,7 +20,7 @@ from checkers import Finding, SEVERITY_HIGH, SEVERITY_MEDIUM, SEVERITY_LOW, SEVE
 
 
 CHECKER = "llm-review"
-DEFAULT_MODEL = "gemini-3.1-pro-preview"
+DEFAULT_MODEL = "gemini-3.8-flash"
 
 SEV_MAP = {
     "HIGH": SEVERITY_HIGH,

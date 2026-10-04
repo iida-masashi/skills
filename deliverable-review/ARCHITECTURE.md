@@ -241,12 +241,12 @@ class Finding:
 
 | ライブラリ | 用途 | バージョン |
 |---|---|---|
-| `python-pptx` | .pptx 読み書き | ≥ 0.6.23 |
-| `python-docx` | .docx 読み書き | ≥ 1.1.0 |
-| `pdfplumber` | .pdf テキスト/表抽出 | ≥ 0.10.0 |
-| `requests` | URL 死活チェック | ≥ 2.31.0 |
-| `pypdf` | PDF サニタイズ（/Info 削除）| ≥ 4.0.0 |
-| `lxml` | OOXML サニタイズ（python-pptx/docx の依存として導入済み） | ≥ 4.9 |
+| `python-pptx` | .pptx 読み書き | ≥ 1.0.2 |
+| `python-docx` | .docx 読み書き | ≥ 1.2.0 |
+| `pdfplumber` | .pdf テキスト/表抽出 | ≥ 0.11.10 |
+| `requests` | URL 死活チェック | ≥ 2.34.2 |
+| `pypdf` | PDF サニタイズ（/Info 削除）| ≥ 6.19.0 |
+| `lxml` | OOXML サニタイズ（python-pptx/docx の依存として導入済み） | ≥ 6.1.3 |
 
 Tesseract / OCR は **未導入**（画像化資料の扱いは別フェーズの検討事項）。
 

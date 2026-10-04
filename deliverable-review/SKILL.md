@@ -1,6 +1,6 @@
 ---
 name: deliverable-review
-description: Use when a management consultant is about to deliver a PowerPoint/Word/PDF to a client and needs a pre-delivery self-check — covering (1) information leakage: file metadata (author/company), hidden slides, speaker notes, tracked changes, PPT/Word comments; (2) AI traces: utm_source=chatgpt URLs, AI boilerplate, knowledge cutoff mentions; (3) accuracy: dead URLs, chart/table total integrity, unit mixing, unverified numeric/date/ranking claims, missing citations; (4) consulting style: title messaging, term consistency, prohibited expressions, layout (fonts/tiny text/page numbers); (5) strategy quality: title length, bullet overload (Miller's 7±2), agenda-vs-sections mismatch, katakana overload, missing assumptions in forecasts, missing executive summary; (6) optional Gemini 3.1 Pro qualitative review covering pyramid principle, MECE, So What? / Why So?, action concreteness, narrative balance, client perspective, logic leaps, framework consistency (3C/4P/PEST/SWOT/Five Forces), feasibility (resources/risks/dependencies/milestones).
+description: Use when a management consultant is about to deliver a PowerPoint/Word/PDF to a client and needs a pre-delivery self-check — covering (1) information leakage: file metadata (author/company), hidden slides, speaker notes, tracked changes, PPT/Word comments; (2) AI traces: utm_source=chatgpt URLs, AI boilerplate, knowledge cutoff mentions; (3) accuracy: dead URLs, chart/table total integrity, unit mixing, unverified numeric/date/ranking claims, missing citations; (4) consulting style: title messaging, term consistency, prohibited expressions, layout (fonts/tiny text/page numbers); (5) strategy quality: title length, bullet overload (Miller's 7±2), agenda-vs-sections mismatch, katakana overload, missing assumptions in forecasts, missing executive summary; (6) optional Gemini 3.8 Flash qualitative review covering pyramid principle, MECE, So What? / Why So?, action concreteness, narrative balance, client perspective, logic leaps, framework consistency (3C/4P/PEST/SWOT/Five Forces), feasibility (resources/risks/dependencies/milestones).
 ---
 
 # deliverable-review
@@ -78,8 +78,8 @@ description: Use when a management consultant is about to deliver a PowerPoint/W
    - **カタカナ多用** — 1スライドのカタカナ密度20%超＋5語以上ユニーク
    - **前提条件キーワード不在** — 予測・試算を含むスライドで「前提/仮定/試算根拠」の記載がない
    - **エグゼクティブサマリー欠落** — 5枚以上の資料で冒頭4枚以内にサマリーがない
-2. **Gemini 3.1 Pro による自動定性レビュー（既定OFF）** — `scripts/llm_review.py`
-   サイドバーで有効化すると、AIチェックJSONを Gemini 3.1 Pro (`gemini-3.1-pro-preview`) に送信し、上記**15観点を網羅レビュー**（観点ごとに最低1件の指摘 or 該当なし宣言）。各指摘は8フィールド構造（severity / category / slide / quote / issue / why_it_matters / suggestion / rewrite_example）。資料全体の overall_assessment（評価グレード A〜D、提出可否、Partner一言、強み/弱み Top）も同時に返します。
+2. **Gemini 3.8 Flash による自動定性レビュー（既定OFF）** — `scripts/llm_review.py`
+   サイドバーで有効化すると、AIチェックJSONを Gemini 3.8 Flash (`gemini-3.8-flash`) に送信し、上記**15観点を網羅レビュー**（観点ごとに最低1件の指摘 or 該当なし宣言）。各指摘は8フィールド構造（severity / category / slide / quote / issue / why_it_matters / suggestion / rewrite_example）。資料全体の overall_assessment（評価グレード A〜D、提出可否、Partner一言、強み/弱み Top）も同時に返します。
    - 入力プロンプトは bullets/body/tables/speaker_notes を**切り詰めず全量送信**（appendix系のみ context長対策で圧縮）
    - SYSTEM_PROMPT は `llm_review.py` と Claude Code 内蔵パスで**単一ソース化**されており、両経路でレビュー品質が一致
    - 結果は画面にカテゴリ別表示。APIキーは環境変数 `GOOGLE_API_KEY`（または `GEMINI_API_KEY`）、もしくは `.env` ファイル（カレント／スキル直下／ユーザーホーム、環境変数 `DELIVERABLE_REVIEW_ENV_FILE` で明示指定可）を使用。**スライド本文が Google に送信されるため、機密資料では既定OFFのまま使用すること。**
@@ -176,7 +176,7 @@ py -m streamlit run ~/.claude/skills/deliverable-review/webui/app.py
 
 ### Web UI との違い
 
-`webui/app.py` のサイドバーには「Gemini 3.1 Pro 定性レビュー」チェックボックスがあるが、それは **Web UI をブラウザから直接使う人向けのオプション**。Claude Code から Skill として起動する場合は、Claude 自身がレビュアーなので Gemini を呼ぶ必要がない。ユーザーが明示的に「Geminiで」と指示した場合のみ `llm_review.py` 経由で実行すること。
+`webui/app.py` のサイドバーには「Gemini 3.8 Flash 定性レビュー」チェックボックスがあるが、それは **Web UI をブラウザから直接使う人向けのオプション**。Claude Code から Skill として起動する場合は、Claude 自身がレビュアーなので Gemini を呼ぶ必要がない。ユーザーが明示的に「Geminiで」と指示した場合のみ `llm_review.py` 経由で実行すること。
 
 ## Severity Guide
 
@@ -207,7 +207,7 @@ deliverable-review/
     layout_checks.py    # Phase 2 コンサル作法(体裁)
     strategy_checks.py  # 戦略コンサル品質ルール (案A: ローカル機械判定)
     ai_check_extract.py # AIチェック 構造JSON抽出
-    llm_review.py       # Gemini 3.1 Pro 定性レビュー (案B)
+    llm_review.py       # Gemini 3.8 Flash 定性レビュー (案B)
     markers.py          # pptx/docxにマーキング
   webui/
     app.py              # Streamlit Web UI (アップロード → レビュー → DL)
@@ -225,8 +225,8 @@ deliverable-review/
 - `python-pptx` にはネイティブコメント機能がないため、注釈はテキストボックスで追加。元ファイルは変更せず `_marked.pptx` コピーを生成。
 - **URL死活** は HEAD → 失敗時 GET フォールバック。Bot対策で 403 を返すサイトは誤検知する場合あり。
 - **AIチェック JSON 生成** 自体は外部API送信なし。Claude Code や他のLLMが JSON を読む前提。
-- **Gemini 3.1 Pro レビュー（Web UI 案B、既定OFF）** を有効にした場合のみ、スライド本文が Google Gemini API に送信される。機密資料では既定OFFのまま使用すること。
+- **Gemini 3.8 Flash レビュー（Web UI 案B、既定OFF）** を有効にした場合のみ、スライド本文が Google Gemini API に送信される。機密資料では既定OFFのまま使用すること。
 - **フォント統一チェック** は python-pptx の `run.font.name` に依存。テーマ継承で `None` になる場合、カウント外。
 - **©・Copyright 表記は出典扱いしない**。自社テンプレートのフッターにある © で出典チェックが素通りするのを防ぐため。
 - **変更履歴の受け入れ（docx）** で段落記号の削除は「マーカーのみ削除」（段落の結合はしない）。体裁が気になる場合は Word で「すべての変更を承諾」してから再チェックする。
-- **Gemini API**: `google-genai` SDK 経由で Gemini Developer API（`vertexai=False`、SDK既定の `v1beta` エンドポイント）を呼ぶ。モデルは `gemini-3.1-pro-preview`。temperature は指定せず既定値（Gemini 3 系推奨の 1.0）を使う。
+- **Gemini API**: `google-genai` SDK 経由で Gemini Developer API（`vertexai=False`、SDK既定の `v1beta` エンドポイント）を呼ぶ。モデルは `gemini-3.8-flash`。temperature は指定せず既定値（Gemini 3 系推奨の 1.0）を使う。

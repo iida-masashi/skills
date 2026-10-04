@@ -104,7 +104,7 @@ with st.sidebar:
         key="chk_strategy_rules",
     )
     enable_llm_review = st.checkbox(
-        "Gemini 3.1 Pro で定性レビュー（MECE・ピラミッド原則・So What?）",
+        "Gemini 3.8 Flash で定性レビュー（MECE・ピラミッド原則・So What?）",
         value=False,
         key="chk_llm_review",
         help="⚠️ スライド本文をGoogle Gemini APIに送信します。機密資料では注意。"
@@ -199,9 +199,9 @@ def run_pipeline(file_bytes: bytes, filename: str, opts: dict) -> dict:
             out["ai_check_prompt_name"] = prompt_path.name
             st.write("- AIチェック JSON 生成")
 
-        # 案B: LLM定性レビュー（Gemini 3.1 Pro）
+        # 案B: LLM定性レビュー（Gemini 3.8 Flash）
         if opts["llm"] and ai_check_json_path:
-            st.write("Gemini 3.1 Pro に定性レビュー依頼中... (数十秒かかります)")
+            st.write("Gemini 3.8 Flash に定性レビュー依頼中... (数十秒かかります)")
             import llm_review
             llm_findings, llm_error = llm_review.run_llm_review(str(ai_check_json_path))
             out["llm_error"] = llm_error
@@ -298,11 +298,11 @@ else:
 
 
 # ------------------------------------------------------------
-# Gemini 3.1 Pro 定性レビュー結果
+# Gemini 3.8 Flash 定性レビュー結果
 # ------------------------------------------------------------
 
 if enable_llm_review:
-    st.subheader("🤖 Gemini 3.1 Pro 定性レビュー結果")
+    st.subheader("🤖 Gemini 3.8 Flash 定性レビュー結果")
     if llm_error:
         st.error(f"レビュー失敗: {llm_error}")
     elif not llm_findings:
@@ -391,7 +391,7 @@ for checker in CHECKER_ORDER:
         "計": total,
     })
 if summary_rows:
-    st.dataframe(summary_rows, use_container_width=True, hide_index=True)
+    st.dataframe(summary_rows, width="stretch", hide_index=True)
 else:
     st.info("発火した指摘はありません。")
 
@@ -442,7 +442,7 @@ rows.sort(key=lambda r: (sev_order.get(r["重要度"], 99), r["チェッカー"]
 
 st.caption(f"{len(rows)}件表示 (フィルタ適用後)")
 if rows:
-    st.dataframe(rows, use_container_width=True, hide_index=True)
+    st.dataframe(rows, width="stretch", hide_index=True)
 
 
 # ------------------------------------------------------------
@@ -458,7 +458,7 @@ dl_cols[0].download_button(
     data=report_md.encode("utf-8"),
     file_name=f"{stem}_review.md",
     mime="text/markdown",
-    use_container_width=True,
+    width="stretch",
 )
 
 if marked_bytes:
@@ -471,7 +471,7 @@ if marked_bytes:
         data=marked_bytes,
         file_name=marked_name,
         mime=mime,
-        use_container_width=True,
+        width="stretch",
     )
 else:
     dl_cols[1].caption(".pdf のためマーキング非対応")
@@ -487,7 +487,7 @@ if sanitized_bytes:
         data=sanitized_bytes,
         file_name=sanitized_name,
         mime=mime,
-        use_container_width=True,
+        width="stretch",
     )
 else:
     dl_cols[2].caption("サニタイズ未実行")
@@ -498,7 +498,7 @@ if ai_check_json_bytes:
         data=ai_check_json_bytes,
         file_name=ai_check_json_name,
         mime="application/json",
-        use_container_width=True,
+        width="stretch",
     )
     with st.expander("AIチェック レビュー手順書 (LLMに渡す)"):
         st.markdown(ai_check_prompt_bytes.decode("utf-8"))
