@@ -37,7 +37,7 @@ Claude Code と Gemini CLI の両方から共有して使う、自作エージ�
 | [`deliverable-review`](./deliverable-review/) | クライアント提出前のPowerPoint/Word/PDFを自己点検（情報漏洩・AI生成痕跡・数値整合性・コンサルスタイル・戦略の質）したいとき | Python（`python-pptx`/`python-docx`/`pdfplumber`/`pypdf`等をrequirements.txtからインストール）。Gemini定性レビュー利用時のみ`GOOGLE_API_KEY` |
 | [`python-safe-coding`](./python-safe-coding/) | Pythonコードを安全にリファクタリングし、厳格な型チェック・統一品質ゲート（`psc`）を通したいとき | `psc` CLI、Ruff、MyPy、pytest+coverage、uv、Bandit。Polars必須（pandas禁止方針） |
 | [`context-compression-skill`](./context-compression-skill/) | ビルド・テスト・巨大ファイル・表データ・広域検索・Web調査など大量出力をコンテキストに入れる前に圧縮したいとき（中核ルールはグローバル CLAUDE.md / GEMINI.md に常駐、本スキルは詳細版） | なし |
-| [`galaxy-orchestrator`](./galaxy-orchestrator/) | Gemini 3系列（3.1 Pro/3.6 Flash/3.5 Flash-Lite）の呼び出しを一本化し、動的モデル選択・リトライ・フォールバック・MCP経由のツール呼び出しを行いたいとき | `pip install -r requirements.txt`、`.env`に`GOOGLE_API_KEY`（or `GEMINI_API_KEY`）、MCPサーバー起動用にNode.js（npx）・`uv`（uvx） |
+| [`api-orchestrator`](./api-orchestrator/) | Gemini API と Grok (xAI) API の呼び出しを一本化し、`--provider`での切替・相互フォールバック・動的モデル選択・リトライ・Web検索・MCP経由のツール呼び出しを行いたいとき | `pip install -r requirements.txt`、`.env`に`GOOGLE_API_KEY`（or `GEMINI_API_KEY`）と`XAI_API_KEY`（片方のみでも可）、MCPサーバー起動用にNode.js（npx）・`uv`（uvx） |
 | [`web-search`](./web-search/) | Web検索・URL取得を行いたいとき（標準でGemini API優先、失敗時はClaudeネイティブのWebSearch/WebFetchにフォールバック） | `<gemini-scripts-dir>`に`gemini_websearch.py`/`gemini_webfetch.py`と`.env`、`convMD` uvプロジェクトが別途必要 |
 | [`gcp-docker-deploy`](./gcp-docker-deploy/) | Dockerizedアプリ（Streamlit/FastAPI/Node.js等）をGitHub Actions経由でGoogle Cloud（Cloud RunまたはVM）にデプロイしたいとき、Cloud Run/VMの選定に迷うとき、WIF/サービスアカウント鍵のどちらで認証するか決めたいとき | `gcloud`/`gh` CLI、Artifact Registry、Workload Identity Federation設定（またはサービスアカウントJSON鍵）。手順のみでスクリプトは持たない |
 

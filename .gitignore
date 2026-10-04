@@ -7,7 +7,7 @@ __pycache__/
 data/auth_info.json
 
 # 実際のプロンプト/応答スニペットを含む実行時ログ（個人の利用履歴のため非公開）
-galaxy-orchestrator/usage_log.jsonl
+api-orchestrator/usage_log.jsonl
 
 # Fortience社内専用スキル（社外公開リポジトリのため非公開）
 /news-release/

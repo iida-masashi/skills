@@ -1,7 +1,6 @@
 """Tests for orchestrator.py — cost tracking, logging, and model selection logic."""
 import json
 import sys
-import types as _types
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -9,21 +8,11 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 
-# scout をモックしてからインポート（APIキー不要にする）
-# conftest ではなくモジュール先頭で差し込む。pytest セッション内で scout が
-# まだロードされていない場合のみ stub を登録することで test_scout.py と衝突しない。
-if "scout" not in sys.modules:
-    _scout_stub = _types.ModuleType("scout")
-    _scout_stub.get_best_available_models = MagicMock(return_value={  # type: ignore[attr-defined]
-        "Specialist": "gemini-3.1-pro-preview",
-        "Primary": "gemini-2.0-flash",
-        "Utility": "gemini-3.1-flash-lite-preview",
-    })
-    sys.modules["scout"] = _scout_stub
-
 from orchestrator import (
     SkillRouting,
     _confirm_command_execution,
+    GROK_COST_PER_1M,
+    _extract_usage,
     _supports_thinking,
     calculate_cost,
     log_usage,
@@ -38,35 +27,45 @@ class TestCalculateCost:
         cost = calculate_cost("gemini-3.1-pro-preview", 1_000_000, 1_000_000)
         assert cost == pytest.approx(14.00, rel=1e-4)
 
-    def test_flash_model_cost(self) -> None:
-        """gemini-3.1-flashのコスト: in=0.075, out=0.30 per 1M tokens."""
-        cost = calculate_cost("gemini-3.1-flash", 1_000_000, 1_000_000)
-        assert cost == pytest.approx(0.375, rel=1e-4)
-
-    def test_flash_2_0_model_cost(self) -> None:
-        """gemini-2.0-flashのコスト: in=0.10, out=0.40 per 1M tokens."""
-        cost = calculate_cost("gemini-2.0-flash", 1_000_000, 1_000_000)
-        assert cost == pytest.approx(0.50, rel=1e-4)
+    def test_flash_3_8_cost(self) -> None:
+        """gemini-3.8-flashのコスト: in=0.75, out=3.75 per 1M tokens (2026-12-31までの価格)."""
+        cost = calculate_cost("gemini-3.8-flash", 1_000_000, 1_000_000)
+        assert cost == pytest.approx(4.50, rel=1e-4)
 
     def test_flash_3_6_cost(self) -> None:
-        """gemini-3.6-flashのコスト: in=1.50, out=7.50 per 1M tokens."""
+        """gemini-3.6-flashのコスト: in=0.75, out=3.75 per 1M tokens."""
         cost = calculate_cost("gemini-3.6-flash", 1_000_000, 1_000_000)
-        assert cost == pytest.approx(9.00, rel=1e-4)
+        assert cost == pytest.approx(4.50, rel=1e-4)
+
+    def test_flash_2_5_lite_cost(self) -> None:
+        """gemini-2.5-flash-liteのコスト: in=0.10, out=0.40 per 1M tokens."""
+        cost = calculate_cost("gemini-2.5-flash-lite", 1_000_000, 1_000_000)
+        assert cost == pytest.approx(0.50, rel=1e-4)
 
     def test_flash_lite_uses_its_own_rate_not_flash_rate(self) -> None:
         """flash-liteは'flash'の部分文字列マッチで誤ってflashレートを使わず、
-        専用のflash-liteレートを使う(過去のバグ: 'gemini-3.1-flash' が
-        'gemini-3.1-flash-lite-preview' の部分文字列としてマッチしていた)"""
-        flash_cost = calculate_cost("gemini-3.1-flash", 1_000_000, 1_000_000)
-        lite_cost = calculate_cost("gemini-3.1-flash-lite-preview", 1_000_000, 1_000_000)
-        assert lite_cost != flash_cost
-        assert lite_cost == pytest.approx(1.75, rel=1e-4)
-        assert flash_cost == pytest.approx(0.375, rel=1e-4)
+        専用のflash-liteレートを使う('gemini-3.5-flash' は 'gemini-3.5-flash-lite' の部分文字列)"""
+        flash_cost = calculate_cost("gemini-3.5-flash", 1_000_000, 1_000_000)
+        lite_cost = calculate_cost("gemini-3.5-flash-lite", 1_000_000, 1_000_000)
+        assert lite_cost == pytest.approx(2.80, rel=1e-4)
+        assert flash_cost == pytest.approx(10.50, rel=1e-4)
 
-    def test_flash_lite_3_5_cost(self) -> None:
-        """gemini-3.5-flash-liteのコスト: in=0.25, out=1.50 per 1M tokens."""
-        cost = calculate_cost("gemini-3.5-flash-lite", 1_000_000, 1_000_000)
-        assert cost == pytest.approx(1.75, rel=1e-4)
+    def test_preview_suffix_matches_base_rate(self) -> None:
+        """'-preview' 付きのモデル名も基底モデルのレートで計算する。"""
+        cost = calculate_cost("gemini-3-flash-preview", 1_000_000, 1_000_000)
+        assert cost == pytest.approx(3.50, rel=1e-4)
+
+    def test_grok_uses_runtime_pricing(self) -> None:
+        """GrokはAPIから取得した料金表(GROK_COST_PER_1M)で計算する。"""
+        with patch.dict(GROK_COST_PER_1M, {"grok-4.7": {"in": 2.00, "out": 6.00}}):
+            cost = calculate_cost("grok-4.7", 1_000_000, 1_000_000)
+        assert cost == pytest.approx(8.00, rel=1e-4)
+
+    def test_grok_without_pricing_uses_default_rates(self) -> None:
+        """料金表を取得できなかったGrokモデルはデフォルトレートを使う。"""
+        with patch.dict(GROK_COST_PER_1M, {}, clear=True):
+            cost = calculate_cost("grok-4.7", 1_000_000, 1_000_000)
+        assert cost == pytest.approx(0.50, rel=1e-4)
 
     def test_unknown_model_uses_default_rates(self) -> None:
         """未知のモデルはデフォルトレート(in=0.10, out=0.40)を使う。"""
@@ -80,8 +79,8 @@ class TestCalculateCost:
 
     def test_cost_proportional_to_tokens(self) -> None:
         """コストはトークン数に比例する。"""
-        cost_half = calculate_cost("gemini-2.0-flash", 500_000, 500_000)
-        cost_full = calculate_cost("gemini-2.0-flash", 1_000_000, 1_000_000)
+        cost_half = calculate_cost("gemini-2.5-flash-lite", 500_000, 500_000)
+        cost_full = calculate_cost("gemini-2.5-flash-lite", 1_000_000, 1_000_000)
         assert cost_full == pytest.approx(cost_half * 2, rel=1e-4)
 
     def test_input_output_rates_differ(self) -> None:
@@ -204,6 +203,42 @@ class TestPrintUsage:
         assert "200" in captured.out
 
 
+# ── _extract_usage ───────────────────────────────────────────────────────────
+
+class TestExtractUsage:
+    def test_grok_usage_is_normalized(self) -> None:
+        """Grok(Responses API)のinput/output_tokensをGemini形式に揃える。"""
+        response = MagicMock()
+        response.usage.input_tokens = 300
+        response.usage.output_tokens = 120
+        response.usage.total_tokens = 420
+        response.output_text = "grok answer"
+        usage, text = _extract_usage(response, "grok-4.3")
+        assert (usage.prompt_token_count, usage.candidates_token_count, usage.total_token_count) == (300, 120, 420)
+        assert text == "grok answer"
+
+    def test_gemini_thoughts_are_billed_as_output(self) -> None:
+        """Geminiの思考トークンは出力単価で課金されるため出力トークンに加算する。"""
+        response = MagicMock()
+        response.usage_metadata.prompt_token_count = 100
+        response.usage_metadata.candidates_token_count = 50
+        response.usage_metadata.thoughts_token_count = 30
+        response.usage_metadata.total_token_count = 180
+        response.text = "gemini answer"
+        usage, _ = _extract_usage(response, "gemini-3.8-flash")
+        assert usage.candidates_token_count == 80
+
+    def test_gemini_without_thoughts(self) -> None:
+        """thoughts_token_countがNone(思考なし)でも落ちない。"""
+        response = MagicMock()
+        response.usage_metadata.prompt_token_count = 100
+        response.usage_metadata.candidates_token_count = 50
+        response.usage_metadata.thoughts_token_count = None
+        response.usage_metadata.total_token_count = 150
+        usage, _ = _extract_usage(response, "gemini-3.8-flash")
+        assert usage.candidates_token_count == 50
+
+
 # ── SkillRouting schema ───────────────────────────────────────────────────────
 
 class TestSkillRoutingSchema:
@@ -234,14 +269,14 @@ class TestSupportsThinking:
     def test_gemini_3_1_pro_supports_thinking(self) -> None:
         assert _supports_thinking("gemini-3.1-pro-preview") is True
 
-    def test_gemini_3_6_flash_supports_thinking(self) -> None:
-        assert _supports_thinking("gemini-3.6-flash") is True
+    def test_gemini_3_8_flash_supports_thinking(self) -> None:
+        assert _supports_thinking("gemini-3.8-flash") is True
 
     def test_gemini_3_5_flash_lite_supports_thinking(self) -> None:
         assert _supports_thinking("gemini-3.5-flash-lite") is True
 
-    def test_gemini_2_0_flash_does_not_support_thinking(self) -> None:
-        assert _supports_thinking("gemini-2.0-flash") is False
+    def test_gemini_2_5_flash_does_not_support_thinking(self) -> None:
+        assert _supports_thinking("gemini-2.5-flash") is False
 
 
 # ── _confirm_command_execution ──────────────────────────────────────────────────
@@ -267,3 +302,87 @@ class TestConfirmCommandExecution:
         with patch("orchestrator.sys.stdin.isatty", return_value=True), \
              patch("builtins.input", return_value="n"):
             assert _confirm_command_execution("echo hi", auto_confirm=False) is False
+
+
+# ── run_orchestrator のフォールバック ─────────────────────────────────────────
+
+class TestCrossProviderFallback:
+    def _fake_provider(self, name: str, *, fail: bool) -> MagicMock:
+        from unittest.mock import AsyncMock
+        p = MagicMock()
+        p.name = name
+        p.supports_cache = name == "gemini"
+        p.models = {"Specialist": f"{name}-s", "Primary": f"{name}-p", "Utility": f"{name}-u"}
+        p.quick = AsyncMock(side_effect=Exception("routing down"))
+        err = Exception(f"{name} down")
+        p.agent = AsyncMock(side_effect=err if fail else None)
+        p.simple = AsyncMock(side_effect=err) if fail else AsyncMock(return_value="ok-response")
+        p.text_of = MagicMock(return_value=f"answer from {name}")
+        return p
+
+    def _run(self, gemini_fail: bool, grok: MagicMock | None, gemini_text: str = "answer from gemini") -> tuple[str | None, list[str]]:
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        import orchestrator
+        gemini = self._fake_provider("gemini", fail=gemini_fail)
+        gemini.text_of.return_value = gemini_text
+        built: list[str] = []
+
+        def build(name: str) -> MagicMock | None:
+            built.append(name)
+            return gemini if name == "gemini" else grok
+
+        mcp = MagicMock()
+        mcp.initialize = AsyncMock()
+        mcp.close = AsyncMock()
+        with patch.object(orchestrator, "build_provider", side_effect=build), \
+             patch.object(orchestrator, "MCPManager", return_value=mcp), \
+             patch.object(orchestrator, "print_usage", return_value=0.0), \
+             patch.object(orchestrator, "load_dotenv"):
+            result = asyncio.run(orchestrator.run_orchestrator("hello", provider="gemini"))
+        return result, built
+
+    def test_falls_back_to_other_provider_when_all_gemini_fail(self) -> None:
+        """Geminiのメイン・同一プロバイダ内フォールバックが両方失敗したらGrokのPrimaryで答える。"""
+        grok = self._fake_provider("grok", fail=False)
+        result, built = self._run(gemini_fail=True, grok=grok)
+        assert result == "answer from grok"
+        assert built == ["gemini", "grok"]
+        grok.simple.assert_awaited_once()
+        assert grok.simple.call_args.args[0] == "grok-p"
+
+    def test_reports_failure_without_other_provider_key(self) -> None:
+        """もう一方のAPIキーが無ければエラーメッセージを返す。"""
+        result, _ = self._run(gemini_fail=True, grok=None)
+        assert result is not None and "No API key" in result
+
+    def test_no_cross_provider_call_when_main_succeeds(self) -> None:
+        """メインが成功すればもう一方のプロバイダは作らない。"""
+        result, built = self._run(gemini_fail=False, grok=self._fake_provider("grok", fail=False))
+        assert result == "answer from gemini"
+        assert built == ["gemini"]
+
+    def test_empty_answer_triggers_fallback(self) -> None:
+        """Geminiが例外なしで空の本文を返した場合も失敗扱いにし、Grokへ切り替える。"""
+        grok = self._fake_provider("grok", fail=False)
+        result, built = self._run(gemini_fail=False, grok=grok, gemini_text="  ")
+        assert result == "answer from grok"
+        assert built == ["gemini", "grok"]
+
+    def test_max_turns_reached_triggers_fallback(self) -> None:
+        """ツール呼び出しが続いてターン上限に達した(agentがNoneを返した)場合もフォールバックに進む。"""
+        from unittest.mock import AsyncMock
+        grok = self._fake_provider("grok", fail=False)
+        import orchestrator
+        gemini = self._fake_provider("gemini", fail=False)
+        gemini.agent = AsyncMock(return_value=None)
+        gemini.simple = AsyncMock(side_effect=Exception("gemini down"))
+        mcp = MagicMock()
+        mcp.initialize = AsyncMock()
+        mcp.close = AsyncMock()
+        import asyncio
+        with patch.object(orchestrator, "build_provider", side_effect=lambda n: gemini if n == "gemini" else grok),              patch.object(orchestrator, "MCPManager", return_value=mcp),              patch.object(orchestrator, "print_usage", return_value=0.0),              patch.object(orchestrator, "load_dotenv"):
+            result = asyncio.run(orchestrator.run_orchestrator("hello", provider="gemini"))
+        gemini.simple.assert_awaited_once()
+        assert result == "answer from grok"

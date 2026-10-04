@@ -74,7 +74,7 @@ class MCPManager:
         await self._discover_tools()
 
     async def _discover_tools(self):
-        """全サーバーのツールを取得し、Geminiで利用可能な名前とマッピングする"""
+        """全サーバーのツールを取得し、Gemini/Grokで利用可能な名前とマッピングする"""
         self.tool_to_server_map.clear()
         self.gemini_tool_map.clear()
         self.available_tools.clear()
@@ -89,6 +89,12 @@ class MCPManager:
                     self.available_tools.append(tool)
             except Exception as e:
                 print(f"⚠️ Failed to list tools from {server_name}: {e}")
+
+    @staticmethod
+    def _input_schema(tool: Any) -> dict:
+        """ツールの入力スキーマを返す。mcp SDK 2.x で inputSchema が input_schema に改名されたため両方を見る"""
+        schema = getattr(tool, "input_schema", None) or getattr(tool, "inputSchema", None)
+        return dict(schema) if schema else {}
 
     def _clean_schema(self, schema: dict) -> dict:
         """Gemini の API スキーマに合わせて不要なフィールドを削除する"""
@@ -113,16 +119,15 @@ class MCPManager:
         for tool in self.available_tools:
             safe_name = tool.name.replace("-", "_").replace(".", "_")
 
-            schema = dict(tool.inputSchema) if tool.inputSchema else {}
-            schema = self._clean_schema(schema)
+            schema = self._clean_schema(self._input_schema(tool))
 
-            # Convert JSON schema to Gemini Schema if possible, or pass dict directly
-            # google-genai accepts dict for parameters
+            # parameters (Gemini独自のSchema型) は "type": ["boolean", "string"] のような
+            # JSON Schema の型リストを受け付けず検証エラーになるため、JSON Schema のまま渡す
             func_decls.append(
                 types.FunctionDeclaration(
                     name=safe_name,
                     description=tool.description or "",
-                    parameters=schema
+                    parameters_json_schema=schema or {"type": "object", "properties": {}}
                 )
             )
 
@@ -131,8 +136,24 @@ class MCPManager:
 
         return [{"function_declarations": func_decls}]
 
+    def get_openai_tools(self) -> list[dict]:
+        """Grok (xAI Responses API) の tools=... に渡す function ツール形式でツールリストを返す"""
+        openai_tools = []
+        for tool in self.available_tools:
+            safe_name = tool.name.replace("-", "_").replace(".", "_")
+            schema = self._clean_schema(self._input_schema(tool))
+            if not schema:
+                schema = {"type": "object", "properties": {}}
+            openai_tools.append({
+                "type": "function",
+                "name": safe_name,
+                "description": tool.description or "",
+                "parameters": schema,
+            })
+        return openai_tools
+
     async def call_tool(self, safe_name: str, arguments: dict) -> str:
-        """Geminiから指定されたツールを実行する"""
+        """Gemini/Grokから指定されたツールを実行する"""
         original_name = self.gemini_tool_map.get(safe_name)
         if not original_name:
             return f"Error: Tool {safe_name} not found."

@@ -1,0 +1,4 @@
+## 0.6. API Orchestration (Gemini / Grok の実行指揮)
+
+1. **Auto-Model Selection**: 複雑なPSI分析には Specialist (`gemini-3.1-pro-preview` / `grok-4.7`) を、定型作業には Primary (`gemini-3.8-flash` / `grok-4.3`) を自動選択せよ。
+2. **Fallback First**: Specialist が失敗したら同じプロバイダの Primary に、それも失敗したらもう一方のプロバイダ (Gemini ⇔ Grok) の Primary にフォールバックせよ。

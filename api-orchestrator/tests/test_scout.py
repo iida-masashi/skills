@@ -64,12 +64,13 @@ class TestGetBestAvailableModels:
 
     @patch("scout_real.genai.Client")
     @patch("scout_real.load_dotenv")
-    def test_detects_3_6_flash_as_primary(self, mock_dotenv: MagicMock, mock_client: MagicMock) -> None:
-        """gemini-3.6-flashモデルをPrimaryとして選択する(3.1-flashより優先)。"""
+    def test_detects_newest_flash_as_primary(self, mock_dotenv: MagicMock, mock_client: MagicMock) -> None:
+        """最も新しい版のflashをPrimaryとして選択する(一覧の並び順に依存しない)。"""
         mock_instance = MagicMock()
         mock_instance.models.list.return_value = [
             _make_model("gemini-3.1-pro-preview"),
-            _make_model("gemini-3.1-flash-preview"),
+            _make_model("gemini-3.8-flash"),
+            _make_model("gemini-3-flash-preview"),
             _make_model("gemini-3.6-flash"),
             _make_model("gemini-3.5-flash-lite"),
         ]
@@ -79,7 +80,50 @@ class TestGetBestAvailableModels:
             result = get_best_available_models()
 
         assert result is not None
-        assert result["Primary"] == "gemini-3.6-flash"
+        assert result["Primary"] == "gemini-3.8-flash"
+
+    @patch("scout_real.genai.Client")
+    @patch("scout_real.load_dotenv")
+    def test_ignores_tts_and_live_variants(self, mock_dotenv: MagicMock, mock_client: MagicMock) -> None:
+        """TTS/Live/画像などテキスト生成用でない派生モデルは、より新しい版でも選ばない。"""
+        mock_instance = MagicMock()
+        mock_instance.models.list.return_value = [
+            _make_model("gemini-3.8-flash-tts"),
+            _make_model("gemini-3.8-flash-lite-tts"),
+            _make_model("gemini-3.8-live"),
+            _make_model("gemini-3.1-pro-preview-customtools"),
+            _make_model("gemini-3.1-flash-lite-image"),
+            _make_model("gemini-3.1-pro-preview"),
+            _make_model("gemini-3.6-flash"),
+            _make_model("gemini-3.5-flash-lite"),
+        ]
+        mock_client.return_value = mock_instance
+
+        with patch.dict("os.environ", {"GOOGLE_API_KEY": "dummy-key"}, clear=True):
+            result = get_best_available_models()
+
+        assert result == {
+            "Specialist": "gemini-3.1-pro-preview",
+            "Primary": "gemini-3.6-flash",
+            "Utility": "gemini-3.5-flash-lite",
+        }
+
+    @patch("scout_real.genai.Client")
+    @patch("scout_real.load_dotenv")
+    def test_ga_preferred_over_preview_of_same_version(self, mock_dotenv: MagicMock, mock_client: MagicMock) -> None:
+        """同じ版ならpreviewよりGAを選ぶ。"""
+        mock_instance = MagicMock()
+        mock_instance.models.list.return_value = [
+            _make_model("gemini-3.1-flash-lite"),
+            _make_model("gemini-3.1-flash-lite-preview"),
+        ]
+        mock_client.return_value = mock_instance
+
+        with patch.dict("os.environ", {"GOOGLE_API_KEY": "dummy-key"}, clear=True):
+            result = get_best_available_models()
+
+        assert result is not None
+        assert result["Utility"] == "gemini-3.1-flash-lite"
 
     @patch("scout_real.genai.Client")
     @patch("scout_real.load_dotenv")
@@ -247,3 +291,85 @@ class TestScoutModels:
             result = scout_models()
 
         assert "Error" in result or "error" in result.lower()
+
+
+# ── Grok ──────────────────────────────────────────────────────────────────────
+
+select_grok_tiers = _scout_real.select_grok_tiers
+grok_pricing = _scout_real.grok_pricing
+get_best_grok_models = _scout_real.get_best_grok_models
+
+
+def _grok(model_id: str, created: int, out_price: int, in_price: int = 12500, aliases: list[str] | None = None) -> dict:
+    return {
+        "id": model_id,
+        "created": created,
+        "prompt_text_token_price": in_price,
+        "completion_text_token_price": out_price,
+        "aliases": aliases or [],
+    }
+
+
+# 2026-10-04 時点の /v1/language-models を模したデータ (版番号順と発売順が一致しない点を含む)
+_GROK_MODELS = [
+    _grok("grok-4.20-0309-non-reasoning", 100, 25000),
+    _grok("grok-4.20-0309-reasoning", 100, 25000),
+    _grok("grok-4.20-multi-agent-0309", 100, 25000),
+    _grok("grok-4.3", 200, 25000, aliases=["grok-4.3-latest"]),
+    _grok("grok-4.5", 300, 60000, in_price=20000),
+    _grok("grok-4.7", 500, 60000, in_price=20000),
+    _grok("grok-build-0.1", 400, 20000, in_price=10000),
+]
+
+
+class TestSelectGrokTiers:
+    def test_tiers_from_current_lineup(self) -> None:
+        """最新=Specialist、最安の汎用=Primary、non-reasoning=Utility。"""
+        assert select_grok_tiers(_GROK_MODELS) == {
+            "Specialist": "grok-4.7",
+            "Primary": "grok-4.3",
+            "Utility": "grok-4.20-0309-non-reasoning",
+        }
+
+    def test_newest_by_created_not_version_number(self) -> None:
+        """新しさは created で決める。"grok-4.3" は文字列順でも小数順でも "grok-4.20" より大きいが、
+        created が古ければSpecialistにしない。"""
+        result = select_grok_tiers([_grok("grok-4.3", 100, 25000), _grok("grok-4.20", 500, 25000)])
+        assert result["Specialist"] == "grok-4.20"
+
+    def test_excludes_build_and_multi_agent(self) -> None:
+        """コーディング特化版(build)は最安でもPrimaryに選ばない。"""
+        result = select_grok_tiers(_GROK_MODELS)
+        assert "build" not in result["Primary"]
+        assert "multi-agent" not in result["Specialist"]
+
+    def test_utility_falls_back_to_primary_without_non_reasoning(self) -> None:
+        """non-reasoningモデルが無ければUtilityはPrimaryと同じにする。"""
+        result = select_grok_tiers([_grok("grok-4.3", 200, 25000), _grok("grok-4.7", 500, 60000)])
+        assert result["Utility"] == result["Primary"] == "grok-4.3"
+
+    def test_empty_list_returns_defaults(self) -> None:
+        """一覧が空ならデフォルトのティアを返す。"""
+        assert select_grok_tiers([]) == _scout_real.GROK_DEFAULTS
+
+
+class TestGrokPricing:
+    def test_price_unit_conversion_and_aliases(self) -> None:
+        """料金フィールドを1Mトークンあたりの$に換算し、エイリアスにも同じ料金を付ける。"""
+        pricing = grok_pricing(_GROK_MODELS)
+        assert pricing["grok-4.7"] == {"in": 2.00, "out": 6.00}
+        assert pricing["grok-4.3-latest"] == {"in": 1.25, "out": 2.50}
+
+
+class TestGetBestGrokModels:
+    def test_returns_none_without_key(self) -> None:
+        with patch.dict("os.environ", {}, clear=True):
+            assert get_best_grok_models() is None
+
+    @patch("scout_real.fetch_grok_models", side_effect=Exception("network down"))
+    def test_returns_defaults_on_fetch_error(self, mock_fetch: MagicMock) -> None:
+        """一覧取得に失敗したらデフォルトのティアと空の料金表を返す。"""
+        with patch.dict("os.environ", {"XAI_API_KEY": "dummy"}, clear=True):
+            tiers, pricing = get_best_grok_models()
+        assert tiers == _scout_real.GROK_DEFAULTS
+        assert pricing == {}
