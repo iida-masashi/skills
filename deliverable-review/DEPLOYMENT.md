@@ -7,6 +7,8 @@
 - **実行者**: Iida Masashi
 - **環境**: Windows 11 / gcloud CLI / gh CLI
 
+> **2026-10 更新**: ワークフローは `claude-gemini-skills` リポジトリ直下の `.github/workflows/deliverable-review-deploy.yml` に移動し、認証は SA キー（`GCP_SA_KEY`）から Workload Identity Federation（`GCP_WIF_PROVIDER` / `GCP_DEPLOYER_SA`）に変更した。デプロイ前に pytest を実行する。以下の `deploy.yml` / `GCP_SA_KEY` / `<your-org>/<your-repo>` に関する記述は初回デプロイ時の記録。
+
 ---
 
 ## 🌐 稼働中サービス

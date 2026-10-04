@@ -6,17 +6,19 @@ AIチェック 定性レビュー用JSONを生成する。
 
 - **CLI**: `scripts/review.py`
 - **Web UI (ローカル)**: `webui/app.py`
-- **Web UI (Cloud Run)**: <https://deliverable-review-wecljomxda-an.a.run.app> — 2026-04-22 に旧構成からデプロイした版。**現在の自動デプロイ対象ではない**（下記「デプロイの現状」参照）
+- **Web UI (Cloud Run)**: <https://deliverable-review-wecljomxda-an.a.run.app>（main への push で自動デプロイ。下記「デプロイ」参照）
 - **ドキュメント**: [SKILL.md](SKILL.md) / [CHECKS.md](CHECKS.md) / [ARCHITECTURE.md](ARCHITECTURE.md) / [DEPLOYMENT.md](DEPLOYMENT.md)
 - **定性レビューのモデル**: Gemini 3.8 Flash (`gemini-3.8-flash`、Gemini Developer API / `google-genai` SDK、既定OFF)
 
 ### デプロイの現状
 
 このフォルダは共有スキル集リポジトリ（`claude-gemini-skills`）のサブフォルダとして管理している。
-GitHub Actions はリポジトリ直下の `.github/workflows/` しか実行しないため、
-`deliverable-review/.github/workflows/deploy.yml` は**動かない**。main への push では Cloud Run は更新されない。
-Cloud Run を更新するには、ワークフローをリポジトリ直下へ移す（`paths: deliverable-review/**` で絞る）か、
-`gcloud run deploy --source deliverable-review` で手動デプロイする。手動デプロイの前に認証方針（IAP 等）を決めること。
+ワークフローはリポジトリ直下の [`.github/workflows/deliverable-review-deploy.yml`](../.github/workflows/deliverable-review-deploy.yml)。
+
+- **トリガー**: main への push のうち `deliverable-review/**` かワークフロー自身が変わったとき、または手動（Actions > "Deploy deliverable-review to Cloud Run" > Run workflow）
+- **流れ**: pytest（外部API不要）→ Docker ビルド・Artifact Registry へ push → Cloud Run デプロイ。テストが落ちたらデプロイしない
+- **認証**: Workload Identity Federation（リポジトリ Secrets `GCP_WIF_PROVIDER` / `GCP_DEPLOYER_SA`、anaplan-skill と共通）。サービスアカウントキー（`GCP_SA_KEY`）は使わない
+- **URL**: Actions 実行結果のサマリに表示される
 
 ---
 
@@ -140,7 +142,7 @@ Gemini 3.8 Flash 定性レビュー（Web UI）を使う場合は Secret Manager
 
 ### デプロイ
 
-> ⚠ 以下は単独リポジトリとして運用していた時の手順。現在は「デプロイの現状」のとおり push しても自動デプロイされない。
+> ⚠ 上記「GitHub リポジトリ設定」と以下は単独リポジトリ（SAキー認証）で運用していた時の手順。現在は冒頭「デプロイの現状」（WIF・リポジトリ直下のワークフロー）を参照。
 
 - `main` ブランチへの push で自動デプロイ
 - GitHub リポジトリ > Actions タブでビルドログ確認
@@ -155,7 +157,7 @@ GitHub > Actions > "Deploy to Cloud Run" > **Run workflow** ボタン
 ## Backlog（TODO）
 
 - [ ] **認証追加**: IAP (Identity-Aware Proxy) による Google アカウントログイン必須化
-- [ ] **WIF への移行**: サービスアカウントキー JSON を廃止し、Workload Identity Federation に
+- [x] **WIF への移行**: リポジトリ直下のワークフローで Workload Identity Federation を使用（2026-10）
 - [ ] **監査ログ**: アップロードされたファイル名・処理時刻・ユーザーを Cloud Logging に出力
 - [ ] **レート制限**: Cloud Armor または Streamlit 内で同一IPからの連続アップロードを制限
 - [ ] **VPC内限定化**: 社内VPNからのみアクセス可能に
@@ -189,9 +191,6 @@ deliverable-review/
 ├── Dockerfile           # Cloud Run 用
 ├── .dockerignore
 ├── .gitignore
-├── .github/
-│   └── workflows/
-│       └── deploy.yml   # GitHub Actions
 ├── requirements.txt
 ├── scripts/             # CLI・コアロジック
 │   ├── review.py
@@ -212,4 +211,6 @@ deliverable-review/
 └── tests/
     ├── test_smoke.py        # pytest スモーク
     └── test_regressions.py  # 不具合の再現テスト
+
+（デプロイ用ワークフローはリポジトリ直下 .github/workflows/deliverable-review-deploy.yml）
 ```
