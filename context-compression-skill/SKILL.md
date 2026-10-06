@@ -106,6 +106,7 @@ npm run build *> $LOG; "exit=$LASTEXITCODE"; Get-Content $LOG -Tail 30
 | `cmd \| tail -30`（Bash、pipefail なし） | ログファイル経由 + `echo "exit=$ec"`（§2） |
 | `npm install`（素のまま） | `npm install --quiet --no-progress` |
 | `pip list` / `npm ls` 全件 | 対象パッケージ名で絞り込み |
+| ロックファイル（`uv.lock` / `package-lock.json` / `poetry.lock`）を `cat` して版を調べる | `uv pip list --outdated` / `uv tree --outdated --depth 1` / `npm outdated`。特定パッケージは `grep -A3 '^name = "pkg"' uv.lock` で絞り込む（`uv.lock` はハッシュ行だけで数千行になる） |
 | `git log`（引数なし） | `git log --oneline -n 5` |
 | `git diff`（いきなり全体） | `git diff --stat` → ファイル単位（§4） |
 | verbose な docker build ログ全文 | リダイレクト → 失敗時のみ末尾・エラー周辺を抽出（§2） |
