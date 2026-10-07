@@ -1,7 +1,7 @@
 ---
 aliases: [mermaid-hygiene, mermaid-validator, マーメイド検証スキル, Mermaid視認性・構文チェックスキル]
 name: mermaid-hygiene
-description: Mermaidダイアグラムの構文エラー防止、Mermaid 11 レキサー互換性（subgraph ID記号排除、双方向ラベル等）、および背景色と文字色のコントラスト比・視認性（暗い背景ノードにおける白文字強制、Quartzダーク/ライトテーマ両立）を検査・担保・自動検証するための専門スキル。
+description: Mermaidダイアグラムの構文エラー防止、Mermaid 11 レキサー互換性（subgraph ID記号排除、双方向ラベル等）、および背景色と文字色のコントラスト比・視認性（暗い背景ノードは白文字・白に近い背景や fill 未指定のノードは黒文字＋淡色fill明示、Quartzダーク/ライトテーマ両立）を検査・担保・自動検証するための専門スキル。
 ---
 
 # Mermaid Hygiene & Contrast Validation 専門スキルガイド
@@ -21,9 +21,9 @@ Mermaid 11 では、`subgraph` の識別子（ID）に中黒（`・`）やスラ
 
 ---
 
-## 🛡️ 8大構文・視認性バリデーションルール
+## 🛡️ 9大構文・視認性バリデーションルール
 
-本スキルでは、以下の8つのルールを厳格に検査します：
+本スキルでは、以下の9つのルールを厳格に検査します：
 
 | ルールID | 種別 | 判定内容 | 修正・対応方針 |
 | :--- | :--- | :--- | :--- |
@@ -35,6 +35,7 @@ Mermaid 11 では、`subgraph` の識別子（ID）に中黒（`・`）やスラ
 | **Rule 6: HAZARDOUS_SUBGRAPH_ID** | 構文 | `subgraph` ID に中黒（`・`）やスラッシュ、括弧などの記号を含む | IDから記号を除去し、表示名は `subgraph ID["表示名"]` で指定する |
 | **Rule 7: DARK_FILL_WITHOUT_WHITE_TEXT** | 視認性 | 暗色背景（YIQ輝度 < 130）のノードに白文字（`color:#fff`）が未指定 | `classDef` または `style` に必ず `color:#ffffff` を追加する |
 | **Rule 8: MERMAID_COMMENT_HAZARD** | 互換性 | コードブロック内に `%%` コメントが存在（Quartz OFMが削除し破損） | コメント行を削除するか、コードブロック外の注記にする |
+| **Rule 9: WHITE_TEXT_WITHOUT_DARK_FILL** | 視認性 | ラベルが白文字なのに、暗色の fill（`style`/`classDef`/`class`/`:::`/div内`background:`）が無い。既定背景はライトテーマで白に近く、文字が読めない | 文字を黒（`color:#000000`）にし、淡色 fill を明示する（例 `style X fill:#f1f5f9,stroke:#475569,color:#000000`）。白文字を残すなら暗色 fill を付ける |
 
 ---
 
@@ -65,6 +66,9 @@ flowchart TD
 
 ### 💡 設計原則
 1. **暗色背景ノードには必ず `color:#ffffff;` または `color:#fff;` をセットにする**。
+   - 逆に、**背景が白に近い（または fill 未指定の）ノードの文字は黒（`color:#000000`）にする**。白文字の `<div style='color:#ffffff;'>` だけ書いて fill を付け忘れると、ライトテーマで白地に白文字になる（2026-10 cpg Vault で多数発生）。
+   - 黒文字にする場合も淡色 fill を明示する。fill 未指定のままだと、ダークテーマで既定背景が暗色になり黒文字が読めなくなる。
+   - 一括修正スクリプトを書くときは、`A["..."]:::cls`（ラベル直後の `:::`）と `A --> B["..."]`（エッジ行内のノード定義）を取りこぼさないこと。取りこぼすと暗色ノードを誤って黒文字化したり、修正漏れが出る。
 2. **`subgraph` に中黒や記号を使わない**:
    - ❌ 悪い例: `subgraph 門祖・開山期["【門流草創】"]`
    - ⭕ 良い例: `subgraph 門祖開山期["【門流草創】"]`
@@ -91,4 +95,10 @@ python "C:\Users\iidam\claude-gemini-skills\mermaid-hygiene\scripts\validate_mer
 ### 3. Quartz公開ディレクトリの検証
 ```powershell
 python "C:\Users\iidam\claude-gemini-skills\mermaid-hygiene\scripts\validate_mermaid.py" "C:\Users\iidam\quartz-religion\content"
+```
+
+### 4. 自動修正（Rule 7 のみ）
+`--fix` を付けると、暗色背景なのに白文字指定がないノードのラベルを `<div style='color:#ffffff;'>…</div>` で囲む。暗色の判定はブロック単位（`classDef`・`style`・`class`・`:::`・div内の`background:`）で、改行コード（CRLF/LF）は維持する。Rule 9（白文字なのに暗色背景がない）は自動修正しないので、文字を黒にして淡色fillを明示する形に手で直す。
+```powershell
+python "C:\Users\iidam\claude-gemini-skills\mermaid-hygiene\scripts\validate_mermaid.py" --fix "D:\Vault\cpg"
 ```

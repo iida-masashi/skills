@@ -8,6 +8,8 @@ Checks Mermaid diagrams in markdown files for:
   5. UNQUOTED_EDGE_LABEL: Unquoted bidirectional link labels (<--> |label|)
   6. HAZARDOUS_SUBGRAPH_ID: Punctuation in subgraph IDs causing Mermaid 11 lexer crashes
   7. DARK_FILL_WITHOUT_WHITE_TEXT: Dark background fill without white text (Contrast/Readability)
+  8. MERMAID_COMMENT_HAZARD: %% inside a mermaid block (Quartz OFM deletes it)
+  9. WHITE_TEXT_WITHOUT_DARK_FILL: White label text on a light/default fill (unreadable in light theme)
 """
 
 from __future__ import annotations
@@ -224,6 +226,11 @@ class MermaidValidator:
                     fill_m = re.search(r"fill:\s*(#[0-9a-fA-F]{3,6}|[a-zA-Z]+)", rest)
                     if fill_m and is_dark_color(fill_m.group(1)):
                         dark_nodes.add(node_id)
+            # Parse class statements: class A,B clsName
+            elif s.startswith("class "):
+                m_cl = re.match(r"^class\s+([a-zA-Z0-9_\-,\s]+?)\s+([a-zA-Z0-9_\-]+);?$", s)
+                if m_cl and m_cl.group(2) in dark_classes:
+                    dark_nodes.update(n.strip() for n in m_cl.group(1).split(","))
 
         for line_no, line in enumerate(lines, start=start_line + 1):
             stripped = line.strip()
@@ -238,6 +245,9 @@ class MermaidValidator:
                 node_class = nm.group(3)
 
                 is_node_dark = (node_class in dark_classes) or (node_id in dark_nodes)
+                if not is_node_dark:
+                    bg_m = re.search(r"background(?:-color)?:\s*(#[0-9a-fA-F]{3,6}|[a-zA-Z]+)", label_text)
+                    is_node_dark = bool(bg_m and is_dark_color(bg_m.group(1)))
                 if is_node_dark:
                     has_explicit_white = bool(
                         re.search(r"color:\s*(#ffffff|#fff|white)", label_text, re.IGNORECASE)
@@ -261,6 +271,23 @@ class MermaidValidator:
                             )
                         )
 
+                # Rule 9: White label text on a light or default (unspecified) fill
+                # Default node fill is light in Quartz's light theme, so white text becomes invisible.
+                elif re.search(r"(?<![-\w])color:\s*(#ffffff|#fff|white)", label_text, re.IGNORECASE):
+                    issues.append(
+                        MermaidLintIssue(
+                            file=file,
+                            line_number=line_no,
+                            severity="ERROR",
+                            rule="WHITE_TEXT_WITHOUT_DARK_FILL",
+                            message=(
+                                f"ノード '{node_id}' のラベルが白文字ですが、暗色の fill（style/classDef）がありません。"
+                                "既定・淡色背景では読めないため、文字を黒（color:#000000）にして淡色fillを明示するか、暗色fillを付けてください。"
+                            ),
+                            snippet=line.strip()[:80],
+                        )
+                    )
+
             # Rule 8: %% inside mermaid block (Quartz OFM deletes between %%...%%, breaking diagram)
             if "%%" in stripped:
                 issues.append(
@@ -279,87 +306,75 @@ class MermaidValidator:
 
         return issues
 
-    def fix_file(self, file_path: Path) -> int:
-        """暗色背景ノードに <div style='color:#ffffff;'> を自動挿入して保存する"""
-        try:
-            content = file_path.read_text(encoding="utf-8")
-        except Exception:
-            return 0
-
-        lines = content.splitlines()
-        new_lines: list[str] = []
-        in_mermaid = False
-        fixed_count = 0
-
+    @staticmethod
+    def _collect_dark(block: list[str]) -> tuple[set[str], set[str]]:
+        """ブロック内の暗色 classDef 名と、暗色 fill を持つノードIDを集める"""
         dark_classes: set[str] = set()
         dark_nodes: set[str] = set()
-
-        # Pre-pass for classes in file
-        for line in lines:
+        for line in block:
             s = line.strip()
-            if s.startswith("```mermaid"):
-                in_mermaid = True
-            elif s == "```" and in_mermaid:
-                in_mermaid = False
-            elif in_mermaid:
-                if s.startswith("classDef "):
-                    m_cls = re.match(r"^classDef\s+([a-zA-Z0-9_\-]+)\s+(.*)", s)
-                    if m_cls:
-                        cls_name, rest = m_cls.group(1), m_cls.group(2)
-                        fill_m = re.search(r"fill:\s*(#[0-9a-fA-F]{3,6}|[a-zA-Z]+)", rest)
-                        if fill_m and is_dark_color(fill_m.group(1)):
-                            dark_classes.add(cls_name)
-                elif s.startswith("style "):
-                    m_style = re.match(r"^style\s+([a-zA-Z0-9_\-]+)\s+(.*)", s)
-                    if m_style:
-                        node_id, rest = m_style.group(1), m_style.group(2)
-                        fill_m = re.search(r"fill:\s*(#[0-9a-fA-F]{3,6}|[a-zA-Z]+)", rest)
-                        if fill_m and is_dark_color(fill_m.group(1)):
-                            dark_nodes.add(node_id)
+            m_cls = re.match(r"^classDef\s+([a-zA-Z0-9_\-]+)\s+(.*)", s)
+            if m_cls:
+                fill_m = re.search(r"fill:\s*(#[0-9a-fA-F]{3,6}|[a-zA-Z]+)", m_cls.group(2))
+                if fill_m and is_dark_color(fill_m.group(1)):
+                    dark_classes.add(m_cls.group(1))
+            m_style = re.match(r"^style\s+([a-zA-Z0-9_\-]+)\s+(.*)", s)
+            if m_style:
+                fill_m = re.search(r"fill:\s*(#[0-9a-fA-F]{3,6}|[a-zA-Z]+)", m_style.group(2))
+                if fill_m and is_dark_color(fill_m.group(1)):
+                    dark_nodes.add(m_style.group(1))
+        for line in block:
+            m_cl = re.match(r"^class\s+([a-zA-Z0-9_\-,\s]+?)\s+([a-zA-Z0-9_\-]+);?$", line.strip())
+            if m_cl and m_cl.group(2) in dark_classes:
+                dark_nodes.update(n.strip() for n in m_cl.group(1).split(","))
+        return dark_classes, dark_nodes
 
-        in_mermaid = False
-        for line in lines:
-            s = line.strip()
-            if s.startswith("```mermaid"):
-                in_mermaid = True
-                new_lines.append(line)
+    def fix_file(self, file_path: Path) -> int:
+        """暗色背景ノードに <div style='color:#ffffff;'> を自動挿入して保存する（ブロック単位で判定、改行コード維持）"""
+        try:
+            with open(file_path, encoding="utf-8", newline="") as fh:
+                raw = fh.read()
+        except Exception:
+            return 0
+        nl = "\r\n" if "\r\n" in raw else "\n"
+        lines = raw.replace("\r\n", "\n").split("\n")
+        fixed_count = 0
+
+        i = 0
+        while i < len(lines):
+            if not lines[i].strip().startswith("```mermaid"):
+                i += 1
                 continue
-            elif s == "```" and in_mermaid:
-                in_mermaid = False
-                new_lines.append(line)
-                continue
+            j = i + 1
+            while j < len(lines) and lines[j].strip() != "```":
+                j += 1
+            dark_classes, dark_nodes = self._collect_dark(lines[i + 1:j])
 
-            if in_mermaid:
-                def replace_node(m: re.Match) -> str:
-                    nonlocal fixed_count
-                    node_id = m.group(1)
-                    label = m.group(2)
-                    cls_name = m.group(3)
-                    is_dark = (cls_name in dark_classes) or (node_id in dark_nodes)
+            def replace_node(m: re.Match) -> str:
+                nonlocal fixed_count
+                node_id, label, cls_name = m.group(1), m.group(2), m.group(3)
+                is_dark = (cls_name in dark_classes) or (node_id in dark_nodes)
+                if not is_dark:
+                    bg_m = re.search(r"background(?:-color)?:\s*(#[0-9a-fA-F]{3,6}|[a-zA-Z]+)", label)
+                    is_dark = bool(bg_m and is_dark_color(bg_m.group(1)))
+                has_explicit_white = bool(re.search(r"color:\s*(#ffffff|#fff|white)", label, re.IGNORECASE))
+                if is_dark and not has_explicit_white:
+                    fixed_count += 1
+                    suffix = f":::{cls_name}" if cls_name else ""
+                    return f'{node_id}["<div style=\'color:#ffffff;\'>{label}</div>"]{suffix}'
+                return m.group(0)
 
-                    has_explicit_white = bool(
-                        re.search(r"color:\s*(#ffffff|#fff|white)", label, re.IGNORECASE)
-                        or "<div style='color:#ffffff;'>" in label
-                        or '<div style="color:#ffffff;">' in label
-                    )
-                    if is_dark and not has_explicit_white:
-                        fixed_count += 1
-                        new_label = f"<div style='color:#ffffff;'>{label}</div>"
-                        suffix = f":::{cls_name}" if cls_name else ""
-                        return f'{node_id}["{new_label}"]{suffix}'
-                    return m.group(0)
-
-                mod_line = re.sub(
+            for k in range(i + 1, j):
+                lines[k] = re.sub(
                     r'([a-zA-Z0-9_\-]+)\s*\["([^"]+)"\](?::::([a-zA-Z0-9_\-]+))?',
                     replace_node,
-                    line,
+                    lines[k],
                 )
-                new_lines.append(mod_line)
-            else:
-                new_lines.append(line)
+            i = j + 1
 
         if fixed_count > 0:
-            file_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+            with open(file_path, "w", encoding="utf-8", newline="") as fh:
+                fh.write(nl.join(lines))
         return fixed_count
 
     def run(self, fix: bool = False) -> list[MermaidLintIssue]:
