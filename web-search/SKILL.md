@@ -1,6 +1,6 @@
 ---
 name: web-search
-description: Search the web or fetch a specific URL's content. Use whenever the user asks to search/検索して/調べて the web, look something up online, or fetch/取得して the contents of a URL. Defaults to Gemini API (tools/gemini_websearch.py / tools/gemini_webfetch.py in this skill directory), falling back to Claude's native WebSearch/WebFetch tools when Gemini fails or its output is insufficient.
+description: Search the web or fetch a specific URL's content. Use whenever the user asks to search/検索して/調べて the web, look something up online, or fetch/取得して the contents of a URL. Defaults to Gemini API (tools/gemini_websearch.py / tools/gemini_webfetch.py in this skill directory), falling back to Claude's native WebSearch/WebFetch tools when Gemini fails or its output is insufficient. For multi-query / multi-page research (2+ topics, heavy pages, search→fetch→re-search), use tools/gemini_parallel.py to delegate each topic to a headless Gemini CLI agent in parallel instead of spawning Claude subagents (saves Claude tokens).
 ---
 
 # web-search
@@ -11,7 +11,7 @@ Web検索・URL取得を行うスキル。**標準ではGemini APIを使い、�
 
 このスキルの主目的は**Claude側トークンの節約ではなく**、ClaudeネイティブのWebSearchツールが持つ**セッション単位の呼び出し回数上限**を消費しないことにある。頻繁にWeb検索が必要な作業（複数企業の並行調査、繰り返しの再検索等）でClaude側のクォータが枯渇するのを避けるため、既定では別課金・別枠のGemini APIを経由する。
 
-**注意（誤解しやすい点）**: Gemini経由で取得した検索結果・URL本文の要約は、Bashツールの標準出力として通常通りこのセッションのコンテキストに読み込まれる。つまり**Claude側のトークン消費自体はこのスキルを使っても減らない**——減るのはWebSearchツールの呼び出し回数（クォータ）だけである。「トークンを節約したいから」という理由でこのスキルを選ぶのは目的の誤解であり、正しい動機は「WebSearchツールの残り回数を温存したいから」である。
+**注意（誤解しやすい点）**: `gemini_websearch.py`/`gemini_webfetch.py`の出力はBashの標準出力としてそのままこのセッションのコンテキストに読み込まれるため、単発呼び出しではClaude側のトークン消費は出力量の分だけ発生する。**Claude側のトークンを大きく減らすのは`gemini_parallel.py`（Gemini CLIエージェントへの並列委譲）**で、検索結果やページ本文はGemini側で処理され、Claude側には結論の先頭部分だけが載る（下記「Claude側のコンテキスト消費を抑えたい場合」参照）。
 
 なお、ClaudeのWebFetchは自己署名証明書エラー等で失敗するサイトがあるが、Geminiの`url_context`ツールはGoogle側の取得経路を使うため成功することがある、という副次的なメリットもある。
 
@@ -86,9 +86,24 @@ uv run python tools/gemini_webfetch.py "<URL>" "このページに記載され�
 - **`--no-audit`で文単位の裏付け監査ブロックを省略する。** 事実確認が目的でない一般検索（「◯◯とは」程度）では、出典一覧と同等かそれ以上の行数になりがちなこのブロックが不要なことが多い。数値・固有名詞の正確性を重視する検索では省略しない。
 - **`--no-sources`で出典URL一覧を省略する。** 出典を一次資料として記録する予定がない検索では、URLリスト自体が不要な行数を占める。記録・検証目的の検索では省略しない。
 - **要約でなく欲しい情報だけを狙ったクエリ・追加指示を書く。** `--max-chars`は生成された回答を後から切り詰めるだけだが、クエリ自体に「一言で」「表形式で数値だけ」のように出力形式を指定すると、Gemini側の生成段階で回答が短くなる（`gemini_webfetch.py`の追加指示についても同様、下記の例を参照）。
-- **複数企業・複数URLにまたがる調査、または1件でも重いページ（PDF・長文記事）の要約は、自分で1件ずつBashを叩くのではなくAgent（`subagent_type: "fork"`または`general-purpose`）に委譲する。** サブエージェントに投げたfetch結果・検索結果はサブエージェント側のコンテキストに閉じ、メインセッションにはサブエージェントがまとめた結論だけが返る。3件以上のURL・企業を並行して調べる場合、または1件でも生の要約が長大になりそうな場合はこちらを優先する（cf. `solution-research`スキルの並列verify-agentパターン）。
+- **複数企業・複数URLにまたがる調査、または1件でも重いページ（PDF・長文記事）の要約は、Claudeのサブエージェント（Agent）ではなく `gemini_parallel.py` でGemini CLIエージェントに並列委譲する。** Claudeのサブエージェントは1体ごとにシステムプロンプト・ツール定義・取得ページ本文がClaudeのトークンとして積み上がるため、Web調査では使わない。`gemini_parallel.py` は各調査を独立したGemini CLI（headless・読み取り専用の`--approval-mode plan`）で実行し、検索・ページ取得・要約をすべてGemini側で完結させる。Claude側に載るのは各調査の先頭N文字とファイルパスだけ。
 
-判断の目安: 1〜2件の軽い単発確認は`--max-chars`＋`--no-audit`＋`--no-sources`＋絞ったクエリで十分。3件以上の並行調査、または結果を後で全文参照する必要がない調査・重いページの要約はAgent委譲に切り替える。
+判断の目安: 1〜2件の軽い単発確認は`gemini_websearch.py`＋`--max-chars`＋`--no-audit`＋`--no-sources`＋絞ったクエリ。2件以上の並行調査・重いページの要約・多段の調べもの（検索→取得→再検索）は`gemini_parallel.py`。Claudeのサブエージェントは、Gemini側が両方失敗した場合の最後の手段に限る。
+
+### 並列Web調査（Gemini CLIエージェントに丸ごと委譲）
+
+```bash
+cd "C:/Users/iidam/claude-gemini-skills/web-search" && uv run python tools/gemini_parallel.py -o "<scratchpad>/research" "調査1" "調査2" "調査3"
+# 調査が多い場合: 1行1調査のファイル（空行・#行は無視）
+uv run python tools/gemini_parallel.py -o "<scratchpad>/research" -f queries.txt
+```
+
+- 各調査は `<out_dir>/qNN.md` に保存される（stderrは `qNN.stderr.log`）。標準出力は `[qNN] OK/FAIL 秒数 パス` と各回答の先頭 `--preview` 文字（既定400、`0`で非表示）だけ。全文が要る調査だけ後から `qNN.md` を読む。
+- 回答中のGoogle転送URL（`vertexaisearch...grounding-api-redirect`）は実URLに自動置換される。解決できなかったものは `(出典URL解決失敗)` になる。
+- オプション: `-j`並列数（既定4）、`-m`モデル、`--max-lines`回答の行数上限の指示（既定10）、`--timeout`1調査の秒数上限（既定300）。1件でも失敗すると exit 1。
+- **調査内容は具体的に書く**（対象・期間・欲しい項目・出力形式）。プロンプトには「出典にない事実の推測禁止・記載なしは記載なし・完全URL付き・今日の日付」の規律が自動で付く。
+- 所要時間は1件30〜60秒程度で、並列数の範囲なら件数が増えてもほぼ同じ。2件以上ならバックグラウンド実行（Bashの`run_in_background`）にして待つ間に他の作業をしてよい。
+- **Claude側では検証しない**: ノート等に記録する数値・関係性・実在性の主張だけを、`gemini_webfetch.py "<URL>" --check "<主張>"` で個別に裏取りする（これもGemini側で完結）。
 
 ## 判断フロー
 
