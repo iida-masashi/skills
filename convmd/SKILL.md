@@ -1,6 +1,6 @@
 ---
 name: convmd
-description: Convert web sources (articles, SNS posts, video/audio, digital archives) and local Office/PDF files into Obsidian-ready Markdown using the convMD CLI at <convmd-repo>. Use when the user asks to import/取り込んで/変換して a URL or file into Markdown/Vault, mentions convMD by name, or shares a URL from a supported platform (Zenn, Qiita, note, X/Twitter, Wikipedia, GitHub, Reddit, Hacker News, はてなブログ, Substack, Medium, SpeakerDeck, Podcast/RSS, 国書データベース, NDLデジタルコレクション, YouTube, or local audio/video/Office/PDF files).
+description: Convert URLs (note, Zenn, Qiita, X, YouTube, GitHub, NDL, Podcast, etc.) or local Office/PDF/audio/video files into Obsidian Markdown with the convMD CLI. Use when asked to 取り込んで/変換して a URL or file into Markdown/Vault, or when convMD is mentioned.
 ---
 
 # convMD

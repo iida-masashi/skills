@@ -1,6 +1,6 @@
 ---
 name: pe-market-research
-description: Use when researching an industry for PE-style due diligence — building a player/competitor map, checking a company's capital structure and ownership, screening M&A or OEM targets, or sweeping regions for manufacturers not yet on a player list. Symptoms: "this company might be a player too", "does anyone in [country] make this", "is this an independent target or does a competitor have a stake in it", "check if this M&A target list is complete".
+description: "Use for PE-style industry due diligence: player/competitor maps, ownership and capital structure checks, M&A/OEM target screening, and regional sweeps for missing manufacturers."
 ---
 
 # PE Market Research

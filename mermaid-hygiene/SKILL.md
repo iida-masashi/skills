@@ -1,7 +1,7 @@
 ---
 aliases: [mermaid-hygiene, mermaid-validator, マーメイド検証スキル, Mermaid視認性・構文チェックスキル]
 name: mermaid-hygiene
-description: Mermaidダイアグラムの構文エラー防止、Mermaid 11 レキサー互換性（subgraph ID記号排除、双方向ラベル等）、および背景色と文字色のコントラスト比・視認性（暗い背景ノードは白文字・白に近い背景や fill 未指定のノードは黒文字＋淡色fill明示、Quartzダーク/ライトテーマ両立）を検査・担保・自動検証するための専門スキル。
+description: Mermaid 図の構文エラー（Mermaid 11 互換）と、背景色・文字色のコントラスト（Quartz のダーク/ライト両立）を検査・自動修正する。
 ---
 
 # Mermaid Hygiene & Contrast Validation 専門スキルガイド

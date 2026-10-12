@@ -1,6 +1,6 @@
 ---
 name: gcp-docker-deploy
-description: Deploy any Dockerized app (Streamlit, FastAPI, Node.js, React+nginx, etc.) to Google Cloud via GitHub Actions — Cloud Run or a Compute Engine VM, with Workload Identity Federation (preferred) or a service-account JSON key. Use this whenever the user wants to "deploy to Cloud Run", "deploy to GCP", "GCPにデプロイ", "set up GitHub Actions to build a Docker image and push to GCP", asks how to get a container running on Google Cloud, wants CI/CD for a containerized app, or is debugging a broken/silent GCP deploy workflow (e.g. a workflow that never triggers, ModuleNotFoundError inside a container that works locally, or an IAM/auth failure in Actions). Also use it when the user is choosing between Cloud Run and a VM for a new deployment, or wants to compare Workload Identity Federation against a service-account key.
+description: Deploy a Dockerized app to Google Cloud (Cloud Run or Compute Engine VM) via GitHub Actions with Workload Identity Federation or a SA key. Use for 'GCPにデプロイ', CI/CD setup, or debugging a broken/silent GCP deploy workflow.
 ---
 
 # GCP Docker Deploy

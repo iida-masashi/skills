@@ -1,6 +1,6 @@
 ---
 name: vault-api
-description: Obsidian Local REST API経由でObsidian Vaultを直接操作する。MCPの代替で、Bash経由のPowerShellスクリプト群（vault-search/vault-read/vault-batch-summary/vault-list/vault-append/vault-mkdir/vault-move/vault-delete/vault-orphans/vault-thin-notes）。全文検索・構造化検索・読み取り・複数ファイル一括サマリ・一覧・追記・フォルダ新規作成・見出し相対挿入・リネーム・削除・孤立ノート検出・薄ノート検出をBashツールで実行可能。
+description: Obsidian Local REST API 経由で Vault を操作する PowerShell スクリプト群（検索・読み取り・一覧・追記・フォルダ作成・移動・削除・孤立/薄ノート検出）。
 disable-model-invocation: false
 ---
 

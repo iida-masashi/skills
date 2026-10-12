@@ -1,6 +1,6 @@
 ---
 name: vault-publish
-description: Sync an Obsidian Vault (awa-garden, religion-garden, solution-garden, or cpg-vault) to its Quartz repo's content/, verify a local build, commit, and push to deploy the digital garden. Invoke when the user wants to publish Vault changes, deploy to the Quartz site, or update a public digital garden — for the 阿波説 (awa) Vault, the religion research Vault, the solution (業務ソリューション調査) Vault, or the cpg (CPG統合ナレッジベース／飲料・お菓子・化粧品SCM調査・cosmeを統合済み) Vault. Also handles sync-only/preview requests (no commit/push) via the --sync-only flag — use this skill even when the user just wants to sync or preview locally without publishing.
+description: Sync an Obsidian Vault (awa, religion, solution, cpg) to its Quartz repo, build-check, commit and push to publish the digital garden. Also handles sync-only/preview with --sync-only.
 ---
 
 # vault-publish: Vault → Quartz → 公開パイプライン

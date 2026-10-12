@@ -1,6 +1,6 @@
 ---
 name: web-search
-description: Search the web or fetch a specific URL's content. Use whenever the user asks to search/検索して/調べて the web, look something up online, or fetch/取得して the contents of a URL. Defaults to Gemini API (tools/gemini_websearch.py / tools/gemini_webfetch.py in this skill directory), falling back to Claude's native WebSearch/WebFetch tools when Gemini fails or its output is insufficient. For multi-query / multi-page research (2+ topics, heavy pages, search→fetch→re-search), use tools/gemini_parallel.py to delegate each topic to a headless Gemini CLI agent in parallel instead of spawning Claude subagents (saves Claude tokens).
+description: Web検索・URL取得。Gemini API（gemini_websearch.py / gemini_webfetch.py）を既定に、失敗時は Claude の WebSearch/WebFetch へフォールバック。2件以上・多段の調査は gemini_parallel.py で Gemini CLI に並列委譲する。
 ---
 
 # web-search

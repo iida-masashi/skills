@@ -1,6 +1,6 @@
 ---
 name: value-chain-research
-description: Use when researching an industry's value chain / supply chain — organization structure, brand-vs-SCM (or equivalent) role split, process governance, company IT stack, academic literature survey, regional-vs-HQ decision rights. Symptoms: "この業界のSCMを調べたい", "◯◯社の組織構造とサプライチェーンの関係は", "業界各社が使っているITシステムを比較したい", "調査の観点として足りないものは". Also use when auditing/fact-checking an existing value-chain research Vault, or when consolidating duplicate content across research notes. Applies to any industry, not just cosmetics — SCM, org design, and governance structures generalize across manufacturing/CPG/retail sectors.
+description: "Use when researching an industry's value chain/SCM: org structure, brand-vs-SCM role split, governance, IT stack, literature survey, or auditing/deduplicating a value-chain research Vault."
 ---
 
 # Value Chain Research

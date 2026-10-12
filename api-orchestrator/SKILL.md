@@ -1,6 +1,6 @@
 ---
 name: api-orchestrator
-description: Gemini API と Grok (xAI) API の呼び出しを一本化する Python ラッパー。利用可能なモデルを偵察して3ティア (Specialist / Primary / Utility) を自動選択し、リトライ・プロバイダ間フォールバック・コスト記録・スキルルーティング・構造化出力・Web検索・MCP ツール呼び出しループをまとめて実行する。Gemini か Grok に推論を任せたいとき、両者を切り替えて使いたいときに使う。
+description: Gemini API と Grok (xAI) API を一本化する Python ラッパー（ティア自動選択・フォールバック・コスト記録・構造化出力・Web検索）。Gemini/Grok に推論を任せたいときに使う。
 ---
 
 # API Orchestrator (Gemini / Grok)

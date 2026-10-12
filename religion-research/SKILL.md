@@ -1,7 +1,7 @@
 ---
 aliases: [religion-research, 文化人類学調査スキル, 宗教・食文化・音楽・民族文化調査スキル, 民族誌調査スキル]
 name: religion-research
-description: 宗教（教団・分派・教理）、食文化（郷土料理・食習慣・儀礼食）、音楽（民族音楽・伝承歌謡・儀礼音楽）、土着の民族文化（親族制度・通過儀礼・工芸・口承伝承）を、文化人類学・民族誌の調査作法に沿って調査・分析し、D:\Vault\religion Vault（宗教研究Vaultから対象を拡張した文化人類学研究Vault）に構造化されたObsidianノートを構築・維持するための高度研究スキル。
+description: "宗教・食文化・音楽・民族文化を文化人類学の作法で調査し、D:\\Vault\\religion Vault に構造化ノートを作成・維持する。"
 ---
 
 # 文化人類学・民族誌研究 (religion-research) 専門スキルガイド

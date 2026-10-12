@@ -1,6 +1,6 @@
 ---
 name: deliverable-review
-description: Use when a management consultant is about to deliver a PowerPoint/Word/PDF to a client and needs a pre-delivery self-check — covering (1) information leakage: file metadata (author/company), hidden slides, speaker notes, tracked changes, PPT/Word comments; (2) AI traces: utm_source=chatgpt URLs, AI boilerplate, knowledge cutoff mentions; (3) accuracy: dead URLs, chart/table total integrity, unit mixing, unverified numeric/date/ranking claims, missing citations; (4) consulting style: title messaging, term consistency, prohibited expressions, layout (fonts/tiny text/page numbers); (5) strategy quality: title length, bullet overload (Miller's 7±2), agenda-vs-sections mismatch, katakana overload, missing assumptions in forecasts, missing executive summary; (6) optional Gemini 3.8 Flash qualitative review covering pyramid principle, MECE, So What? / Why So?, action concreteness, narrative balance, client perspective, logic leaps, framework consistency (3C/4P/PEST/SWOT/Five Forces), feasibility (resources/risks/dependencies/milestones).
+description: "Pre-delivery self-check for consultant PowerPoint/Word/PDF deliverables: information leakage (metadata, hidden slides, notes, comments), AI traces, accuracy (dead URLs, totals, unverified claims), consulting style and storyline quality, with optional Gemini qualitative review."
 ---
 
 # deliverable-review

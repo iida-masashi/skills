@@ -1,6 +1,6 @@
 ---
 name: solution-market-research
-description: Use when researching and comparing software/system solutions (SaaS, パッケージ製品, ベンダーサービス) for a specific functional need — building a vendor comparison table, an RFP候補一覧, a Fit/Gap適合度マトリクス, or fact-checking an existing AI-generated solution survey. Symptoms: "◯◯向けのシステムを比較したい", "RFPを作りたいので候補ベンダーを調べたい", "この調査資料はAIが作ったので裏取りしたい", "存在しない製品名が混ざっていないか確認したい", "各社の導入企業数・シェアを調べたい". Applies to any functional domain (WMS/TMS, ERP, CRM, MES, etc.), not just logistics.
+description: "Use when comparing software/SaaS/vendor solutions for a functional need: vendor comparison tables, RFP候補一覧, Fit/Gap matrices, or fact-checking an AI-generated solution survey (fake products, share figures)."
 ---
 
 # Solution Market Research

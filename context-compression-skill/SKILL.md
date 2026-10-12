@@ -1,6 +1,6 @@
 ---
 name: context-compression-skill
-description: Use when a tool call is likely to produce large output — builds, test suites, package installs, long logs, files over ~300 lines, DataFrames/SQL results, wide repo searches, or multi-page web research — to filter it before it enters the context window without losing exit codes or failure evidence. 大量出力（ビルド・テスト・ログ・巨大ファイル・表データ・広域検索・Web調査）をコンテキストに入れる前に圧縮したいとき。
+description: Use before builds, test suites, installs, long logs, files over ~300 lines, SQL/DataFrame output or wide searches, to filter output before it enters context without losing exit codes or failure evidence. 大量出力の圧縮。
 ---
 
 # Context Compression Skill
