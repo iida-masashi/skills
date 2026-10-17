@@ -1,18 +1,23 @@
 # convMD Skill
 
-Webソース（記事・SNS投稿・動画/音声・デジタルアーカイブ）とローカルのOffice/PDFファイルをObsidian向けMarkdownに変換する **convMD CLI**（`<convmd-repo>`、uv管理・venv同梱）を呼び出すためのSkill。このフォルダ自体にはコードは含まれない——コマンドの組み立て方に関する知識のみを提供し、convMD本体のコード編集はここでは行わない。
+Webソース（記事・SNS投稿・動画/音声・デジタルアーカイブ・EDINET有価証券報告書）とローカルのOffice/PDFファイルをObsidian向けMarkdownに変換する **convMD CLI**（リポジトリ: [https://github.com/iida-masashi/convMD](https://github.com/iida-masashi/convMD)、uv管理）を呼び出すためのSkill。なお、`convMD` 本体リポジトリのルート直下にも同一の `SKILL.md` が同梱されており、`convMD` リポジトリ単体でも1リポジトリ完結で利用できる。
 
 | Document | Purpose |
 |---|---|
 | [SKILL.md](SKILL.md) | プラットフォーム別オプション判定・よく使うフラグ・診断手順・判断指針 |
 
-convMD自体の実装詳細（モジュール構成、Gemini呼び出し規約など）は別リポジトリの `<convmd-repo>/CLAUDE.md` と `README.md` を参照。
+convMD自体の実装詳細（モジュール構成、Gemini呼び出し規約など）は本体リポジトリ（[https://github.com/iida-masashi/convMD](https://github.com/iida-masashi/convMD)）の `CLAUDE.md` と `README.md` を参照。
 
 ## Quick Start
 
 ```bash
+# 初回のみ: convMD 本体のクローンとセットアップ
+git clone https://github.com/iida-masashi/convMD.git "<convmd-repo>"
 cd "<convmd-repo>"
-uv run python -m convmd.cli <URLまたはファイルパス> [オプション]
+uv sync
+
+# 変換の実行
+uv run python -m convmd.cli <URLまたはファイルパスまたはedinet:指定> [オプション]
 ```
 
 環境不備が疑われる場合はまず診断を走らせる（終了コードは常に0のため、成否は出力の`[FAIL]`/`[MISSING]`で判定する）。
@@ -31,20 +36,21 @@ uv sync --extra render    # JS動的レンダリングサイト向け（+ playwr
 
 ## 対応ソース
 
-URLドメインは自動判別されるため、ほとんどの場合は素のURLを渡すだけでよい。追加オプションが要る/推奨されるケースのみ:
+URLドメイン/プレフィックスは自動判別されるため、ほとんどの場合は素のURLを渡すだけでよい。追加オプションが要る/推奨されるケースのみ:
 
 | ソース | 追加オプション | 備考 |
 |---|---|---|
+| EDINET (`edinet:<書類管理番号\|証券コード\|EDINETコード>`) | `--edinet-days N`（既定400） | 要 `EDINET_API_KEY`。XBRL→CSVから経営指標・財務諸表を表に無変換転記 |
 | 国書データベース (`kokusho.nijl.ac.jp`) | `--ocr`、`--bilingual` | `--ocr`なしだと画像ダウンロードのみ |
-| NDLデジタルコレクション (`dl.ndl.go.jp`) | 同上 | IIIF経由、国書DBと同じ仕組み |
+| NDLデジタルコレクション (`dl.ndl.go.jp`) / 国立公文書館 (`digital.archives.go.jp`) | 同上 | IIIF経由、国書DBと同じ仕組み |
 | SpeakerDeck | （なし） | Gemini OCRが自動実行される |
 | YouTube (`youtu.be` / `youtube.com`) | （なし） | 字幕を自動抽出 |
 | X/Twitter (`x.com` / `twitter.com`) | （なし、要 `XAI_API_KEY`） | AI再構成のため出力に要検証タグが付く |
 | ローカル音声/動画 (`.mp3/.m4a/.mp4`等) | （なし、要 `uv sync --extra whisper` + FFmpeg） | faster-whisperでオフライン文字起こし |
 | Podcast/RSS (`*.rss`, `/feed`) | `--podcast-limit N`（既定1） | 最新エピソードのMP3を取得して文字起こし |
 | JS動的レンダリングが必要な一般サイト | `--render-js`（要 `uv sync --extra render` + playwright install） | 静的抽出が失敗する/空になる場合に検討 |
-| 上記以外で静的抽出が失敗しそうなサイト | `--ai-extract` | Gemini DOM解析にフォールバック（自動でも失敗時/200バイト未満で発動） |
-| Office/PDF (`.pptx/.xlsx/.docx/.pdf`) | （なし） | markitdown経由 |
+| 上記以外で静的抽出が失敗しそうなサイト | `--ai-extract` | Gemini DOM解析にフォールバック（自動でも失敗時/本文100文字未満で発動） |
+| Office/PDF (`.pptx/.xlsx/.docx/.pdf`) | （なし） | `anydoc`（優先） / `markitdown`（フォールバック）経由 |
 | 一般的なニュース/ブログ | （なし） | Readability相当で抽出 |
 
 他にZenn, Qiita, note, Wikipedia, GitHub, Reddit, Hacker News, はてなブログ, Substack, Mediumにも対応（frontmatter記載）。
