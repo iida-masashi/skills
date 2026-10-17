@@ -21,26 +21,26 @@
        └── extra: dict              (形式別の補助情報。docx: table_loc)
            │
            ▼
-┌─────────────────────────┐
-│ checkers.run_all(doc)   │   10 チェッカー + 戦略ルールを順次実行
-└──────────┬──────────────┘
+┌─────────────────────────────────────────┐
+│ checkers.run_all(doc, strategy=True)    │   基本10チェッカー + 戦略ルール10種を順次実行
+└──────────┬──────────────────────────────┘
            │
            ▼
-     List[Finding]
-       ├── checker: 識別子
-       ├── severity: HIGH/MEDIUM/LOW/INFO
-       ├── category: サブ分類
-       ├── location_label: "Slide 3" 等
-       ├── location_index: 数値
-       ├── evidence: マッチ文字列
-       ├── note: 指摘コメント
-       └── source_handle: 元のshape/cellへのポインタ
-           │
-     ┌─────┴─────┬─────────┬──────────┐
-     ▼           ▼         ▼          ▼
-  レポート    マーキング  サニタイズ  AIチェック JSON
-  review.md   _marked     _sanitized  _aicheck.json
-              .pptx/docx  .pptx/docx/
+     List[Finding]  ◄──── (Web UI: Gemini ON時) ── llm_review.run_llm_review()
+       ├── checker: 識別子                                    ▲
+       ├── severity: HIGH/MEDIUM/LOW/INFO                     │
+       ├── category: サブ分類                                 │
+       ├── location_label: "Slide 3" 等                       │
+       ├── location_index: 数値                               │
+       ├── evidence: マッチ文字列                             │
+       ├── note: 指摘コメント                                 │
+       └── source_handle: 元のshape/cellへのポインタ          │
+           │                                                  │
+     ┌─────┴─────┬─────────┬──────────────────┐               │
+     ▼           ▼         ▼                  ▼               │
+  レポート    マーキング  サニタイズ    AIチェック JSON ──────┘
+  _review.md  _marked     _sanitized    _aicheck.json (+ _aicheck_prompt.md)
+              .pptx/docx  .pptx/docx/   (Claude Code 自己レビュー / Gemini 入力)
                           pdf
 ```
 
@@ -48,12 +48,21 @@
 
 ### `review.py` — CLIエントリ
 
-- 引数解析 (`argparse`)
+- 引数解析 (`argparse`: `--skip-liveness`, `--out-dir`, `--sanitize`, `--ai-check-json`, `--no-strategy`, `--fail-on`)
 - 拡張子判定
 - 各フェーズの呼び出し順序制御
 - Markdownレポート生成（サマリ表、チェッカー別詳細）
 - コンソールサマリ表示
 - 終了コード: `--fail-on LEVEL` 指定時に該当以上の指摘があれば 1、入力エラー・依存不足・サニタイズ結果破損は 2
+
+### `webui/app.py` — Streamlit Web UI
+
+- `.pptx` / `.docx` / `.pdf` のブラウザアップロードと一時ファイル展開
+- サイドバーでのチェッカー個別 ON/OFF 制御（`url-liveness`, `metadata`, `copyright` は既定OFF）
+- ローカル戦略ルール (`strategy_checks`) と Gemini 3.8 Flash 定性レビュー (`llm_review`) の切り替え
+- `(file_hash, options)` をキーとした `st.session_state` キャッシュ（フィルタ変更時の再実行・API再呼び出しを防止）
+- Cloud Run 実行判定（環境変数 `K_SERVICE` の有無によるキャプション切り替え）
+- 重要度・チェッカー・スライド別のインタラクティブフィルタと、Markdownレポート / マーキング済みファイル / サニタイズ済みファイル / AIチェック JSON のダウンロード提供
 
 ### `extractors.py` — テキスト抽出
 
@@ -93,7 +102,7 @@
 
 - 単位混在（通貨単位、%/pp）検出
 - pptx ネイティブチャートの読み取り（python-pptx の chart API）と合計検証
-- 表の行/列合計の再計算（pptx/docx/pdfテーブル）
+- 表の行/列合計の再計算（pptx/docx/pdfテーブル、年度ヘッダ・計画行・小計二重計上・▲マイナス表記・構成比列の除外ロジック込み）
 
 ### `metadata.py` — メタデータ
 
@@ -127,11 +136,34 @@
 - `check_font_uniformity`: フォント3種以上/5種以上
 - `check_tiny_font`: 8pt/10pt未満検出
 
+### `strategy_checks.py` — 戦略コンサル品質ルール（ローカル完結・10種）
+
+LLMを使わずに正規表現・文字数・構造カウントで高速判定するルール群（`checker="strategy"`, `category="strategy/*"`）:
+- `check_title_length`: タイトル長超過（40文字超）
+- `check_title_multiple_sentences`: タイトル内の句点・複数文混在（1スライド1メッセージ違反）
+- `check_vague_title`: 主語・結論のない曖昧タイトル（「〜について」「現状」「課題」単体など）
+- `check_bullet_overload`: 1スライド内の箇条書き/段落過多（Miller's Law: 9個超）
+- `check_conclusion_missing`: 資料末尾に結論・まとめ・Next Steps スライドが欠落
+- `check_agenda_vs_sections`: アジェンダ項目と本編セクション見出しの乖離
+- `check_deck_too_sparse`: 文字量が極端に少なく図表もないスカスカなスライド
+- `check_katakana_overload`: カタカナ語密度（25%以上かつ許容語除外後5語以上）の過多検出
+- `check_assumptions_missing`: 予測・試算・市場規模等を述べるスライドでの前提条件・算出根拠の未記載
+- `check_executive_summary_missing`: 5スライド以上のPPTXで冒頭4スライド以内にエグゼクティブサマリー/要旨が欠落
+
 ### `ai_check_extract.py` — AIチェック 構造抽出
 
-- 各スライドを role 分類（cover/agenda/company-profile/team-profile/problem/solution/benefit/schedule/team/pricing/appendix/content）
-- body_paragraphs / bullets / tables / has_image / has_chart / speaker_notes を JSON 化
-- `write_prompt_hint`: Claude Code 向けレビュー手順書を出力
+外部LLMを呼ばずに、Claude Code の自己レビューや `llm_review.py` の入力となる構造化 JSON (`_aicheck.json`) と手順書 (`_aicheck_prompt.md`) を生成する:
+- `extract_structure_pptx`: 各スライドを role 分類（cover/agenda/company-profile/team-profile/problem/solution/benefit/schedule/team/pricing/conclusion/appendix/content）し、`body_paragraphs` / `bullets` / `tables` / `has_image` / `has_chart` / `speaker_notes` を JSON 化
+- `extract_structure_docx`: 見出し（Heading/見出しスタイル）単位でセクション分割し、セクションごとの本文段落 (`body_paragraphs`)・箇条書き・表 (`tables`) を抽出
+- `extract_structure_pdf`: ページ単位で本文テキスト (`body_paragraphs`) と表 (`tables`) を抽出
+- `write_prompt_hint`: Claude Code 等のエージェント向け 15 観点レビュー手順書 (`_aicheck_prompt.md`) を出力
+
+### `llm_review.py` — Gemini 3.8 Flash 定性レビュー
+
+Web UI（または直接呼び出し）から `_aicheck.json` を読み込み、`google-genai` SDK 経由で Gemini（既定 `gemini-3.8-flash`）に Tier-1 戦略コンサル MD/Partner 視点の定性レビューを実行させる（`checker="llm-review"`, `category="llm/*"`）:
+- **15観点の網羅レビュー**: `pyramid`, `mece`, `so-what`, `issue-tree`, `logic-leap`, `data-rigor`, `framework`, `action`, `feasibility`, `balance`, `client-view`, `alternatives`, `premise`, `story-line`, `risk-scenario`
+- **構造化 JSON 出力**: `response_mime_type="application/json"` で `overall_assessment`（Key Question、答え明瞭度、ストーリー要約、強み/弱み、提出可否、A〜D評価、Partner一言コメント）と各指摘の `findings`（`quote`, `issue`, `why_it_matters`, `suggestion`, `rewrite_example`）を取得
+- **認証・環境変数制御**: `GOOGLE_API_KEY` / `GEMINI_API_KEY` を環境変数または `.env`（`DELIVERABLE_REVIEW_ENV_FILE`、カレント、スキル直下、ホーム）から読み込み、`GOOGLE_GENAI_USE_VERTEXAI` 等を一時除外して `genai.Client(api_key=..., vertexai=False)` で呼び出す
 
 ### `markers.py` — レビュー用コピー生成
 
@@ -230,12 +262,15 @@ class Finding:
 |---|---|---|
 | extract_pptx | O(shapes) | 0.5〜2秒 |
 | 基本チェッカー（URL/AI/コピ/主張/数値/メタ/内部/作法） | O(n × パターン数) | 1〜3秒 |
+| 戦略ルール（strategy_checks 10種） | O(slides × shapes) | 0.2〜0.5秒 |
 | URL死活 | O(URL数 / 並列度) | URL数次第、10本並列で5秒程度/20URL |
 | レポート生成 | O(findings) | 瞬時 |
 | マーキング書き込み | O(slides) | 0.5〜2秒 |
+| サニタイズ + 再検証 | O(XMLパーツ数) | 0.5〜2秒 |
 | AIチェック JSON | O(shapes) | 0.5〜2秒 |
+| Gemini 3.8 Flash 定性レビュー（Web UI オプション） | O(トークン数) | 10〜25秒（1 APIコール） |
 
-ボトルネックは **URL死活**。スキップには `--skip-liveness` を使う。
+ローカル処理のボトルネックは **URL死活**（スキップには `--skip-liveness` を使う）。Web UI で Gemini 定性レビューを有効にした場合は API 応答待ちが支配的となる。
 
 ## 依存関係
 
@@ -245,8 +280,11 @@ class Finding:
 | `python-docx` | .docx 読み書き | ≥ 1.2.0 |
 | `pdfplumber` | .pdf テキスト/表抽出 | ≥ 0.11.10 |
 | `requests` | URL 死活チェック | ≥ 2.34.2 |
-| `pypdf` | PDF サニタイズ（/Info 削除）| ≥ 6.19.0 |
-| `lxml` | OOXML サニタイズ（python-pptx/docx の依存として導入済み） | ≥ 6.1.3 |
+| `pypdf` | PDF サニタイズ（/Info・/Metadata 削除）| ≥ 6.21.0 |
+| `lxml` | OOXML サニタイズ（XML直接編集） | ≥ 6.1.3 |
+| `streamlit` | Web UI | ≥ 1.66.0 |
+| `google-genai` | Gemini 3.8 Flash 定性レビュー | ≥ 2.31.0 |
+| `python-dotenv` | `.env` からAPIキー読込 | ≥ 1.2.4 |
 
 Tesseract / OCR は **未導入**（画像化資料の扱いは別フェーズの検討事項）。
 
