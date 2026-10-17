@@ -6,14 +6,14 @@ Web検索とURL取得を行うSkill。**標準ではGemini APIを使い、失敗
 |----------|---------|
 | [SKILL.md](SKILL.md) | 判断フロー（Gemini優先→フォールバック）と留意点 |
 
-実体はこのフォルダ配下の `tools/gemini_websearch.py` / `tools/gemini_webfetch.py` の2スクリプトで、このフォルダ自身が独立した軽量uvプロジェクト（`pyproject.toml`、依存は`google-genai`のみ）になっている。APIキー等の認証情報だけは秘密情報のため、既定で`<gemini-workdir>\.env`（作者環境のGemini作業ディレクトリ）を参照する。別環境に持ち込む場合は環境変数`GEMINI_SKILL_ENV_PATH`で`.env`の場所を上書きできる。
+実体はこのフォルダ配下の `tools/gemini_websearch.py` / `tools/gemini_webfetch.py` / `tools/gemini_parallel.py` の3スクリプトで、このフォルダ自身が独立した軽量uvプロジェクト（`pyproject.toml`、依存は`google-genai`および`pydantic`）になっている。APIキー等の認証情報だけは秘密情報のため、既定で`<gemini-workdir>\.env`（作者環境のGemini作業ディレクトリ）を参照する。別環境に持ち込む場合は環境変数`GEMINI_SKILL_ENV_PATH`で`.env`の場所を上書きできる。
 
 ## Quick Start
 
 初回のみ依存解決:
 
-```bash
-cd claude-gemini-skills/web-search && uv sync
+```powershell
+uv sync --directory claude-gemini-skills/web-search
 ```
 
 APIキー/認証は既定で `<gemini-workdir>\.env` から自動読み込みされる（`GEMINI_SKILL_ENV_PATH`で上書き可）。両スクリプトとも起動時に以下の順で認証情報を解決する。
@@ -28,11 +28,11 @@ APIキー/認証は既定で `<gemini-workdir>\.env` から自動読み込みさ
 
 ### Web検索
 
-```bash
-cd claude-gemini-skills/web-search && uv run python tools/gemini_websearch.py "検索クエリ"
+```powershell
+uv run --directory claude-gemini-skills/web-search python tools/gemini_websearch.py "検索クエリ"
 ```
 
-出力: （出典0件の場合は先頭に⚠️検索未実行警告） + Geminiの回答本文 + `--- 検索クエリ ---`（Geminiが実際にGoogle検索した語句） + `--- 出典 ---`（実URL解決済み） + `--- 文単位の裏付け監査 (Grounding Audit) ---`（Status: 帰属あり・未検証 / WARNING / 監査不能）。
+出力: （出典0件の場合は先頭に`[WARNING]`検索未実行警告） + Geminiの回答本文 + `--- 検索クエリ ---`（Geminiが実際にGoogle検索した語句） + `--- 出典 ---`（実URL解決済み） + `--- 文単位の裏付け監査 (Grounding Audit) ---`（Status: 帰属あり・未検証 / WARNING / 監査不能）。
 
 追加フラグ:
 - `--json` — 回答、出典、検索クエリ、`grounded`フラグ、裏付け監査結果をJSONで出力する（`--verify-claim`併用時は`claim_checks`キーが`{per_claim, per_source}`形式で追加される）。Agent側で出典を反復処理したい場合に使う。
@@ -40,28 +40,28 @@ cd claude-gemini-skills/web-search && uv run python tools/gemini_websearch.py "�
 - `--thinking-level {minimal,low,medium,high}` — 思考プロセス（Thinking）の深さを指定する（既定はモデル既定値。`gemini-3.8-flash`は既定でMEDIUM）。legacyな`thinking_budget`とは同時指定できないため`thinking_level`のみをサポートする。
 - `--no-resolve` — 出典URLのリダイレクト実URL逆引き解決を無効化する。
 - `--no-sources` — 出典URL一覧（`--- 出典 ---`）の表示を省略し件数のみ表示する（コンテキスト節約。`--json`時は`sources`キー自体を省く）。`--verify-claim`の出典URL内訳表示には影響しない。
-- `--verify-claim` — 回答本文中でgrounding済みの文をclaim単位とし、その出典URLごとに1回だけ問い合わせて構造化出力（JSON Schema）で判定する。「裏付けあり」判定には原文引用（quote）を必須とし、quoteが空なら自動格下げする。同じURLに複数claimが帰属していてもURLあたり1回にまとめるため、`text[:500]`のような回答の打ち切りは発生しない。claimごとの最終判定は複数出典の結果を集約する（1出典でも裏付けあり→裏付けあり、全出典が裏付けなし→裏付けなし、それ以外→不明）。出典URLへの問い合わせは並列実行（最大4並列）。
+- `--verify-claim` — 回答本文中でgrounding済みの文をclaim単位とし、その出典URLごとに1回だけ問い合わせて構造化出力（JSON Schema）で判定する。「裏付けあり」判定には原文引用（quote）を必須とし、quoteが空または「なし」「N/A」等のプレースホルダなら自動格下げする。同じURLに複数claimが帰属していてもURLあたり1回にまとめるため、`text[:500]`のような回答の打ち切りは発生しない。claimごとの最終判定は複数出典の結果を集約する（1出典でも裏付けあり→裏付けあり、全出典が裏付けなし→裏付けなし、それ以外→不明）。出典URLへの問い合わせは並列実行（最大4並列）。
 - `--refute` — クエリを「この主張を否定・反証する情報がないか」という反証志向のプロンプトに自動変換してから検索する。「AとBに関係がある」のような一文の真偽を疑うときに使う。
 - `--model MODEL` — 使用するGeminiモデルを指定する（既定: `gemini-3.8-flash`）。`--verify-claim`の裏付けチェックにも同じモデルが使われる。
 
 ### URL取得（WebFetch相当）
 
-```bash
-cd claude-gemini-skills/web-search && uv run python tools/gemini_webfetch.py "<URL>" ["追加の指示（省略可）"]
+```powershell
+uv run --directory claude-gemini-skills/web-search python tools/gemini_webfetch.py "<URL>" ["追加の指示（省略可）"]
 ```
 
 追加の指示を省略した場合のデフォルトは要約＋グラウンディング規律＋取得失敗トークン(`RETRIEVAL_FAILED`)指示。
 ※GoogleのリダイレクトURL（`vertexaisearch.cloud.google.com/grounding-api-redirect/...`）が渡された場合も自動で実URLへ逆引き解決してから取得します。
 
-出力: `--- 取得ステータス ---`（`URL_RETRIEVAL_STATUS_SUCCESS` / `FAILED` 等のステータスと実際に取得したURL`retrieved_url`。取得情報が無い場合もその旨を表示） + SUCCESS以外または取得URLのホスト不一致の場合は⚠️取得失敗警告 + Geminiの回答本文。
+出力: `--- 取得ステータス ---`（`URL_RETRIEVAL_STATUS_SUCCESS` / `FAILED` 等のステータスと実際に取得したURL`retrieved_url`。取得情報が無い場合もその旨を表示） + SUCCESS以外または取得URLのホスト不一致の場合は`[WARNING]`取得失敗警告 + Geminiの回答本文。
 
 追加フラグ:
-- `--check "<主張>"` — 要約の代わりに、この1URLの内容が指定した主張を裏付けるかを検証する。主張は項目単位に分解され、構造化出力（JSON Schema）で判定される。「裏付けあり」には原文引用（quote）を必須とし、quoteが空なら自動的に「不明」へ格下げする。特定の1ページに対して単発で「本当にそう書いてあるか」を確認したいときに使う（`gemini_websearch.py --verify-claim`は複数出典を横断する場合向け）。自由記述の追加指示とは同時指定不可。
+- `--check "<主張>"` — 要約の代わりに、この1URLの内容が指定した主張を裏付けるかを検証する。主張は項目単位に分解され、構造化出力（JSON Schema）で判定される。「裏付けあり」には原文引用（quote）を必須とし、quoteが空またはプレースホルダなら自動的に「不明」へ格下げする。特定の1ページに対して単発で「本当にそう書いてあるか」を確認したいときに使う（`gemini_websearch.py --verify-claim`は複数出典を横断する場合向け）。自由記述の追加指示とは同時指定不可。
 - `--json` — `--check`使用時、結果を`{url, items: [{claim, verdict, quote, detail}], statuses, fetch_ok}`のJSONで出力する。
 - `--model MODEL` — 使用するGeminiモデルを指定する（既定: `gemini-3.8-flash`）。
 - `--thinking-level {minimal,low,medium,high}` — 思考プロセス（Thinking）の深さを指定する（既定はモデル既定値）。
 
-**取得ステータスの判定基準**: `URL_RETRIEVAL_STATUS_SUCCESS`であっても、実際に取得できたページ（`retrieved_url`）のホスト名が要求したURLのホスト名と異なる場合は「取得失敗の疑い」として扱う（`--check`では自動的に「不明」へ格下げ）。ログイン壁や無関係なページへのリダイレクトで「何かは取れたがページは読めていない」ケースをSUCCESS扱いにしないための措置。
+**取得ステータスの判定基準**: `URL_RETRIEVAL_STATUS_SUCCESS`であっても、実際に取得できたページ（`retrieved_url`）の登録ドメイン（組織ドメイン）が要求したURLのドメインと異なる場合は「取得失敗の疑い」として扱う（`--check`では自動的に「不明」へ格下げ。同一組織のサブドメイン間リダイレクトや未解決の`grounding-api-redirect`経由は許容）。ログイン壁や無関係なページへのリダイレクトで「何かは取れたがページは読めていない」ケースをSUCCESS扱いにしないための措置。
 
 ## Highlights
 
@@ -79,8 +79,8 @@ cd claude-gemini-skills/web-search && uv run python tools/gemini_webfetch.py "<U
 
 ## 実行例
 
-```bash
-$ cd claude-gemini-skills/web-search && uv run python tools/gemini_websearch.py "Gemini 3.6 Flash リリース日"
+```powershell
+$ uv run --directory claude-gemini-skills/web-search python tools/gemini_websearch.py "Gemini 3.6 Flash リリース日"
 (Geminiによる回答本文)
 
 --- 検索クエリ (web_search_queries) ---
@@ -96,22 +96,22 @@ Status: 帰属あり・未検証 (すべての主要文章にWeb出典への帰�
 ```
 
 
-```bash
-$ cd claude-gemini-skills/web-search && uv run python tools/gemini_webfetch.py "https://example.com/article"
-(このページの内容を詳しく要約して、の回答本文)
-
+```powershell
+$ uv run --directory claude-gemini-skills/web-search python tools/gemini_webfetch.py "https://example.com/article"
 --- 取得ステータス ---
 URL_RETRIEVAL_STATUS_SUCCESS  https://example.com/article
+
+(このページの内容を詳しく要約して、の回答本文)
 ```
 
-```bash
-$ cd claude-gemini-skills/web-search && uv run python tools/gemini_websearch.py "A社の創業者はB財団の理事を務めている" --refute
+```powershell
+$ uv run --directory claude-gemini-skills/web-search python tools/gemini_websearch.py "A社の創業者はB財団の理事を務めている" --refute
 (反証志向のプロンプトに変換されて実行される。肯定情報より否定・矛盾する情報を優先的に探し、
  混同の背景〈似た名前の別法人、社名の連想等〉まで報告する)
 ```
 
-```bash
-$ cd claude-gemini-skills/web-search && uv run python tools/gemini_websearch.py "架空商事株式会社の本社所在地" --verify-claim
+```powershell
+$ uv run --directory claude-gemini-skills/web-search python tools/gemini_websearch.py "架空商事株式会社の本社所在地" --verify-claim
 (grounding済みの文をclaim単位とし、その出典URLごとに1回問い合わせて集約した判定が付く)
 
 --- 出典の裏付けチェック（--verify-claim、grounding済みの文をclaim単位に集約して判定） ---
@@ -124,8 +124,8 @@ $ cd claude-gemini-skills/web-search && uv run python tools/gemini_websearch.py 
         ページ下部に住所・電話番号が明記されている。
 ```
 
-```bash
-$ cd claude-gemini-skills/web-search && uv run python tools/gemini_webfetch.py "https://ja.wikipedia.org/wiki/架空商事" --check "架空商事の本社は東京都千代田区にある"
+```powershell
+$ uv run --directory claude-gemini-skills/web-search python tools/gemini_webfetch.py "https://ja.wikipedia.org/wiki/架空商事" --check "架空商事の本社は東京都千代田区にある"
 (1URL単発での主張検証。構造化出力で判定され、「裏付けあり」には原文引用が付く)
 
 [1] 裏付けあり  架空商事の本社は東京都千代田区にある

@@ -27,75 +27,75 @@ Web検索・URL取得を行うスキル。**標準ではGemini APIを使い、�
 * **取得失敗の明示**: `gemini_webfetch.py`は`URL_RETRIEVAL_STATUS_SUCCESS`以外の場合、要約本文より前に取得ステータスと警告を表示する。
 * **高速実URL並列解決**: 302 Location ヘッダーの即時抽出により、巨大PDFや403遮断サイトでも実URLの欠落・タイムアウトなし（最大8並列）。
 
-このスキルディレクトリ自体が独立したuvプロジェクト（依存は`google-genai`のみ）。初回のみ `cd` して `uv sync` で依存解決する。
+このスキルディレクトリ自体が独立したuvプロジェクト（依存は`google-genai`および`pydantic`）。初回のみ `uv sync --directory "C:/Users/iidam/claude-gemini-skills/web-search"` で依存解決する。
 
 両スクリプトはAPIキー/Vertex AI設定を既定で `C:\Users\iidam\gemini\.env` から自動読み込みする（環境変数`GEMINI_SKILL_ENV_PATH`でパスを上書き可能）。
 
 ### Web検索（検索クエリを投げて要約・出典・裏付け監査を得る）
 
-```bash
-cd "C:/Users/iidam/claude-gemini-skills/web-search" && uv run python tools/gemini_websearch.py "検索クエリ"
+```powershell
+uv run --directory "C:/Users/iidam/claude-gemini-skills/web-search" python tools/gemini_websearch.py "検索クエリ"
 ```
 
-出力: （出典0件の場合は先頭に⚠️検索未実行警告）+ Geminiによる回答本文 + `--- 検索クエリ ---` + `--- 出典 ---` + `--- 文単位の裏付け監査 (Grounding Audit) ---`（Status: 帰属あり・未検証 / WARNING / 監査不能）。
+出力: （出典0件の場合は先頭に`[WARNING]`検索未実行警告）+ Geminiによる回答本文 + `--- 検索クエリ ---` + `--- 出典 ---` + `--- 文単位の裏付け監査 (Grounding Audit) ---`（Status: 帰属あり・未検証 / WARNING / 監査不能）。
 
 - `--json`: 回答、出典、発行クエリ、裏付け監査結果をJSON形式で出力する。後続処理（Agent側での自動反復）に使う場合はこちら。
 - `--no-audit`: 文単位の裏付け監査表示を省略する（出力をシンプルにしたい場合や極限まで軽量化したい場合）。
 - `--thinking-level {minimal,low,medium,high}`: 思考プロセス（Thinking）の深さを指定する（既定はモデル既定値。`gemini-3.8-flash`は既定でMEDIUM）。複雑な論理・数値突合の精度を上げたい場合は`high`を指定する。legacyな`thinking_budget`パラメータとは同時指定不可のため、このスキルは`thinking_level`のみを使う。
 - `--no-resolve`: 出典URLのリダイレクト解決（実URLへの逆引き）自体を省略し、さらに軽量化する。
 - `--no-sources`: 出典URL一覧（`--- 出典 ---`ブロック）の表示を省略し、件数だけ表示する。一次資料として記録する予定がない一般検索（「◯◯とは」程度の確認）で有効。`--verify-claim`併用時の出典URL内訳表示には影響しない（そちらは検証目的でURLが必要なため）。
-- `--max-chars N`: 回答本文をN文字で打ち切って出力する。このスクリプトの標準出力はBashツール経由でそのままClaude側のコンテキストに読み込まれるため、結論だけ分かればよい場面ではこれで流入量を絞れる（出典一覧・判定結果には影響しない）。
+- `--max-chars N`: 回答本文をN文字で打ち切って出力する。このスクリプトの標準出力はBash/PowerShellツール経由でそのままClaude側のコンテキストに読み込まれるため、結論だけ分かればよい場面ではこれで流入量を絞れる（出典一覧・判定結果には影響しない）。
 
 ### URL取得（特定URLの内容を取得・要約する、WebFetch相当）
 
-```bash
-cd "C:/Users/iidam/claude-gemini-skills/web-search" && uv run python tools/gemini_webfetch.py "<URL>" ["追加の指示（省略可、既定は要約）"]
+```powershell
+uv run --directory "C:/Users/iidam/claude-gemini-skills/web-search" python tools/gemini_webfetch.py "<URL>" ["追加の指示（省略可、既定は要約）"]
 ```
 
-出力: `--- 取得ステータス ---`（`URL_RETRIEVAL_STATUS_SUCCESS`または`FAILED`等と実際に取得できたURL。取得情報が無い場合もその旨を表示）+ SUCCESS以外の場合は⚠️取得失敗警告 + Geminiによる回答本文。なお、GoogleのリダイレクトURL（`vertexaisearch...`）が渡された場合も自動で実URLへ逆引き解決してから取得します。
+出力: `--- 取得ステータス ---`（`URL_RETRIEVAL_STATUS_SUCCESS`または`FAILED`等と実際に取得できたURL。取得情報が無い場合もその旨を表示）+ SUCCESS以外の場合は`[WARNING]`取得失敗警告 + Geminiによる回答本文。なお、GoogleのリダイレクトURL（`vertexaisearch...`）が渡された場合も自動で実URLへ逆引き解決してから取得します。
 
 - `--max-chars N`: 同上（`--check`使用時は元々短い判定結果しか返らないため影響しない）。
 
-**追加の指示は「要約して」ではなく欲しい情報だけを狙って書く。** Gemini側の回答自体が短くなり、Bash出力＝Claude側のコンテキスト消費が減る。例:
+**追加の指示は「要約して」ではなく欲しい情報だけを狙って書く。** Gemini側の回答自体が短くなり、標準出力＝Claude側のコンテキスト消費が減る。例:
 
-```bash
+```powershell
 # 悪い例: 全文要約は本文が長くなりがち
-uv run python tools/gemini_webfetch.py "<URL>" "このページの内容を詳しく要約して"
+uv run --directory "C:/Users/iidam/claude-gemini-skills/web-search" python tools/gemini_webfetch.py "<URL>" "このページの内容を詳しく要約して"
 
 # 良い例: 欲しい数値・事実だけに絞る
-uv run python tools/gemini_webfetch.py "<URL>" "このページに記載されている削減時間・対象工場数の数値だけを、原文の表現のまま抜き出して。他の説明は不要"
+uv run --directory "C:/Users/iidam/claude-gemini-skills/web-search" python tools/gemini_webfetch.py "<URL>" "このページに記載されている削減時間・対象工場数の数値だけを、原文の表現のまま抜き出して。他の説明は不要"
 ```
 
 ## オプション機能：さらに厳密な検証モード（明示的に指定したときだけ使う）
 
 上記「標準の裏付け監査（Grounding Audit）」はAPIレスポンスのメタデータのみを用いて追加通信なしで検証しますが、以下は**追加のGemini API呼び出しを発生させてより強固に裏取りする機能**です。
 
-- **`gemini_websearch.py "クエリ" --verify-claim`**: 回答本文中でgrounding済み（出典への帰属が申告済み）の文をclaim単位とし、その出典URLごとに1回だけ問い合わせて裏付けを検証する（同じURLに複数claimが帰属している場合もまとめて1回で判定）。判定は構造化出力（JSON Schema）で強制し、「裏付けあり」の場合は原文からの引用（quote）を必須にする。claim単位の最終判定は「1出典でも裏付けあり（quote付き）→裏付けあり／全出典が裏付けなし→裏付けなし／それ以外→不明」に集約する。出典URLへの問い合わせは並列実行（最大4並列）。`grounding_supports`が空（出典への帰属が一切申告されていない）の場合はスキップされ、その旨が表示される。
+- **`gemini_websearch.py "クエリ" --verify-claim`**: 回答本文中でgrounding済み（出典への帰属が申告済み）の文をclaim単位とし、その出典URLごとに1回だけ問い合わせて裏付けを検証する（同じURLに複数claimが帰属している場合もまとめて1回で判定）。判定は構造化出力（JSON Schema）で強制し、「裏付けあり」の場合は原文からの引用（quote）を必須にする（空文字や「なし」「N/A」等のプレースホルダは自動格下げ）。claim単位の最終判定は「1出典でも裏付けあり（quote付き）→裏付けあり／全出典が裏付けなし→裏付けなし／それ以外→不明」に集約する。出典URLへの問い合わせは並列実行（最大4並列）。`grounding_supports`が空（出典への帰属が一切申告されていない）の場合はスキップされ、その旨が表示される。
 - **`gemini_websearch.py "クエリ" --refute`**: クエリを「この主張を否定・反証する情報がないか」という反証志向のプロンプトに自動変換してから検索する。「AとBに関係がある」のような一文の真偽を疑うときに使う。
-- **`gemini_webfetch.py "<URL>" --check "<主張>"`**: 要約の代わりに、特定の主張1件がこのURLの内容で裏付けられるかを検証する。判定は構造化出力（JSON Schema）で行い、「裏付けあり」の場合は原文引用（quote）を必須にする（quoteが空なら自動的に「不明」へ格下げ）。
+- **`gemini_webfetch.py "<URL>" --check "<主張>"`**: 要約の代わりに、特定の主張1件がこのURLの内容で裏付けられるかを検証する。判定は構造化出力（JSON Schema）で行い、「裏付けあり」の場合は原文引用（quote）を必須にする（quoteが空またはプレースホルダなら自動的に「不明」へ格下げ）。
   - `--json`併用で`{url, items: [{claim, verdict, quote, detail}], statuses, fetch_ok}`を得られる。
-  - **取得ステータスがSUCCESSでも、実際に取得できたページのホストが要求したURLのホストと異なる場合は「不明」へ格下げされる**（ログイン壁・別ページへのリダイレクト等、「何かは取れたが求めたページではない」ケースの対策）。
+  - **取得ステータスがSUCCESSでも、実際に取得できたページの登録ドメイン（組織ドメイン）が要求したURLのドメインと異なる場合は「不明」へ格下げされる**（ログイン壁・別サイトへのリダイレクト等、「何かは取れたが求めたページではない」ケースの対策。同一組織のサブドメイン間リダイレクトや未解決の`grounding-api-redirect`経由は許容）。
 
 これらのオプション機能を多用するタスク（企業事例の事実確認、既存ノートの数値検証など）では、`solution-research`スキルが調査〜検証の手順を体系化しているので、単発の`--check`呼び出しを都度組み立てるより先にそちらを確認する方がよい。
 
 ## Claude側のコンテキスト消費を抑えたい場合
 
-このスキルはClaude側の**WebSearch呼び出し回数**は節約するが、Gemini側の回答・取得結果はBashの標準出力としてそのままこのセッションのコンテキストに載る（上記「目的」参照）。**Claude側のトークン消費自体を抑えたい**場合は、以下を組み合わせる：
+このスキルはClaude側の**WebSearch呼び出し回数**は節約するが、Gemini側の回答・取得結果は標準出力としてそのままこのセッションのコンテキストに載る（上記「目的」参照）。**Claude側のトークン消費自体を抑えたい**場合は、以下を組み合わせる：
 
 - **`--max-chars`で回答本文を打ち切る**（軽量な対策、単発のfetch向け）。
 - **`--no-audit`で文単位の裏付け監査ブロックを省略する。** 事実確認が目的でない一般検索（「◯◯とは」程度）では、出典一覧と同等かそれ以上の行数になりがちなこのブロックが不要なことが多い。数値・固有名詞の正確性を重視する検索では省略しない。
 - **`--no-sources`で出典URL一覧を省略する。** 出典を一次資料として記録する予定がない検索では、URLリスト自体が不要な行数を占める。記録・検証目的の検索では省略しない。
-- **要約でなく欲しい情報だけを狙ったクエリ・追加指示を書く。** `--max-chars`は生成された回答を後から切り詰めるだけだが、クエリ自体に「一言で」「表形式で数値だけ」のように出力形式を指定すると、Gemini側の生成段階で回答が短くなる（`gemini_webfetch.py`の追加指示についても同様、下記の例を参照）。
+- **要約でなく欲しい情報だけを狙ったクエリ・追加指示を書く。** `--max-chars`は生成された回答を後から切り詰めるだけだが、クエリ自体に「一言で」「表形式で数値だけ」のように出力形式を指定すると、Gemini側の生成段階で回答が短くなる（`gemini_webfetch.py`の追加指示についても同様、上記の例を参照）。
 - **複数企業・複数URLにまたがる調査、または1件でも重いページ（PDF・長文記事）の要約は、Claudeのサブエージェント（Agent）ではなく `gemini_parallel.py` でGemini CLIエージェントに並列委譲する。** Claudeのサブエージェントは1体ごとにシステムプロンプト・ツール定義・取得ページ本文がClaudeのトークンとして積み上がるため、Web調査では使わない。`gemini_parallel.py` は各調査を独立したGemini CLI（headless・読み取り専用の`--approval-mode plan`）で実行し、検索・ページ取得・要約をすべてGemini側で完結させる。Claude側に載るのは各調査の先頭N文字とファイルパスだけ。
 
 判断の目安: 1〜2件の軽い単発確認は`gemini_websearch.py`＋`--max-chars`＋`--no-audit`＋`--no-sources`＋絞ったクエリ。2件以上の並行調査・重いページの要約・多段の調べもの（検索→取得→再検索）は`gemini_parallel.py`。Claudeのサブエージェントは、Gemini側が両方失敗した場合の最後の手段に限る。
 
 ### 並列Web調査（Gemini CLIエージェントに丸ごと委譲）
 
-```bash
-cd "C:/Users/iidam/claude-gemini-skills/web-search" && uv run python tools/gemini_parallel.py -o "<scratchpad>/research" "調査1" "調査2" "調査3"
+```powershell
+uv run --directory "C:/Users/iidam/claude-gemini-skills/web-search" python tools/gemini_parallel.py -o "<scratchpad>/research" "調査1" "調査2" "調査3"
 # 調査が多い場合: 1行1調査のファイル（空行・#行は無視）
-uv run python tools/gemini_parallel.py -o "<scratchpad>/research" -f queries.txt
+uv run --directory "C:/Users/iidam/claude-gemini-skills/web-search" python tools/gemini_parallel.py -o "<scratchpad>/research" -f queries.txt
 ```
 
 - 各調査は `<out_dir>/qNN.md` に保存される（stderrは `qNN.stderr.log`）。標準出力は `[qNN] OK/FAIL 秒数 パス` と各回答の先頭 `--preview` 文字（既定400、`0`で非表示）だけ。全文が要る調査だけ後から `qNN.md` を読む。

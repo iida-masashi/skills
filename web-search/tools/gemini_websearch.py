@@ -14,37 +14,44 @@ APIキー/Vertex AI設定は既定で C:/Users/iidam/gemini/.env から読み込
 """
 
 import argparse
-from datetime import datetime
 import json
-import os
 import re
 import sys
-import urllib.error
-import urllib.request
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Final, Literal
 
 from google import genai
 from google.genai import types
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 sys.path.insert(0, str(Path(__file__).parent))
-from gemini_webfetch import _truncate, fetch_raw, make_client, resolve_redirect  # noqa: E402
+from gemini_webfetch import (
+    ENV_PATH,
+    _is_empty_quote,
+    _truncate,
+    configure_utf8_stdio,
+    fetch_raw,
+    generate_with_retry,
+    load_env,
+    make_client,
+    resolve_redirect,
+)
 
-ENV_PATH = Path(os.environ.get("GEMINI_SKILL_ENV_PATH", r"C:\Users\iidam\gemini\.env"))
+_JST: Final[timezone] = timezone(timedelta(hours=9))
 
-REFUTE_TEMPLATE = (
+REFUTE_TEMPLATE: Final[str] = (
     "次の主張について、これを否定・反証する情報や、矛盾する独立の情報源がないか重点的に調べて報告して。"
     "肯定的な情報がある場合も併記してよいが、まず反証の可能性を優先して探すこと。主張: {claim}"
 )
 
-MAX_VERIFY_WORKERS = 4
-MAX_RESOLVE_WORKERS = 8
+MAX_VERIFY_WORKERS: Final[int] = 4
+MAX_RESOLVE_WORKERS: Final[int] = 8
 
 
 def get_system_instruction() -> str:
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now(timezone.utc).astimezone(_JST).strftime("%Y-%m-%d")  # noqa: UP017
     return (
         f"あなたは厳格な事実調査アシスタントです。現在の基準日は {today} です。\n"
         "【絶対規律】\n"
@@ -55,38 +62,81 @@ def get_system_instruction() -> str:
     )
 
 
-_SENTENCE_SPLIT_RE = re.compile(r"(?<=[。！？])")
-_MARKDOWN_STRIP_RE = re.compile(r"[*_`#>]")
-_HAS_DIGIT_RE = re.compile(r"\d")
-_TRAILING_PUNCT_RE = re.compile(r"[。．.！!？?\s]+$")
+_SENTENCE_SPLIT_RE: Final[re.Pattern[str]] = re.compile(r"(?<=[。！？])")
+_LEADING_LIST_MARKER_RE: Final[re.Pattern[str]] = re.compile(r"^\s*(?:[-*+•]\s+|\d+[.)]\s+)+")
+_MARKDOWN_LINK_RE: Final[re.Pattern[str]] = re.compile(r"\[([^\]]+)\]\([^)]+\)")
+_MARKDOWN_STRIP_RE: Final[re.Pattern[str]] = re.compile(r"[*_`#>]")
+_WHITESPACE_RE: Final[re.Pattern[str]] = re.compile(r"\s+")
+_HAS_DIGIT_RE: Final[re.Pattern[str]] = re.compile(r"\d")
+_TRAILING_PUNCT_RE: Final[re.Pattern[str]] = re.compile(r"[。．.！!？?\s]+$")
 
 
 def _clean_for_match(s: str) -> str:
-    """Markdown記号と末尾の句読点・空白を除去する。
+    """箇条書きマーカー・Markdownリンク・強調記号・末尾の句読点や余分な空白を除去する。
 
-    grounding_supportsのsegment.textは末尾の句点「。」を含まないことが多く、
-    回答本文側（行/文分割後）は句点付きのまま残る。突合前に両側で末尾句読点を
-    揃えないと、実際にはgroundedな文が誤って未裏付け扱いになる(false positive)。
+    grounding_supportsのsegment.textは箇条書き記号（- / 1.）や末尾の句点「。」を
+    含まないことが多く、回答本文側（行/文分割後）にはそれらが含まれる。
+    突合前に両側を正規化しないと、実際にはgroundedな文が誤って未裏付け扱いになる(false positive)。
     """
-    return _TRAILING_PUNCT_RE.sub("", _MARKDOWN_STRIP_RE.sub("", s).strip())
+    s = _LEADING_LIST_MARKER_RE.sub("", s)
+    s = _MARKDOWN_LINK_RE.sub(r"\1", s)
+    s = _MARKDOWN_STRIP_RE.sub("", s)
+    s = _LEADING_LIST_MARKER_RE.sub("", s)
+    s = _WHITESPACE_RE.sub(" ", s).strip()
+    return _TRAILING_PUNCT_RE.sub("", s)
 
 
-def _split_sentences(text: str) -> list:
+def _split_sentences(text: str) -> list[str]:
     """行を文単位（。！？区切り）にさらに分割し、Markdown記号を除去する。
 
     grounding_supportsのsegmentは文単位で付与されるため、行単位で突合すると
     1行内の一部だけが裏付けられている場合に他の未裏付け文を見逃す(false negative)。
     """
-    sentences = []
+    sentences: list[str] = []
     for line in text.splitlines():
         line = line.strip()
-        if not line or line.startswith("#") or line.startswith("---"):
+        if not line or line.startswith(("#", "---")):
             continue
         for raw in _SENTENCE_SPLIT_RE.split(line):
             cleaned = _clean_for_match(raw)
             if cleaned:
                 sentences.append(cleaned)
     return sentences
+
+
+def _is_sentence_covered(sentence: str, grounded_texts: list[str]) -> bool:
+    """文がgroundedセグメント群によって裏付けられているか判定する。
+
+    1. 単一のgroundedセグメントに文全体が含まれる場合: True
+    2. 複数のgroundedセグメントに分割されている場合（1文の前半と後半に別々の出典が
+       付くケース等）: 文中に含まれるgroundedセグメント（4文字以上）の被覆領域が
+       文全体の70%以上を占め、かつ未回収部分に数字が含まれない場合はTrueとする。
+    """
+    if not sentence or not grounded_texts:
+        return False
+    if any(sentence in g for g in grounded_texts if g):
+        return True
+
+    covered = [False] * len(sentence)
+    for g in grounded_texts:
+        if len(g) < 4:
+            continue
+        start = 0
+        while True:
+            pos = sentence.find(g, start)
+            if pos == -1:
+                break
+            for i in range(pos, pos + len(g)):
+                covered[i] = True
+            start = pos + 1
+
+    covered_count = sum(covered)
+    if covered_count == 0:
+        return False
+    uncovered_text = "".join(ch for ch, cov in zip(sentence, covered) if not cov)
+    if _HAS_DIGIT_RE.search(uncovered_text):
+        return False
+    return (covered_count / len(sentence)) >= 0.7
 
 
 def audit_grounding(
@@ -132,7 +182,7 @@ def audit_grounding(
             "sources": ref_sources,
         })
 
-    grounded_texts = [s["text"] for s in segments if s["has_grounding"]]
+    grounded_texts = [s["text"] for s in segments if s["has_grounding"] and s["text"]]
 
     # 未裏付け文（Un-grounded text）の検出。文単位で判定し、
     # 数字を含む文（数値主張の疑いがある）は短さやボイラープレート一致に関わらず必ず監査する。
@@ -145,10 +195,7 @@ def audit_grounding(
                 continue
             if any(bp in sentence for bp in boilerplate_patterns):
                 continue
-        # 文がgroundedセグメントに包含されている場合のみ「裏付けあり」とする
-        # （逆方向のsegment in sentenceは、短い1句の一致で文全体を誤ってクリアするため使わない）
-        is_covered = any(sentence in g for g in grounded_texts)
-        if not is_covered:
+        if not _is_sentence_covered(sentence, grounded_texts):
             ungrounded_snippets.append(sentence)
 
     return {
@@ -157,20 +204,6 @@ def audit_grounding(
         "is_fully_grounded": len(ungrounded_snippets) == 0,
         "audit_unavailable": False,
     }
-
-
-def load_env(path: Path) -> None:
-    if not path.exists():
-        return
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        key = key.strip()
-        value = value.strip().strip('"').strip("'")
-        if key and key not in os.environ:
-            os.environ[key] = value
 
 
 def search_raw(
@@ -193,7 +226,8 @@ def search_raw(
             thinking_level=types.ThinkingLevel[thinking_level.upper()]
         )
 
-    response = client.models.generate_content(
+    response = generate_with_retry(
+        client,
         model=model,
         contents=query,
         config=types.GenerateContentConfig(**config_kwargs),
@@ -221,11 +255,10 @@ def search_raw(
             if unique_uris:
                 with ThreadPoolExecutor(max_workers=min(MAX_RESOLVE_WORKERS, len(unique_uris))) as pool:
                     future_to_uri = {pool.submit(resolve_redirect, uri): uri for uri in unique_uris}
-                    for fut in future_to_uri:
-                        uri = future_to_uri[fut]
+                    for fut, uri in future_to_uri.items():
                         try:
                             resolved_map[uri] = fut.result()
-                        except Exception:
+                        except (OSError, RuntimeError, ValueError):
                             resolved_map[uri] = None
 
         for chunk_idx, chunk in enumerate(chunks):
@@ -308,7 +341,9 @@ def _build_claim_units(raw_supports: list, sources: list, chunk_index_to_source:
         for idx in indices:
             src_idx = chunk_index_to_source.get(idx)
             if src_idx is not None and src_idx < len(sources):
-                urls.append(sources[src_idx]["url"])
+                url = sources[src_idx]["url"]
+                if url not in urls:
+                    urls.append(url)
         if not urls:
             continue
         units[i] = {"text": seg.text.strip(), "urls": urls}
@@ -346,22 +381,51 @@ def verify_claim(
         requested_ids = {cid for cid, _ in claims}
         segments_block = "\n".join(f"- id={cid}: {ctext}" for cid, ctext in claims)
         instruction = SEGMENT_CHECK_INSTRUCTION_TEMPLATE.format(segments_block=segments_block)
-        result = fetch_raw(
-            url, instruction=instruction, model=model, client=client,
-            thinking_level=thinking_level, response_schema=SegmentCheckResult.model_json_schema(),
-        )
+        try:
+            result = fetch_raw(
+                url, instruction=instruction, model=model, client=client,
+                thinking_level=thinking_level, response_schema=SegmentCheckResult.model_json_schema(),
+            )
+        except Exception as exc:  # noqa: BLE001
+            err_items = [
+                {
+                    "id": cid,
+                    "verdict": "不明",
+                    "quote": "",
+                    "detail": f"[自動格下げ: URL検証中にエラーが発生したため判定不能 ({exc})]",
+                }
+                for cid, _ in claims
+            ]
+            return {"url": url, "title": url_titles.get(url, url), "items": err_items, "fetch_ok": False}
+
         try:
             parsed = SegmentCheckResult.model_validate_json(result["text"])
-            items = [item.model_dump() for item in parsed.items]
-        except Exception:
-            items = [
+            raw_items = [item.model_dump() for item in parsed.items]
+        except ValidationError:
+            raw_items = [
                 {"id": cid, "verdict": "不明", "quote": "", "detail": "JSON応答のパースに失敗したため判定不能"}
                 for cid, _ in claims
             ]
 
         # モデルがこのURLに送っていないid（幻覚的なid、または他URL向けidの混入）を
-        # 返してくる可能性があるため、実際に送ったid集合でフィルタする。
-        items = [item for item in items if item.get("id") in requested_ids]
+        # 返してくる可能性があるため、実際に送ったid集合でフィルタし、重複idは先勝ちにする。
+        seen_ids: set[int] = set()
+        items: list[dict] = []
+        for item in raw_items:
+            cid = item.get("id")
+            if cid in requested_ids and cid not in seen_ids:
+                seen_ids.add(cid)
+                items.append(item)
+
+        # モデルが要求した一部のclaim_idを応答から欠落させた場合、「不明」として補完する
+        for cid, _ in claims:
+            if cid not in seen_ids:
+                items.append({
+                    "id": cid,
+                    "verdict": "不明",
+                    "quote": "",
+                    "detail": "モデル応答から該当idが欠落したため判定不能",
+                })
 
         if not result["fetch_ok"]:
             reason = result.get("fetch_ng_reason") or "取得ステータスがSUCCESSでない"
@@ -370,7 +434,8 @@ def verify_claim(
                     item["detail"] = f"[自動格下げ: {reason}] " + item.get("detail", "")
                     item["verdict"] = "不明"
         for item in items:
-            if item.get("verdict") == "裏付けあり" and not item.get("quote"):
+            if item.get("verdict") == "裏付けあり" and _is_empty_quote(item.get("quote")):
+                item["quote"] = ""
                 item["detail"] = "[自動格下げ: quoteが空] " + item.get("detail", "")
                 item["verdict"] = "不明"
 
@@ -460,7 +525,7 @@ def search(
         return
 
     if not result["grounded"]:
-        print("⚠️ 【検索未実行／出典0件：以下の回答はGoogle検索で裏付けられておらず、事前学習知識のみに基づく可能性があります】\n")
+        print("[WARNING] 【検索未実行／出典0件：以下の回答はGoogle検索で裏付けられておらず、事前学習知識のみに基づく可能性があります】\n")
 
     print(_truncate(result["text"], max_chars))
 
@@ -489,7 +554,7 @@ def search(
             print("Status: WARNING (Web出典への帰属が申告されていない文が含まれています)")
 
         if audit["ungrounded_snippets"]:
-            print("\n⚠️ 【出典への帰属が申告されていない文（モデル推測・事前知識の可能性）】:")
+            print("\n[WARNING] 【出典への帰属が申告されていない文（モデル推測・事前知識の可能性）】:")
             for s in audit["ungrounded_snippets"]:
                 print(f"  * {s}")
 
@@ -510,6 +575,7 @@ def search(
 
 
 def main() -> None:
+    configure_utf8_stdio()
     parser = argparse.ArgumentParser(
         prog="gemini_websearch.py",
         description="Gemini API (Google Search grounding) を使ったWeb検索。回答本文の主張の裏取り・反証も行える。",

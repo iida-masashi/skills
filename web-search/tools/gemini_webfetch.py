@@ -20,25 +20,58 @@ APIキー/Vertex AI設定は既定で C:/Users/iidam/gemini/.env から読み込
 """
 
 import argparse
+import contextlib
+import http.client
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Literal
-from urllib.parse import urlparse
+from typing import Final, Literal
+from urllib.parse import urljoin, urlparse
 
 from google import genai
 from google.genai import types
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
-ENV_PATH = Path(os.environ.get("GEMINI_SKILL_ENV_PATH", r"C:\Users\iidam\gemini\.env"))
-FETCH_FAILURE_TOKEN = "RETRIEVAL_FAILED"
-DEFAULT_INSTRUCTION = (
+ENV_PATH: Final[Path] = Path(os.environ.get("GEMINI_SKILL_ENV_PATH", r"C:\Users\iidam\gemini\.env"))
+FETCH_FAILURE_TOKEN: Final[str] = "RETRIEVAL_FAILED"
+DEFAULT_INSTRUCTION: Final[str] = (
     "このページの内容を要約して。ページにない情報は補わず、"
     f"取得できなかった場合は本文全体を「{FETCH_FAILURE_TOKEN}」とだけ出力して。"
 )
+
+_SECOND_LEVEL_TLDS: Final[frozenset[str]] = frozenset({
+    "co.jp", "ne.jp", "or.jp", "go.jp", "ac.jp", "lg.jp", "ed.jp", "ad.jp", "gr.jp",
+    "co.uk", "org.uk", "ac.uk", "gov.uk",
+    "com.au", "net.au", "org.au", "edu.au", "gov.au",
+    "co.kr", "or.kr", "go.kr", "ac.kr",
+    "com.br", "com.cn", "com.tw", "com.hk", "com.sg", "com.nz", "co.nz", "co.in", "co.za",
+})
+
+_EMPTY_QUOTE_PLACEHOLDERS: Final[frozenset[str]] = frozenset({
+    "", "なし", "該当なし", "記載なし", "引用なし", "n/a", "na", "none", "null", "-", "ー", "―",
+})
+
+
+def configure_utf8_stdio() -> None:
+    """Windows環境でのcp932エンコードエラーを防ぐため、標準出力・標準エラーをUTF-8に設定する。"""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            with contextlib.suppress(OSError, ValueError):
+                reconfigure(encoding="utf-8", errors="replace")
+
+
+def _is_empty_quote(quote: str | None) -> bool:
+    """quoteが空文字、空白のみ、または『なし』『N/A』等のプレースホルダ文字列かを判定する。"""
+    if not quote:
+        return True
+    normalized = quote.strip().strip("\"'「」『』").strip().lower()
+    return normalized in _EMPTY_QUOTE_PLACEHOLDERS
 
 
 def get_system_instruction() -> str:
@@ -60,9 +93,9 @@ class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def resolve_redirect(url: str, timeout: float = 5.0) -> str | None:
+def resolve_redirect(url: str, timeout: float = 5.0, max_hops: int = 3) -> str | None:
     """grounding-api-redirect URLを実URLに解決する。失敗時はNone。
-    
+
     Googleのgrounding-api-redirectはHTTP 302 Foundで実URLを返す。
     リダイレクト先サイトへの接続・ページダウンロードを行わずにLocationヘッダーのみを取得することで、
     相手先サーバーの403ブロックや巨大PDFダウンロードによるタイムアウトを回避する。
@@ -73,27 +106,37 @@ def resolve_redirect(url: str, timeout: float = 5.0) -> str | None:
         return url
 
     opener = urllib.request.build_opener(NoRedirectHandler)
-    req = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            ),
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        },
-    )
-    try:
-        resp = opener.open(req, timeout=timeout)
-        return resp.geturl()
-    except urllib.error.HTTPError as e:
-        if e.code in (301, 302, 303, 307, 308):
-            location = e.headers.get("Location")
-            if location:
-                return location
-        return None
-    except Exception:
-        return None
+    current_url = url
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    }
+
+    for _ in range(max_hops):
+        req = urllib.request.Request(current_url, headers=headers)
+        try:
+            with opener.open(req, timeout=timeout) as resp:
+                final_url = resp.geturl()
+                return final_url if "grounding-api-redirect" not in final_url else None
+        except urllib.error.HTTPError as e:
+            try:
+                if e.code in (301, 302, 303, 307, 308):
+                    location = e.headers.get("Location") if e.headers else None
+                    if location:
+                        next_url = urljoin(current_url, location)
+                        if "grounding-api-redirect" not in next_url:
+                            return next_url
+                        current_url = next_url
+                        continue
+            finally:
+                e.close()
+            return None
+        except (OSError, ValueError, http.client.HTTPException):
+            return None
+    return None
 
 
 CHECK_INSTRUCTION_TEMPLATE = """次の主張を、否定できない事実の最小単位ごとに箇条書きに分解し、
@@ -133,7 +176,7 @@ def _parse_check_json(text: str) -> list[dict] | None:
         return None
     try:
         result = CheckResult.model_validate_json(text)
-    except Exception:
+    except ValidationError:
         return None
     return [item.model_dump() for item in result.items]
 
@@ -170,20 +213,82 @@ def make_client() -> genai.Client:
     sys.exit(1)
 
 
+def _is_retryable_error(exc: Exception) -> bool:
+    """レート制限(429)や一時的なサーバーエラー(5xx)・通信タイムアウトかを判定する。"""
+    status_code = getattr(exc, "code", None) or getattr(exc, "status_code", None)
+    if status_code in (408, 429, 500, 502, 503, 504):
+        return True
+    msg = str(exc).upper()
+    retry_tokens = ("429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE", "500", "502", "504", "TIMED OUT", "TIMEOUT")
+    return any(token in msg for token in retry_tokens)
+
+
+def generate_with_retry(
+    client: genai.Client,
+    *,
+    model: str,
+    contents: str,
+    config: types.GenerateContentConfig,
+    max_retries: int = 3,
+    base_delay: float = 1.0,
+):
+    """一時的なAPIエラー(429/5xx)に対して指数バックオフでリトライを行う。"""
+    last_exc: Exception | None = None
+    for attempt in range(max_retries):
+        try:
+            return client.models.generate_content(
+                model=model,
+                contents=contents,
+                config=config,
+            )
+        except Exception as exc:
+            last_exc = exc
+            if attempt + 1 >= max_retries or not _is_retryable_error(exc):
+                raise
+            time.sleep(base_delay * (2 ** attempt))
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError("generate_with_retry failed without exception")
+
+
 def _normalize_host(url: str) -> str:
-    host = (urlparse(url).hostname or "").lower()
-    return host[4:] if host.startswith("www.") else host
+    host = (urlparse(url).hostname or "").lower().rstrip(".")
+    return host.removeprefix("www.")
 
 
-def _is_fetch_ok(statuses: list, requested_url: str | None = None) -> tuple[bool, str | None]:
+def _registrable_domain(host: str) -> str:
+    """ホスト名から組織単位の登録ドメイン（例: sub.example.co.jp -> example.co.jp）を返す。"""
+    normalized = host.lower().rstrip(".").removeprefix("www.")
+    parts = [p for p in normalized.split(".") if p]
+    if len(parts) < 2:
+        return normalized
+    last_two = ".".join(parts[-2:])
+    if last_two in _SECOND_LEVEL_TLDS and len(parts) >= 3:
+        return ".".join(parts[-3:])
+    return last_two
+
+
+def _hosts_match(host_a: str, host_b: str) -> bool:
+    """同一ホスト、または同一組織ドメイン（サブドメイン間のリダイレクト等）であればTrueを返す。"""
+    if not host_a or not host_b:
+        return False
+    if host_a == host_b:
+        return True
+    return _registrable_domain(host_a) == _registrable_domain(host_b)
+
+
+def _is_fetch_ok(statuses: Sequence[dict], requested_url: str | None = None) -> tuple[bool, str | None]:
     """statuses一覧に取得成功(SUCCESS)が1件でも含まれるか判定する共通ヘルパー。
 
     requested_urlを渡した場合、SUCCESSであってもretrieved_urlのホストが
-    要求URLのホストと一致しない場合はNGとする（ログイン壁・別ページへのリダイレクト等、
-    「何かは取れたが求めたページではない」ケースをSUCCESS扱いにしないため）。
+    要求URLのホスト（または同一登録ドメイン）と一致しない場合はNGとする
+    （ログイン壁・別サイトへのリダイレクト等、「何かは取れたが求めたページではない」ケースを
+    SUCCESS扱いにしないため）。
+    ただし、requested_urlが未解決のgrounding-api-redirect URLである場合は、
+    Gemini側でリダイレクト先を取得した結果のホストを受け入れる。
     戻り値は (ok, ng理由 or None)。
     """
-    success_statuses = [s for s in statuses if s["status"] == "URL_RETRIEVAL_STATUS_SUCCESS"]
+    success_statuses = [s for s in statuses if s.get("status") == "URL_RETRIEVAL_STATUS_SUCCESS"]
     if not success_statuses:
         return False, None
 
@@ -191,9 +296,16 @@ def _is_fetch_ok(statuses: list, requested_url: str | None = None) -> tuple[bool
         return True, None
 
     requested_host = _normalize_host(requested_url)
+    is_grounding_redirect = (
+        "grounding-api-redirect" in requested_url
+        or requested_host == "vertexaisearch.cloud.google.com"
+    )
+    if is_grounding_redirect:
+        return True, None
+
     for s in success_statuses:
         retrieved = s.get("retrieved_url")
-        if retrieved and _normalize_host(retrieved) == requested_host:
+        if retrieved and _hosts_match(_normalize_host(retrieved), requested_host):
             return True, None
 
     retrieved_hosts = ", ".join(_normalize_host(s.get("retrieved_url") or "") or "(不明)" for s in success_statuses)
@@ -228,7 +340,8 @@ def fetch_raw(
         config_kwargs["response_mime_type"] = "application/json"
         config_kwargs["response_json_schema"] = response_schema
 
-    response = client.models.generate_content(
+    response = generate_with_retry(
+        client,
         model=model,
         contents=f"{instruction}: {url}",
         config=types.GenerateContentConfig(**config_kwargs),
@@ -239,7 +352,9 @@ def fetch_raw(
     statuses = []
     if url_metas:
         for m in url_metas:
-            statuses.append({"status": m.url_retrieval_status.name, "retrieved_url": m.retrieved_url})
+            status_obj = getattr(m, "url_retrieval_status", None)
+            status_name = getattr(status_obj, "name", str(status_obj)) if status_obj else "UNKNOWN"
+            statuses.append({"status": status_name, "retrieved_url": getattr(m, "retrieved_url", None)})
 
     fetch_ok, ng_reason = _is_fetch_ok(statuses, requested_url=url)
 
@@ -289,14 +404,15 @@ def check_claim_raw(
                 )
                 item["verdict"] = "不明"
 
-    # 「裏付けあり」なのにquote（原文引用）が空の場合は、根拠のない断定の疑いがあるため格下げする。
+    # 「裏付けあり」なのにquote（原文引用）が空・プレースホルダの場合は、根拠のない断定の疑いがあるため格下げする。
     # ページに実際にその引用が存在するかまでは検証していないが、最低限の裏取りの痕跡を要求する。
     for item in items:
-        if item.get("verdict") == "裏付けあり" and not item.get("quote"):
+        if item.get("verdict") == "裏付けあり" and _is_empty_quote(item.get("quote")):
+            item["quote"] = ""
             item["detail"] = "[自動格下げ: 「裏付けあり」だが原文引用(quote)が空のため不明扱いとした] " + item.get("detail", "")
             item["verdict"] = "不明"
 
-    return {"url": url, "items": items, "statuses": statuses, "fetch_ok": result["fetch_ok"]}
+    return {"url": result.get("requested_url", url), "items": items, "statuses": statuses, "fetch_ok": result["fetch_ok"]}
 
 
 def _truncate(text: str, max_chars: int | None) -> str:
@@ -325,7 +441,7 @@ def fetch(
     text = result["text"]
     if not result["fetch_ok"] or FETCH_FAILURE_TOKEN in text or not text.strip():
         reason = f"（{result['fetch_ng_reason']}）" if result.get("fetch_ng_reason") else ""
-        print(f"⚠️ 【取得失敗の疑い{reason}：以下の内容は正常に取得できたページの要約ではない可能性があります】\n")
+        print(f"[WARNING] 【取得失敗の疑い{reason}：以下の内容は正常に取得できたページの要約ではない可能性があります】\n")
 
     print(_truncate(text, max_chars))
 
@@ -337,7 +453,7 @@ def check(url: str, claim: str, model: str = "gemini-3.8-flash", as_json: bool =
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
 
-    print(f"URL: {url}")
+    print(f"URL: {result.get('url', url)}")
     print(f"主張: {claim}\n")
     for i, item in enumerate(result["items"], 1):
         print(f"[{i}] {item['verdict']}  {item['claim']}")
@@ -352,6 +468,7 @@ def check(url: str, claim: str, model: str = "gemini-3.8-flash", as_json: bool =
 
 
 def main() -> None:
+    configure_utf8_stdio()
     parser = argparse.ArgumentParser(
         prog="gemini_webfetch.py",
         description="指定URLの内容をGemini経由で取得・要約、または特定の主張がURL内に実在するか検証する。",
