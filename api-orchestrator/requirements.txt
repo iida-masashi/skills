@@ -1,8 +1,0 @@
-google-genai
-openai
-httpx
-python-dotenv
-pydantic
-tenacity
-mcp
-pytest
