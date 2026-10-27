@@ -4,9 +4,9 @@ version = "0.3.0"
 description = "AST-based Safe Refactoring & Quality Gate Skill"
 requires-python = ">=3.12"
 dependencies = [
-    "ruff",
-    "mypy",
-    "pytest",
+    "ruff>=0.17.0",
+    "mypy>=2.0.0",
+    "pytest>=9.0.0",
     "pytest-cov>=7.1.0",
 ]
 
@@ -14,8 +14,8 @@ dependencies = [
 # Self-healer pulls Gemini SDK only on demand. Install via:
 #   uv pip install -e ".[heal]"
 heal = [
-    "google-genai",
-    "python-dotenv",
+    "google-genai>=2.0.0",
+    "python-dotenv>=1.2.0",
 ]
 
 [project.scripts]
@@ -49,9 +49,9 @@ ignore = [
 "tests/**.py" = ["S101", "T20", "ANN", "SLF001"]
 # Subprocess wrapper: argv is constructed by callers, not user-supplied raw shell.
 "src/python_safe_coding/gate.py" = ["S603"]
-# CLI entry points may use root logger and pass argv to subprocess.
-"src/python_safe_coding/cli.py" = ["S603", "S607", "TRY401", "LOG015"]
-"src/python_safe_coding/healer.py" = ["S603", "S607", "TRY401", "BLE001"]
+# CLI entry points and healer loop log exception details explicitly.
+"src/python_safe_coding/cli.py" = ["TRY401"]
+"src/python_safe_coding/healer.py" = ["TRY401", "BLE001"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10

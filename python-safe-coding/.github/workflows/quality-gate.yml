@@ -33,9 +33,6 @@ jobs:
       - name: Install psc as console script
         run: uv pip install -e .
 
-      - name: AST policy (cached)
-        run: uv run psc ast --baseline .psc-baseline.json --cache-dir .psc-cache .
-
       - name: Quality gate
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
@@ -43,9 +40,14 @@ jobs:
               --target . \
               --since "origin/${{ github.base_ref }}" \
               --baseline .psc-baseline.json \
+              --cache-dir .psc-cache \
               --github-summary
           else
-            uv run psc gate --target . --baseline .psc-baseline.json --github-summary
+            uv run psc gate \
+              --target . \
+              --baseline .psc-baseline.json \
+              --cache-dir .psc-cache \
+              --github-summary
           fi
 
       - name: Pre-push checks

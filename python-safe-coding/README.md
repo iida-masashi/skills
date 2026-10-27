@@ -26,7 +26,7 @@ uv pip install -e '.[heal]'  # add Gemini self-healer support
 
 ```bash
 psc gate     [--target .] [--since main] [--baseline FILE]
-             [--coverage-threshold 80] [--github-summary]
+             [--cache-dir .psc-cache] [--coverage-threshold 80] [--github-summary]
 
 psc ast      [TARGET ...]   [--since main] [--baseline FILE]
                             [--cache-dir .psc-cache]

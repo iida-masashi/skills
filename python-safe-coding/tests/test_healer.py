@@ -9,6 +9,7 @@ import pytest
 
 from python_safe_coding.healer import (
     _build_prompt,
+    _full_quality_bar,
     _generate_fix,
     make_diff,
     resolve_target,
@@ -41,7 +42,11 @@ class _FakeTypes:
 
 class _FakeResponse:
     def __init__(self, text: str) -> None:
-        self.text = text
+        self._text = text
+
+    @property
+    def text(self) -> str | None:
+        return self._text
 
 
 class _FakeModels:
@@ -123,7 +128,7 @@ def test_build_prompt_includes_error_and_source(tmp_path: Path) -> None:
 def test_generate_fix_returns_pro_result() -> None:
     """Happy path: the Pro model responds; no fallback occurs."""
     client = _FakeClient([_FakeResponse("```python\nx = 1\n```")])
-    out = _generate_fix(client, "prompt", _FakeTypes)  # type: ignore[arg-type]
+    out = _generate_fix(client, "prompt", _FakeTypes)
     assert out == "x = 1"
     assert client.models.calls == ["gemini-3.1-pro-preview"]
 
@@ -133,7 +138,7 @@ def test_generate_fix_falls_back_on_transient_error() -> None:
     client = _FakeClient(
         [RuntimeError("503 unavailable"), _FakeResponse("```python\ny = 2\n```")]
     )
-    out = _generate_fix(client, "prompt", _FakeTypes)  # type: ignore[arg-type]
+    out = _generate_fix(client, "prompt", _FakeTypes)
     assert out == "y = 2"
     # Pro tried first, then Flash.
     assert client.models.calls == ["gemini-3.1-pro-preview", "gemini-3.0-flash"]
@@ -145,6 +150,16 @@ def test_generate_fix_propagates_programming_errors(exc: Exception) -> None:
     propagate rather than be masked by a Flash retry (I-2)."""
     client = _FakeClient([exc])
     with pytest.raises(type(exc)):
-        _generate_fix(client, "prompt", _FakeTypes)  # type: ignore[arg-type]
+        _generate_fix(client, "prompt", _FakeTypes)
     # Fallback was NOT attempted.
     assert client.models.calls == ["gemini-3.1-pro-preview"]
+
+
+def test_full_quality_bar_rejects_pandas_import(tmp_path: Path) -> None:
+    """Self-healer quality bar must enforce the Polars-First AST policy."""
+    bad = tmp_path / "bad.py"
+    bad.write_text("import pandas as pd\n", encoding="utf-8")
+    ok, err = _full_quality_bar(bad)
+    assert ok is False
+    assert "AST Policy:" in err
+    assert "Use polars instead of pandas" in err

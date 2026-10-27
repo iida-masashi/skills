@@ -10,45 +10,34 @@ from __future__ import annotations
 import ast
 import logging
 from pathlib import Path
+from typing import Final
 
 logger = logging.getLogger(__name__)
 
-DefNode = ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef
+type DefNode = ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef
+_DEF_NODE_TYPES: Final = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
 
 
 def find_target_node(tree: ast.AST, target_name: str) -> DefNode | None:
-    """Find the top-level function or class with the given name.
+    """Find a top-level or dotted-path function/class definition by name.
 
-    Only top-level (module-scoped) definitions are considered, so methods on
-    classes and nested helpers are not matched ambiguously. Use a dotted
-    locator (e.g. `MyClass.method`) for nested targets.
+    Top-level (module-scoped) definitions are matched for simple names so
+    methods on classes and nested helpers are not matched ambiguously. Use a
+    dotted locator (e.g. `MyClass.method`) for nested targets.
     """
-    if "." in target_name:
-        return _find_nested(tree, target_name.split("."))
-    if isinstance(tree, ast.Module):
-        for node in tree.body:
-            if (
-                isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
-                and node.name == target_name
-            ):
-                return node
-    return None
-
-
-def _find_nested(tree: ast.AST, parts: list[str]) -> DefNode | None:
-    if not isinstance(tree, ast.Module):
+    if not isinstance(tree, ast.Module) or not target_name:
         return None
     current_body: list[ast.stmt] = list(tree.body)
     found: DefNode | None = None
-    for part in parts:
-        found = None
-        for node in current_body:
-            if (
-                isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
-                and node.name == part
-            ):
-                found = node
-                break
+    for part in target_name.split("."):
+        found = next(
+            (
+                node
+                for node in current_body
+                if isinstance(node, _DEF_NODE_TYPES) and node.name == part
+            ),
+            None,
+        )
         if found is None:
             return None
         current_body = list(found.body)
@@ -99,6 +88,8 @@ def replace_code(
     )
 
     new_code_lines = new_code_obj.read_text(encoding="utf-8").splitlines(keepends=True)
+    if new_code_lines and not new_code_lines[-1].endswith(("\n", "\r")):
+        new_code_lines[-1] += "\n"
     final_lines = (
         source_lines[: start_line - 1] + new_code_lines + source_lines[end_line:]
     )

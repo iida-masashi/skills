@@ -9,8 +9,10 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Final, Literal
 
 logger = logging.getLogger(__name__)
 
@@ -28,30 +30,49 @@ class ToolUnavailableError(RuntimeError):
 
 # ASCII status tags — emoji is avoided because some Windows terminals (cp932)
 # break on Unicode glyphs.
-_STATUS_OK = "[OK]"
-_STATUS_FAIL = "[FAIL]"
-_STATUS_ERROR = "[ERROR]"
+_STATUS_OK: Final = "[OK]"
+_STATUS_FAIL: Final = "[FAIL]"
+_STATUS_ERROR: Final = "[ERROR]"
+
+type StepStatus = Literal["Passed", "Failed", "Error"]
 
 
 @dataclass(frozen=True)
 class StepResult:
     step: str
-    status: str  # "Passed" | "Failed" | "Error"
+    status: StepStatus
     details: str
 
 
 def _record(
     summary_data: list[StepResult] | None,
     step: str,
-    status: str,
+    status: StepStatus,
     details: str,
 ) -> None:
     if summary_data is not None:
         summary_data.append(StepResult(step=step, status=status, details=details))
 
 
+def run_process(
+    argv: Sequence[str],
+    *,
+    cwd: Path | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Execute `argv` without a shell, returning a UTF-8 CompletedProcess."""
+    return subprocess.run(
+        list(argv),
+        check=False,
+        text=True,
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(cwd) if cwd else None,
+    )
+
+
 def run_command(
-    argv: list[str],
+    argv: Sequence[str],
     description: str,
     summary_data: list[StepResult] | None = None,
     *,
@@ -63,15 +84,7 @@ def run_command(
     """
     logger.info("--- Running %s ---", description)
     try:
-        result = subprocess.run(
-            argv,
-            check=False,
-            text=True,
-            capture_output=True,
-            encoding="utf-8",
-            errors="replace",
-            cwd=str(cwd) if cwd else None,
-        )
+        result = run_process(argv, cwd=cwd)
     except (subprocess.SubprocessError, OSError) as exc:
         err_msg = f"Error running {description}: {exc}"
         logger.exception(err_msg)

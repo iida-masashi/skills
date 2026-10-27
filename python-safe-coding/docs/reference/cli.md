@@ -8,7 +8,7 @@ Run the full quality gate: Ruff → AST policy → MyPy → pytest.
 
 ```
 psc gate [--target PATH] [--since REF] [--baseline FILE]
-         [--coverage-threshold N] [--github-summary]
+         [--cache-dir DIR] [--coverage-threshold N] [--github-summary]
 ```
 
 | Flag | Default | Effect |
@@ -16,6 +16,7 @@ psc gate [--target PATH] [--since REF] [--baseline FILE]
 | `--target` | `.` | Directory or file to scan. |
 | `--since REF` | (off) | Diff-aware: only `.py` files changed against `REF` are passed to Ruff and the AST checker. MyPy stays full-tree because per-file mypy breaks cross-module inference. Falls back to a full scan with a warning when `git` is unavailable. |
 | `--baseline FILE` | (off) | Suppress AST-policy violations recorded in `FILE`. Only NEW violations fail. |
+| `--cache-dir DIR` | (off) | Cache per-file AST policy results under `DIR` (e.g. `.psc-cache`). |
 | `--coverage-threshold N` | `80` | Pytest fails if total coverage < N%. |
 | `--github-summary` | (off) | Append a markdown summary to `$GITHUB_STEP_SUMMARY`. |
 

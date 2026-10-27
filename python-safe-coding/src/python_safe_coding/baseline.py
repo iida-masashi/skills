@@ -19,6 +19,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
@@ -72,8 +73,22 @@ def _hash_line(content: str) -> str:
     ).hexdigest()[:16]
 
 
+def _read_lines(file_path: Path, line_cache: dict[Path, list[str]] | None) -> list[str]:
+    if line_cache is not None and file_path in line_cache:
+        return line_cache[file_path]
+    lines = (
+        file_path.read_text(encoding="utf-8").splitlines() if file_path.exists() else []
+    )
+    if line_cache is not None:
+        line_cache[file_path] = lines
+    return lines
+
+
 def fingerprint_violation(
-    violation: str, *, root: Path | None = None
+    violation: str,
+    *,
+    root: Path | None = None,
+    _line_cache: dict[Path, list[str]] | None = None,
 ) -> Fingerprint | None:
     """Convert a single AST checker violation message into a Fingerprint.
 
@@ -97,29 +112,30 @@ def fingerprint_violation(
             rel = file_path
 
     line_hash = ""
-    try:
-        if file_path.exists():
-            lines = file_path.read_text(encoding="utf-8").splitlines()
-            if 1 <= lineno <= len(lines):
+    if lineno >= 1:
+        try:
+            lines = _read_lines(file_path, _line_cache)
+            if lineno <= len(lines):
                 line_hash = _hash_line(lines[lineno - 1])
-    except OSError:
-        line_hash = ""
+        except OSError:
+            line_hash = ""
 
     return Fingerprint(file=rel.as_posix(), rule_id=rule_id, line_hash=line_hash)
 
 
 def fingerprint_all(
-    violations: list[str], *, root: Path | None = None
+    violations: Sequence[str], *, root: Path | None = None
 ) -> list[Fingerprint]:
+    line_cache: dict[Path, list[str]] = {}
     fps: list[Fingerprint] = []
     for v in violations:
-        fp = fingerprint_violation(v, root=root)
+        fp = fingerprint_violation(v, root=root, _line_cache=line_cache)
         if fp is not None:
             fps.append(fp)
     return fps
 
 
-def write_baseline(path: Path, fingerprints: list[Fingerprint]) -> None:
+def write_baseline(path: Path, fingerprints: Sequence[Fingerprint]) -> None:
     payload = {
         "version": BASELINE_VERSION,
         "fingerprints": sorted(
@@ -151,7 +167,7 @@ def read_baseline(path: Path) -> set[Fingerprint]:
 
 
 def filter_new(
-    violations: list[str],
+    violations: Sequence[str],
     baseline: set[Fingerprint],
     *,
     root: Path | None = None,
@@ -162,10 +178,11 @@ def filter_new(
     baseline" warnings — entries that refer to violations the user already
     fixed but forgot to remove from the baseline file.
     """
+    line_cache: dict[Path, list[str]] = {}
     new_violations: list[str] = []
     seen: set[Fingerprint] = set()
     for v in violations:
-        fp = fingerprint_violation(v, root=root)
+        fp = fingerprint_violation(v, root=root, _line_cache=line_cache)
         if fp is None:
             new_violations.append(v)
             continue

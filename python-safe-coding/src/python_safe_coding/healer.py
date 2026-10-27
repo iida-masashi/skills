@@ -16,26 +16,43 @@ import difflib
 import logging
 import os
 import re
-import subprocess
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any, Final, Protocol
 
-if TYPE_CHECKING:  # pragma: no cover - type-check-only import
-    from google.genai import Client as GenaiClient
+from python_safe_coding.ast_checker import check_file
+from python_safe_coding.gate import run_process as _run
 
 logger = logging.getLogger("python_safe_coding.healer")
 
-PRO_MODEL = "gemini-3.1-pro-preview"
-FLASH_MODEL = "gemini-3.0-flash"
-MAX_RETRIES = 3
+PRO_MODEL: Final = "gemini-3.1-pro-preview"
+FLASH_MODEL: Final = "gemini-3.0-flash"
+MAX_RETRIES: Final = 3
 # Capture both POSIX and Windows-style paths (e.g. `C:\foo\bar.py:42:`).
 # NOTE: spaces are intentionally excluded. Widening the class to match spaced
 # paths (e.g. `C:\Program Files\...`) regresses the common Ruff `--> <path>`
 # format — re.search would capture a leading space or preceding words. Spaced
 # absolute paths remain unmatched (graceful: healing aborts). See M-3 in
 # docs/DEEP_AUDIT_2026-06-04.md.
-_FILE_RE = re.compile(r"((?:[A-Za-z]:[\\/])?[A-Za-z0-9_./\\-]+\.py):\d+:")
+_FILE_RE: Final = re.compile(r"((?:[A-Za-z]:[\\/])?[A-Za-z0-9_./\\-]+\.py):\d+:")
+
+
+class _GenerateResponseProto(Protocol):
+    @property
+    def text(self) -> str | None: ...
+
+
+class _ModelsProto(Protocol):
+    def generate_content(
+        self, *, model: str, contents: str, config: Any
+    ) -> _GenerateResponseProto: ...
+
+
+class GenaiClientProto(Protocol):
+    """Structural protocol for google.genai.Client (avoids hard SDK import)."""
+
+    @property
+    def models(self) -> _ModelsProto: ...
 
 
 class HealerDependencyError(RuntimeError):
@@ -58,7 +75,7 @@ def _import_genai() -> tuple[Any, Any, Any]:
     return genai, types, load_dotenv
 
 
-def _generate_fix(client: GenaiClient, prompt: str, types_mod: Any) -> str:
+def _generate_fix(client: GenaiClientProto, prompt: str, types_mod: Any) -> str:
     config_pro = types_mod.GenerateContentConfig(
         thinking_config=types_mod.ThinkingConfig(
             include_thoughts=False,
@@ -104,18 +121,6 @@ def strip_codefence(text: str) -> str:
     return text
 
 
-def _run(argv: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        argv,
-        check=False,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        cwd=str(cwd) if cwd else None,
-    )
-
-
 def _format_and_lint(file_path: Path) -> tuple[bool, str]:
     logger.info("Format + auto-fix pass on %s", file_path)
     _run(["uv", "run", "ruff", "format", str(file_path)])
@@ -127,6 +132,9 @@ def _format_and_lint(file_path: Path) -> tuple[bool, str]:
 
 
 def _full_quality_bar(file_path: Path) -> tuple[bool, str]:
+    ast_errors = check_file(file_path)
+    if ast_errors:
+        return False, "AST Policy:\n" + "\n".join(ast_errors)
     res_mypy = _run(["uv", "run", "mypy", str(file_path), "--ignore-missing-imports"])
     if res_mypy.returncode != 0:
         return False, "MyPy:\n" + (res_mypy.stdout or "") + (res_mypy.stderr or "")
@@ -162,6 +170,12 @@ You are a careful Python debugging engineer.
 [Target file: {file_path.name}]
 {source}
 </data>
+
+<constraints>
+- Maintain strict type annotations (no untyped defs).
+- Follow Polars-First policy (never import pandas; use polars).
+- Use pathlib.Path for file paths and timezone-aware UTC datetimes.
+</constraints>
 
 <task>
 Repair the source so that the error log is resolved without breaking behavior.
@@ -219,7 +233,7 @@ def _emit_preview(
 
 
 def _healing_loop(
-    client: GenaiClient,
+    client: GenaiClientProto,
     types_mod: Any,
     file_path: Path,
     original_code: str,
@@ -290,9 +304,9 @@ def self_heal_code(
     """
     genai, types_mod, load_dotenv = _import_genai()
     load_dotenv()
-    api_key = os.getenv("GOOGLE_API_KEY")
+    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if not api_key:
-        logger.error("GOOGLE_API_KEY missing; cannot self-heal.")
+        logger.error("GEMINI_API_KEY / GOOGLE_API_KEY missing; cannot self-heal.")
         return False
     client = genai.Client(api_key=api_key, vertexai=False)
 

@@ -562,6 +562,22 @@ def test_cmd_prepush_bad_toml_returns_config_error(
     assert cli._cmd_prepush(args) == cli.EXIT_CONFIG
 
 
+def test_cmd_prepush_missing_uv_raises_tool_unavailable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If `uv` is absent during prepush, raise ToolUnavailableError -> EXIT_CONFIG."""
+    monkeypatch.setattr(compileall, "compile_dir", lambda *_a, **_kw: True)
+
+    def no_uv(*_a: Any, **_kw: Any) -> _FakeProc:
+        raise FileNotFoundError("uv not found")
+
+    monkeypatch.setattr(subprocess, "run", no_uv)
+    args = cli._build_parser().parse_args(["prepush", "--target", str(tmp_path)])
+    with pytest.raises(ToolUnavailableError):
+        cli._cmd_prepush(args)
+
+
 # ---------- I-4: psc replace write-failure path ----------------------------
 
 

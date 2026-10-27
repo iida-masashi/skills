@@ -24,10 +24,11 @@ import argparse
 import compileall
 import logging
 import re
-import subprocess
 import sys
 import tomllib
+from collections.abc import Sequence
 from pathlib import Path
+from typing import Final
 
 from python_safe_coding.ast_checker import _SKIP_PARTS, check_target
 from python_safe_coding.baseline import (
@@ -42,17 +43,18 @@ from python_safe_coding.gate import (
     StepResult,
     ToolUnavailableError,
     run_command,
+    run_process,
     write_github_summary,
 )
 
 logger = logging.getLogger("psc")
 
-EXIT_OK = 0
-EXIT_VIOLATION = 1
-EXIT_INTERNAL = 2
-EXIT_CONFIG = 3
+EXIT_OK: Final = 0
+EXIT_VIOLATION: Final = 1
+EXIT_INTERNAL: Final = 2
+EXIT_CONFIG: Final = 3
 
-DEFAULT_COVERAGE_FLOOR = 80
+DEFAULT_COVERAGE_FLOOR: Final = 80
 
 
 # --------------------------------------------------------------------------
@@ -63,7 +65,7 @@ DEFAULT_COVERAGE_FLOOR = 80
 def _changed_python_files(since: str, root: Path) -> list[Path] | None:
     """Return .py files changed since `since` ref. None on git failure."""
     try:
-        result = subprocess.run(
+        result = run_process(
             # `-c core.quotepath=false` keeps non-ASCII (e.g. cp932) names
             # un-escaped; `--relative` emits paths relative to `cwd=root` (and
             # scopes the diff to that subtree), so `root / line` resolves
@@ -79,13 +81,9 @@ def _changed_python_files(since: str, root: Path) -> list[Path] | None:
                 "--relative",
                 f"{since}...HEAD",
             ],
-            check=False,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            cwd=str(root),
+            cwd=root,
         )
-    except (FileNotFoundError, OSError):
+    except OSError:
         logger.warning("git not available; running full scan.")
         return None
     if result.returncode != 0:
@@ -100,32 +98,36 @@ def _changed_python_files(since: str, root: Path) -> list[Path] | None:
     ]
 
 
-# --------------------------------------------------------------------------
-# `psc gate`
-# --------------------------------------------------------------------------
-
-
-def _resolve_gate_targets(args: argparse.Namespace) -> list[str] | None:
-    """Resolve which targets Ruff/AST should scan. None = skip those steps."""
-    if not args.since:
-        return [args.target]
-    changed = _changed_python_files(args.since, Path(args.target).resolve())
+def _resolve_targets(
+    raw_targets: Sequence[str],
+    since: str | None,
+    root: Path,
+) -> list[str] | None:
+    """Resolve which targets Ruff/AST should scan. None = no changes since ref."""
+    if not since:
+        return list(raw_targets)
+    changed = _changed_python_files(since, root)
     if changed is None:
-        return [args.target]
+        return list(raw_targets)
     if not changed:
-        logger.info("[OK] No Python changes since %s; skipping Ruff/AST.", args.since)
+        logger.info("[OK] No Python changes since %s; skipping Ruff/AST.", since)
         return None
     targets = [str(p) for p in changed]
     logger.info(
         "Diff-aware: %d file(s) changed since %s.",
         len(targets),
-        args.since,
+        since,
     )
     return targets
 
 
+# --------------------------------------------------------------------------
+# `psc gate`
+# --------------------------------------------------------------------------
+
+
 def _collect_ast_errors(
-    targets: list[str],
+    targets: Sequence[str],
     *,
     cache_dir: Path | None = None,
 ) -> list[str]:
@@ -159,14 +161,15 @@ def _apply_baseline(
 
 
 def _step_ast(
-    targets: list[str],
+    targets: Sequence[str],
     summary: list[StepResult] | None,
     *,
     baseline_path: Path | None = None,
+    cache_dir: Path | None = None,
     root: Path,
 ) -> bool:
     logger.info("Polars-First AST policy...")
-    ast_errors = _collect_ast_errors(targets)
+    ast_errors = _collect_ast_errors(targets, cache_dir=cache_dir)
     ast_errors, info = _apply_baseline(ast_errors, baseline_path, root)
     for line in info:
         logger.info(line)
@@ -191,9 +194,10 @@ def _cmd_gate(args: argparse.Namespace) -> int:
     summary: list[StepResult] | None = [] if args.github_summary else None
     success = True
 
-    targets = _resolve_gate_targets(args)
-    baseline_path = Path(args.baseline) if args.baseline else None
     root = Path(args.target).resolve()
+    targets = _resolve_targets([args.target], args.since, root)
+    baseline_path = Path(args.baseline) if args.baseline else None
+    cache_dir = Path(args.cache_dir) if getattr(args, "cache_dir", None) else None
     if targets:
         logger.info("Code quality (Ruff)...")
         ok, _ = run_command(
@@ -205,6 +209,7 @@ def _cmd_gate(args: argparse.Namespace) -> int:
                 targets,
                 summary,
                 baseline_path=baseline_path,
+                cache_dir=cache_dir,
                 root=root,
             )
             and success
@@ -249,17 +254,9 @@ def _cmd_gate(args: argparse.Namespace) -> int:
 def _cmd_ast(args: argparse.Namespace) -> int:
     raw_targets = args.targets or ["."]
     root = Path(raw_targets[0]).resolve()
-    targets: list[str] = list(raw_targets)
-
-    if args.since:
-        changed = _changed_python_files(args.since, root)
-        if changed is None:
-            pass  # full scan fallback already logged
-        elif not changed:
-            logger.info("[OK] No Python changes since %s.", args.since)
-            return EXIT_OK
-        else:
-            targets = [str(p) for p in changed]
+    targets = _resolve_targets(raw_targets, args.since, root)
+    if targets is None:
+        return EXIT_OK
 
     cache_dir = Path(args.cache_dir) if args.cache_dir else None
     errors = _collect_ast_errors(targets, cache_dir=cache_dir)
@@ -425,12 +422,10 @@ def _cmd_prepush(args: argparse.Namespace) -> int:
         logger.error("[FAIL] Syntax errors. Run 'python -m compileall .'.")
 
     logger.info("[2/3] uv.lock sync...")
-    res = subprocess.run(
-        ["uv", "lock", "--check"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        res = run_process(["uv", "lock", "--check"], cwd=root)
+    except OSError as exc:
+        raise ToolUnavailableError(f"Error running uv lock --check: {exc}") from exc
     lock_ok = res.returncode == 0
     if not lock_ok:
         logger.error("[FAIL] uv.lock out of sync. Run 'uv lock'.")
@@ -474,6 +469,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "--baseline",
         help=f"AST-policy baseline file (e.g. {DEFAULT_BASELINE_FILE}); "
         "only NEW violations fail the gate.",
+    )
+    p_gate.add_argument(
+        "--cache-dir",
+        help="Directory for per-file result cache (e.g. .psc-cache).",
     )
     p_gate.set_defaults(func=_cmd_gate)
 

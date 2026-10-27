@@ -154,3 +154,22 @@ def test_replace_invalid_result_raises_and_leaves_file_unchanged(
 
     # File must be byte-for-byte unchanged.
     assert target.read_text(encoding="utf-8") == original
+
+
+def test_replace_code_without_trailing_newline_does_not_corrupt_next_line(
+    tmp_path: Path,
+) -> None:
+    """New code lacking a final newline must not merge with the following line."""
+    target = tmp_path / "t.py"
+    target.write_text(
+        "def target():\n    return 1\n\ndef keep():\n    return 2\n",
+        encoding="utf-8",
+    )
+    new = tmp_path / "new.py"
+    # Intentionally omit trailing newline.
+    new.write_text("def target():\n    return 99", encoding="utf-8")
+
+    replace_code(target, "target", new)
+    out = target.read_text(encoding="utf-8")
+    assert "return 99\n" in out
+    assert "def keep():" in out
