@@ -1,4 +1,4 @@
-﻿"""
+"""
 Tests for batch operations and concurrent processing
 
 Tests parallel data fetching and batch processing efficiency.
@@ -152,12 +152,8 @@ class TestConcurrentSafety:
             call_count[0] += 1
             mock = Mock()
             mock.info = {"symbol": symbol, "call_num": call_count[0]}
-            mock.financials = pd.DataFrame(
-                {"2024": [100 * call_count[0]]}, index=["Revenue"]
-            )
-            mock.balance_sheet = pd.DataFrame(
-                {"2024": [500 * call_count[0]]}, index=["Assets"]
-            )
+            mock.financials = pd.DataFrame({"2024": [100 * call_count[0]]}, index=["Revenue"])
+            mock.balance_sheet = pd.DataFrame({"2024": [500 * call_count[0]]}, index=["Assets"])
             return mock
 
         mock_ticker_class.side_effect = create_mock_ticker
@@ -166,9 +162,7 @@ class TestConcurrentSafety:
         from consultant_toolkit.finance_data import fetch_financial_data
 
         with ThreadPoolExecutor(max_workers=3) as executor:
-            futures = [
-                executor.submit(fetch_financial_data, f"TICKER{i}") for i in range(5)
-            ]
+            futures = [executor.submit(fetch_financial_data, f"TICKER{i}") for i in range(5)]
             results = [f.result() for f in futures]
 
         # All should succeed

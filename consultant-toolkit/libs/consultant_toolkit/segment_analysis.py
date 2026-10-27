@@ -144,9 +144,7 @@ def get_segment_data_manual(ticker: str) -> dict | None:
     return SEGMENT_MAPPINGS.get(ticker_upper)
 
 
-def calculate_segment_revenue(
-    ticker: str, total_revenue: float
-) -> pd.DataFrame | None:
+def calculate_segment_revenue(ticker: str, total_revenue: float) -> pd.DataFrame | None:
     """
     総収益からセグメント別収益を計算
 
@@ -161,21 +159,7 @@ def calculate_segment_revenue(
     if not segment_data:
         return None
 
-    segments = []
-    for seg_name, seg_info in segment_data["segments"].items():
-        revenue = total_revenue * seg_info["percentage"]
-        segments.append(
-            {
-                "Segment": seg_name,
-                "Revenue": revenue,
-                "Percentage": seg_info["percentage"] * 100,
-                "Description": seg_info["description"],
-            }
-        )
-
-    df = pd.DataFrame(segments)
-    df = df.sort_values("Revenue", ascending=False)
-    return df
+    return calculate_segment_revenue_from_ai(segment_data, total_revenue)
 
 
 # ========================================
@@ -194,9 +178,9 @@ def extract_segments_with_ai(ticker: str, company_name: str) -> dict | None:
     Returns:
         抽出されたセグメント情報辞書
     """
-    from consultant_toolkit.env_loader import get_api_key
+    from consultant_toolkit.env_loader import get_gemini_api_key
 
-    api_key = get_api_key("GOOGLE_API_KEY")
+    api_key = get_gemini_api_key()
     if not api_key:
         return None
 
@@ -301,9 +285,7 @@ def get_geographic_revenue(ticker: str, total_revenue: float) -> pd.DataFrame | 
     regions = []
     for region, percentage in geo_data.items():
         revenue = total_revenue * percentage
-        regions.append(
-            {"Region": region, "Revenue": revenue, "Percentage": percentage * 100}
-        )
+        regions.append({"Region": region, "Revenue": revenue, "Percentage": percentage * 100})
 
     df = pd.DataFrame(regions)
     df = df.sort_values("Revenue", ascending=False)
@@ -373,14 +355,12 @@ def get_segment_analysis(
     return segment_df, geo_df, source
 
 
-def calculate_segment_revenue_from_ai(
-    segment_info: dict, total_revenue: float
-) -> pd.DataFrame:
+def calculate_segment_revenue_from_ai(segment_info: dict, total_revenue: float) -> pd.DataFrame:
     """
-    AI抽出されたセグメント情報から収益を計算
+    セグメント情報辞書からセグメント別収益を計算
 
     Args:
-        segment_info: AI抽出されたセグメント情報
+        segment_info: セグメント情報辞書（手動またはAI抽出）
         total_revenue: 総収益額
 
     Returns:

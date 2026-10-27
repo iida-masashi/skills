@@ -954,9 +954,7 @@ def search_ticker_by_name(company_name: str, threshold: float = 0.6) -> str | No
             return ticker
 
     # 曖昧検索（類似度ベース）
-    matches = difflib.get_close_matches(
-        query, COMPANY_NAME_TO_TICKER.keys(), n=1, cutoff=threshold
-    )
+    matches = difflib.get_close_matches(query, COMPANY_NAME_TO_TICKER.keys(), n=1, cutoff=threshold)
     if matches:
         return COMPANY_NAME_TO_TICKER[matches[0]]
 

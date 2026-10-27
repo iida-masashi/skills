@@ -1,4 +1,4 @@
-﻿import json
+import json
 import os
 import random
 import time
@@ -10,7 +10,8 @@ import streamlit as st
 import yfinance as yf
 
 # Import utility modules
-from consultant_toolkit.env_loader import get_api_key, load_environment
+from consultant_toolkit.env_loader import get_gemini_api_key, load_environment
+from consultant_toolkit.gemini_client import DEFAULT_MODEL, create_gemini_client
 from duckduckgo_search import DDGS
 from pytrends.request import TrendReq
 
@@ -66,8 +67,6 @@ load_environment()
 
 def get_genai_client(api_key):
     """Initialize Gemini client with proper mode."""
-    from consultant_toolkit.gemini_client import create_gemini_client
-
     project = os.getenv("GOOGLE_CLOUD_PROJECT")
     is_vertex = api_key.startswith("AQ") if api_key else False
 
@@ -87,8 +86,8 @@ def call_gemini(api_key, prompt):
     if not client:
         return None
 
-    models = ["gemini-2.0-flash", "gemini-2.0-flash-lite-preview", "gemini-1.5-flash"]
-    for model_name in models:
+    models = [DEFAULT_MODEL, "gemini-2.5-flash", "gemini-2.0-flash"]
+    for model_name in dict.fromkeys(models):
         try:
             response = client.models.generate_content(model=model_name, contents=prompt)
             return response.text
@@ -199,9 +198,7 @@ def search_latest_news(keyword, max_results=10):
     try:
         with DDGS() as ddgs:
             news_res = list(
-                ddgs.news(
-                    keyword, region="jp-jp", safesearch="off", max_results=max_results
-                )
+                ddgs.news(keyword, region="jp-jp", safesearch="off", max_results=max_results)
             )
             for r in news_res:
                 results.append(
@@ -287,13 +284,9 @@ with st.sidebar:
 with st.expander("🛠️ 分析設定 (Analysis Configuration)", expanded=True):
     col_cfg1, col_cfg2 = st.columns([2, 1])
     with col_cfg1:
-        target_product = st.text_input(
-            "自社商品・ブランド名", value="アサヒ スーパードライ"
-        )
+        target_product = st.text_input("自社商品・ブランド名", value="アサヒ スーパードライ")
         if "competitor_products" not in st.session_state:
-            st.session_state["competitor_products"] = (
-                "キリン 一番搾り, サントリー プレミアムモルツ"
-            )
+            st.session_state["competitor_products"] = "キリン 一番搾り, サントリー プレミアムモルツ"
 
         competitor_products = st.text_area(
             "競合商品・ブランド名 (カンマ区切り)",
@@ -301,7 +294,7 @@ with st.expander("🛠️ 分析設定 (Analysis Configuration)", expanded=True)
         )
 
         if st.button("✨ AIで競合を自動抽出"):
-            api_key_tmp = get_api_key("GOOGLE_API_KEY", "")
+            api_key_tmp = get_gemini_api_key("")
             if not api_key_tmp:
                 st.error("APIキーが見つかりません。設定を確認してください。")
             else:
@@ -316,7 +309,7 @@ with st.expander("🛠️ 分析設定 (Analysis Configuration)", expanded=True)
 
     with col_cfg2:
         api_key = st.text_input(
-            "Gemini API Key", type="password", value=get_api_key("GOOGLE_API_KEY", "")
+            "Gemini API Key", type="password", value=get_gemini_api_key("") or ""
         )
         period_map = {
             "指定なし": None,
@@ -328,17 +321,13 @@ with st.expander("🛠️ 分析設定 (Analysis Configuration)", expanded=True)
         time_limit = period_map[analysis_period]
 
 # --- Unified Run Button ---
-if st.button(
-    "🚀 分析を開始する (Start Analysis)", use_container_width=True, type="primary"
-):
+if st.button("🚀 分析を開始する (Start Analysis)", use_container_width=True, type="primary"):
     if not api_key:
         st.warning("APIキーを入力してください。")
     else:
         with st.status("📊 市場データを収集中...", expanded=True) as status:
             st.write("Google Trends からトレンドデータを取得中...")
-            competitors = [
-                c.strip() for c in competitor_products.split(",") if c.strip()
-            ]
+            competitors = [c.strip() for c in competitor_products.split(",") if c.strip()]
             all_keywords = [target_product] + competitors
             df_trend, df_region, related = get_google_trends(all_keywords)
 
@@ -401,9 +390,7 @@ if st.button(
                 vol_avg = df_trend[target_product].mean()
                 trend_direction = "増加" if vol_now > vol_avg else "減少・停滞"
                 summary = f"対象ブランド '{target_product}' の12ヶ月のトレンド。最新値は {vol_now:.1f}、平均は {vol_avg:.1f}。現在は{trend_direction}傾向。"
-                insights["trend"] = generate_insight(
-                    api_key, "マーケットトレンド分析", summary
-                )
+                insights["trend"] = generate_insight(api_key, "マーケットトレンド分析", summary)
 
             # Positioning Insight
             if df_trend is not None:
@@ -419,9 +406,7 @@ if st.button(
                 label = ai_sentiment.get("sentiment_label", "不明")
                 score = ai_sentiment.get("sentiment_score", 0)
                 summary = f"Web評判の要約: {ai_sentiment.get('summary')}。感情ラベル: {label}、スコア: {score:.2f}。"
-                insights["sentiment"] = generate_insight(
-                    api_key, "ブランド評判・感情分析", summary
-                )
+                insights["sentiment"] = generate_insight(api_key, "ブランド評判・感情分析", summary)
 
             st.session_state["mkt_results"] = {
                 "target": target_product,
@@ -468,9 +453,7 @@ else:
                 delta="Positive" if sentiment_val > 0 else "Negative",
             )
         with col_m2:
-            current_vol = (
-                res["trend"][res["target"]].iloc[-1] if res["trend"] is not None else 0
-            )
+            current_vol = res["trend"][res["target"]].iloc[-1] if res["trend"] is not None else 0
             st.metric("最新話題量 (Trend)", f"{int(current_vol)}")
         with col_m3:
             st.metric("Web収集件数", f"{len(res['opinions'])}")
@@ -491,12 +474,14 @@ else:
                 )
                 fig_trend_mini.update_layout(
                     legend={
-                        "orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "right", "x": 1
+                        "orientation": "h",
+                        "yanchor": "bottom",
+                        "y": 1.02,
+                        "xanchor": "right",
+                        "x": 1,
                     }
                 )
-                st.plotly_chart(
-                    fig_trend_mini, use_container_width=True, config=PLOTLY_CONFIG
-                )
+                st.plotly_chart(fig_trend_mini, use_container_width=True, config=PLOTLY_CONFIG)
                 if "trend" in insights:
                     st.info(f"**💡 AI分析インサイト**\n\n{insights['trend']}")
         with col_p2:
@@ -527,9 +512,7 @@ else:
                 for n in ai.get("key_negatives", []):
                     st.write(f"- {n}")
 
-            st.warning(
-                f"**推奨アクション**: {', '.join(ai.get('improvement_actions', []))}"
-            )
+            st.warning(f"**推奨アクション**: {', '.join(ai.get('improvement_actions', []))}")
         else:
             st.write("AI分析データがありません。")
 
@@ -539,9 +522,7 @@ else:
             fig_trend_full = px.line(
                 res["trend"], title="話題量詳細 (時系列)", template="plotly_white"
             )
-            st.plotly_chart(
-                fig_trend_full, use_container_width=True, config=PLOTLY_CONFIG
-            )
+            st.plotly_chart(fig_trend_full, use_container_width=True, config=PLOTLY_CONFIG)
             if "trend" in insights:
                 st.info(f"**💡 AI分析インサイト**\n\n{insights['trend']}")
 
@@ -549,9 +530,7 @@ else:
             with c_g1:
                 st.subheader("🗺️ 地域別関心")
                 df_reg = res["region"].sort_values(res["target"]).tail(10)
-                fig_reg = px.bar(
-                    df_reg, x=res["target"], orientation="h", title="都道府県別関心度"
-                )
+                fig_reg = px.bar(df_reg, x=res["target"], orientation="h", title="都道府県別関心度")
                 st.plotly_chart(fig_reg, use_container_width=True, config=PLOTLY_CONFIG)
             with c_g2:
                 st.subheader("🔍 関連キーワード")
@@ -611,9 +590,7 @@ else:
 
         with st.expander("収集されたWebの声・ソース (Raw Data)"):
             for op in res["opinions"]:
-                st.markdown(
-                    f"- **{op['title']}** ([Link]({op['link']})) - {op['source']}"
-                )
+                st.markdown(f"- **{op['title']}** ([Link]({op['link']})) - {op['source']}")
 
     with tab4:
         st.subheader("⚔️ 競合分析・ポジショニング")
@@ -636,9 +613,7 @@ else:
         st.markdown("Google Trendsと金融指標（株価・為替等）の相関を可視化します。")
         c_f1, c_f2 = st.columns(2)
         with c_f1:
-            ticker1 = st.text_input(
-                "株価ティッカー (Yahoo Finance形式)", value="7203.T"
-            )
+            ticker1 = st.text_input("株価ティッカー (Yahoo Finance形式)", value="7203.T")
         with c_f2:
             ticker2 = st.text_input("比較指標ティッカー (為替等)", value="JPY=X")
 
@@ -652,10 +627,7 @@ else:
                         s1 = s1_df["Close"].squeeze()
                         s2 = s2_df["Close"].squeeze()
 
-                        if (
-                            res["trend"] is not None
-                            and res["target"] in res["trend"].columns
-                        ):
+                        if res["trend"] is not None and res["target"] in res["trend"].columns:
                             trends = res["trend"][res["target"]]
 
                             s1.name = ticker1
@@ -667,9 +639,7 @@ else:
                                     return s * 0
                                 return (s - s.min()) / (s.max() - s.min())
 
-                            combined = (
-                                pd.concat([trends, s1, s2], axis=1).ffill().dropna()
-                            )
+                            combined = pd.concat([trends, s1, s2], axis=1).ffill().dropna()
 
                             if not combined.empty:
                                 norm_df = combined.apply(norm)
@@ -687,30 +657,24 @@ else:
                                 corr1 = norm_df.corr()["Trend"][ticker1]
                                 corr2 = norm_df.corr()["Trend"][ticker2]
                                 col_c1, col_c2 = st.columns(2)
-                                col_c1.metric(
-                                    f"トレンド vs {ticker1} 相関係数", f"{corr1:.2f}"
-                                )
-                                col_c2.metric(
-                                    f"トレンド vs {ticker2} 相関係数", f"{corr2:.2f}"
-                                )
+                                col_c1.metric(f"トレンド vs {ticker1} 相関係数", f"{corr1:.2f}")
+                                col_c2.metric(f"トレンド vs {ticker2} 相関係数", f"{corr2:.2f}")
 
                                 # --- Generate Financial Insight ---
                                 summary_fin = f"ブランドトレンド vs {ticker1} (相関係数: {corr1:.2f})、ブランドトレンド vs {ticker2} (相関係数: {corr2:.2f})。"
                                 fin_insight = generate_insight(
                                     api_key, "財務・マクロ相関分析", summary_fin
                                 )
-                                st.session_state["mkt_results"]["insights"][
-                                    "financial"
-                                ] = fin_insight
+                                st.session_state["mkt_results"]["insights"]["financial"] = (
+                                    fin_insight
+                                )
                                 st.rerun()
                             else:
                                 st.error("共通の分析期間が見つかりませんでした。")
                         else:
                             st.error("トレンドデータが不足しています。")
                     else:
-                        st.error(
-                            "ティッカー情報の取得に失敗しました。入力内容を確認してください。"
-                        )
+                        st.error("ティッカー情報の取得に失敗しました。入力内容を確認してください。")
                 except Exception as e:
                     st.error(f"分析実行エラー: {e}")
 

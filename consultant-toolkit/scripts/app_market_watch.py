@@ -1,4 +1,3 @@
-﻿
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -6,7 +5,7 @@ import streamlit as st
 import yfinance as yf
 
 # Import utility modules
-from consultant_toolkit.env_loader import get_api_key, load_environment
+from consultant_toolkit.env_loader import get_gemini_api_key, load_environment
 from prophet import Prophet
 from ta.momentum import RSIIndicator
 from ta.trend import MACD, SMAIndicator
@@ -44,9 +43,7 @@ def make_forecast(ticker_symbol, periods=180):
 
         df_prophet = df[["Date", "Close"]].rename(columns={"Date": "ds", "Close": "y"})
 
-        m = Prophet(
-            daily_seasonality=False, weekly_seasonality=False, yearly_seasonality=True
-        )
+        m = Prophet(daily_seasonality=False, weekly_seasonality=False, yearly_seasonality=True)
         m.fit(df_prophet)
 
         future = m.make_future_dataframe(periods=periods)
@@ -183,7 +180,7 @@ def get_sector_history():
 # --- Sidebar ---
 st.sidebar.title("🌏 AIマーケット・アナリスト")
 api_key = st.sidebar.text_input(
-    "Gemini API Key", type="password", value=get_api_key("GOOGLE_API_KEY", "")
+    "Gemini API Key", type="password", value=get_gemini_api_key("") or ""
 )
 
 target_index = st.sidebar.selectbox(
@@ -232,9 +229,7 @@ with tab1:
                     "1W %": "{:+.2f}%",
                     "1M %": "{:+.2f}%",
                 }
-            ).background_gradient(
-                cmap="RdYlGn", subset=["1D %", "1W %", "1M %"], vmin=-3, vmax=3
-            )
+            ).background_gradient(cmap="RdYlGn", subset=["1D %", "1W %", "1M %"], vmin=-3, vmax=3)
         )
     else:
         st.error("データ取得に失敗しました。")
@@ -248,9 +243,7 @@ with tab2:
     if df_tech is not None and not df_tech.empty:
         # Chart
         fig_tech = go.Figure()
-        fig_tech.add_trace(
-            go.Scatter(x=df_tech.index, y=df_tech["Close"], name="Close")
-        )
+        fig_tech.add_trace(go.Scatter(x=df_tech.index, y=df_tech["Close"], name="Close"))
         fig_tech.add_trace(
             go.Scatter(
                 x=df_tech.index,
@@ -303,12 +296,8 @@ with tab2:
 
         with col_t2:
             fig_macd = go.Figure()
-            fig_macd.add_trace(
-                go.Scatter(x=df_tech.index, y=df_tech["MACD"], name="MACD")
-            )
-            fig_macd.add_trace(
-                go.Scatter(x=df_tech.index, y=df_tech["MACD_Signal"], name="Signal")
-            )
+            fig_macd.add_trace(go.Scatter(x=df_tech.index, y=df_tech["MACD"], name="MACD"))
+            fig_macd.add_trace(go.Scatter(x=df_tech.index, y=df_tech["MACD_Signal"], name="Signal"))
             fig_macd.update_layout(title="MACD Trend")
             st.plotly_chart(fig_macd, use_container_width=True)
 
@@ -337,7 +326,10 @@ with tab2:
                 """
                 with st.spinner("AIがチャートを凝視しています..."):
                     try:
-                        from consultant_toolkit.gemini_client import DEFAULT_MODEL, create_gemini_client
+                        from consultant_toolkit.gemini_client import (
+                            DEFAULT_MODEL,
+                            create_gemini_client,
+                        )
 
                         client = create_gemini_client(api_key=api_key)
                         response = client.models.generate_content(
@@ -459,9 +451,7 @@ with tab3:
             )
 
             # Correlation of returns
-            df_returns = df_sectors.pct_change().tail(
-                60
-            )  # Last 3 months (approx 60 trading days)
+            df_returns = df_sectors.pct_change().tail(60)  # Last 3 months (approx 60 trading days)
             corr_matrix = df_returns.corr()
 
             fig_corr = px.imshow(
@@ -480,9 +470,7 @@ with tab3:
 
 with tab4:
     st.subheader("🌾 コモディティ価格予測 (USD建て)")
-    st.caption(
-        "Prophet (AI) を用いて、主要コモディティの向こう半年の価格トレンドを予測します。"
-    )
+    st.caption("Prophet (AI) を用いて、主要コモディティの向こう半年の価格トレンドを予測します。")
 
     # Constants
     COMMODITIES = {
@@ -510,9 +498,7 @@ with tab4:
 
     col_c1, col_c2 = st.columns(2)
     with col_c1:
-        selected_comm = st.selectbox(
-            "分析対象を選択", list(COMMODITIES.keys()), key="comm_select"
-        )
+        selected_comm = st.selectbox("分析対象を選択", list(COMMODITIES.keys()), key="comm_select")
     with col_c2:
         forecast_months = st.slider("予測期間 (月)", 1, 12, 6, key="comm_months")
         forecast_days = forecast_months * 30

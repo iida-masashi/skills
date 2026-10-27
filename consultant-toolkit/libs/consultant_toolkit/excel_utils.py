@@ -34,9 +34,7 @@ def convert_excel_to_csv(
     try:
         # polars >= 0.19.0 では source 引数に渡す
         if sheet_name:
-            df = pl.read_excel(
-                source=input_path, sheet_name=sheet_name, engine="calamine"
-            )
+            df = pl.read_excel(source=input_path, sheet_name=sheet_name, engine="calamine")
         else:
             df = pl.read_excel(source=input_path, engine="calamine")
     except (OSError, ModuleNotFoundError, ValueError) as e:

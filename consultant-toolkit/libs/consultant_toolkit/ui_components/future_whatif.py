@@ -436,9 +436,7 @@ def render_whatif_simulator(
     # --- タブ4: 総合シミュレーション ---
     with sim_tabs[3]:
         st.markdown("#### 🎯 総合インパクト分析")
-        st.markdown(
-            "各タブのパラメータを一括で設定し、全指標への統合インパクトを確認します。"
-        )
+        st.markdown("各タブのパラメータを一括で設定し、全指標への統合インパクトを確認します。")
 
         with st.expander("🎛️ 全パラメータ設定", expanded=True):
             col_all1, col_all2, col_all3 = st.columns(3)
@@ -542,26 +540,20 @@ def render_whatif_simulator(
         sim_dpo = max(0, current_dpo + dpo_change)
         sim_ccc = sim_dio + sim_dso - sim_dpo
         ccc_improvement_total = current_ccc_val - sim_ccc
-        working_capital_reduction_total = (
-            ccc_improvement_total / DAYS_PER_YEAR
-        ) * (current_revenue * (current_cogs_ratio / 100))
+        working_capital_reduction_total = (ccc_improvement_total / DAYS_PER_YEAR) * (
+            current_revenue * (current_cogs_ratio / 100)
+        )
         sim_invested_capital = max(
             current_invested_capital * 0.1,
             current_invested_capital - working_capital_reduction_total,
         )
         sim_nopat = total_oi_sim * 0.7  # 推定税率30%
-        sim_roic = (
-            (sim_nopat / sim_invested_capital * 100)
-            if sim_invested_capital > 0
-            else 0
-        )
+        sim_roic = (sim_nopat / sim_invested_capital * 100) if sim_invested_capital > 0 else 0
 
         # サマリーメトリクス
         st.markdown("#### 📊 統合KPIダッシュボード")
 
-        col_total1, col_total2, col_total3, col_total4, col_total5, col_total6 = (
-            st.columns(6)
-        )
+        col_total1, col_total2, col_total3, col_total4, col_total5, col_total6 = st.columns(6)
 
         with col_total1:
             st.metric(
@@ -627,9 +619,7 @@ def render_whatif_simulator(
             if current_revenue > 0
             else 50,  # キャッシュ創出
             50,  # 成長性（ベースライン）
-            min((current_ocf / current_capex) * 20, 100)
-            if current_capex > 0
-            else 50,  # 投資効率
+            min((current_ocf / current_capex) * 20, 100) if current_capex > 0 else 50,  # 投資効率
             min(current_roic * 5, 100),  # ROIC (20%で100)
         ]
 
@@ -715,15 +705,11 @@ def render_whatif_simulator(
             for action in actions:
                 st.markdown(action)
         else:
-            st.info(
-                "💡 パラメータを調整して、改善施策のインパクトを確認してください。"
-            )
+            st.info("💡 パラメータを調整して、改善施策のインパクトを確認してください。")
 
         # エクスポート
         st.markdown("---")
-        if st.button(
-            "📥 シミュレーション結果をエクスポート", use_container_width=True
-        ):
+        if st.button("📥 シミュレーション結果をエクスポート", use_container_width=True):
             sim_results = {
                 "simulation_date": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "company": target_company_name,

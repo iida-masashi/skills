@@ -44,14 +44,9 @@ def render_roic_tree(
                 income_statement_df, balance_sheet_df, y_latest
             )
 
-            if (
-                metrics_latest["revenue"] > 0
-                and metrics_latest["invested_capital"] > 0
-            ):
+            if metrics_latest["revenue"] > 0 and metrics_latest["invested_capital"] > 0:
                 # 追加メトリクス計算
-                total_assets = get_val_safe(
-                    balance_sheet_df, ["Total Assets"], y_latest
-                )
+                total_assets = get_val_safe(balance_sheet_df, ["Total Assets"], y_latest)
                 equity = get_val_safe(
                     balance_sheet_df,
                     ["Total Equity Gross Minority Interest", "Stockholders Equity"],
@@ -59,11 +54,7 @@ def render_roic_tree(
                 )
                 debt = get_val_safe(balance_sheet_df, ["Total Debt"], y_latest)
 
-                asset_turnover = (
-                    metrics_latest["revenue"] / total_assets
-                    if total_assets > 0
-                    else 0
-                )
+                asset_turnover = metrics_latest["revenue"] / total_assets if total_assets > 0 else 0
                 leverage = total_assets / equity if equity > 0 else 0
                 debt_ratio = debt / total_assets if total_assets > 0 else 0
 
@@ -85,9 +76,7 @@ def render_roic_tree(
             years = income_statement_df.columns.sort_values()
             for y in years:
                 try:
-                    metrics = calculate_financial_metrics(
-                        income_statement_df, balance_sheet_df, y
-                    )
+                    metrics = calculate_financial_metrics(income_statement_df, balance_sheet_df, y)
                     if metrics["revenue"] > 0:
                         historical_data.append(
                             {
@@ -261,9 +250,7 @@ def render_roic_tree(
                             color_discrete_map=DYNAMIC_COLORS,
                         )
                         fig_turnover_trend.update_layout(height=350)
-                        st.plotly_chart(
-                            fig_turnover_trend, use_container_width=True
-                        )
+                        st.plotly_chart(fig_turnover_trend, use_container_width=True)
                 else:
                     st.warning("歴史データがありません")
 
@@ -356,9 +343,7 @@ def render_roic_tree(
                 # ギャップ分析（対象企業 vs ベスト）
                 target_company = list(DYNAMIC_COMPANIES.keys())[0]
                 if target_company in df_tree["Company"].values:
-                    target_data = df_tree[
-                        df_tree["Company"] == target_company
-                    ].iloc[0]
+                    target_data = df_tree[df_tree["Company"] == target_company].iloc[0]
 
                     st.markdown(f"### 📊 {target_company} のギャップ分析")
 
@@ -384,17 +369,11 @@ def render_roic_tree(
                                 # #10: 現状値が0の場合でもギャップから改善率を計算
                                 f"{((best_roic['ROIC (%)'] / target_data['ROIC (%)']) - 1) * 100:.1f}%"
                                 if target_data["ROIC (%)"] > 0
-                                else (
-                                    "黒字化が必要"
-                                    if best_roic["ROIC (%)"] > 0
-                                    else "N/A"
-                                ),
+                                else ("黒字化が必要" if best_roic["ROIC (%)"] > 0 else "N/A"),
                                 f"{((best_margin['NOPAT Margin (%)'] / target_data['NOPAT Margin (%)']) - 1) * 100:.1f}%"
                                 if target_data["NOPAT Margin (%)"] > 0
                                 else (
-                                    "黒字化が必要"
-                                    if best_margin["NOPAT Margin (%)"] > 0
-                                    else "N/A"
+                                    "黒字化が必要" if best_margin["NOPAT Margin (%)"] > 0 else "N/A"
                                 ),
                                 f"{((best_turnover['IC Turnover (x)'] / target_data['IC Turnover (x)']) - 1) * 100:.1f}%"
                                 if target_data["IC Turnover (x)"] > 0
@@ -426,14 +405,11 @@ def render_roic_tree(
                 # 対象企業の現状値を取得
                 roic_sim_target_company = list(DYNAMIC_COMPANIES.keys())[0]
                 if roic_sim_target_company in df_tree["Company"].values:
-                    roic_sim_base = df_tree[
-                        df_tree["Company"] == roic_sim_target_company
-                    ].iloc[0]
+                    roic_sim_base = df_tree[df_tree["Company"] == roic_sim_target_company].iloc[0]
                     roic_sim_current_roic = roic_sim_base["ROIC (%)"]
                     roic_sim_current_margin = roic_sim_base["NOPAT Margin (%)"]
                     roic_sim_current_turnover = roic_sim_base["IC Turnover (x)"]
                     roic_sim_current_revenue_m = roic_sim_base["Revenue (M)"]
-                    roic_sim_base["NOPAT (M)"]
                 else:
                     # フォールバック: df_treeの最初の行を使用
                     roic_sim_base = df_tree.iloc[0]
@@ -441,7 +417,6 @@ def render_roic_tree(
                     roic_sim_current_margin = roic_sim_base["NOPAT Margin (%)"]
                     roic_sim_current_turnover = roic_sim_base["IC Turnover (x)"]
                     roic_sim_current_revenue_m = roic_sim_base["Revenue (M)"]
-                    roic_sim_base["NOPAT (M)"]
                     roic_sim_target_company = roic_sim_base["Company"]
 
                 # 投下資本 (IC) を逆算: IC = Revenue / IC_Turnover
@@ -466,27 +441,17 @@ def render_roic_tree(
                         _rs_rec = get_val_safe(
                             _rs_bs, ["Accounts Receivable", "Receivables"], _rs_y
                         )
-                        _rs_pay = get_val_safe(
-                            _rs_bs, ["Accounts Payable", "Payables"], _rs_y
-                        )
+                        _rs_pay = get_val_safe(_rs_bs, ["Accounts Payable", "Payables"], _rs_y)
                         roic_sim_current_dio = (
-                            (_rs_inv / _rs_cogs * DAYS_PER_YEAR)
-                            if _rs_cogs > 0
-                            else 60.0
+                            (_rs_inv / _rs_cogs * DAYS_PER_YEAR) if _rs_cogs > 0 else 60.0
                         )
                         roic_sim_current_dso = (
-                            (_rs_rec / _rs_rev * DAYS_PER_YEAR)
-                            if _rs_rev > 0
-                            else 45.0
+                            (_rs_rec / _rs_rev * DAYS_PER_YEAR) if _rs_rev > 0 else 45.0
                         )
                         roic_sim_current_dpo = (
-                            (_rs_pay / _rs_cogs * DAYS_PER_YEAR)
-                            if _rs_cogs > 0
-                            else 30.0
+                            (_rs_pay / _rs_cogs * DAYS_PER_YEAR) if _rs_cogs > 0 else 30.0
                         )
-                        roic_sim_cogs_ratio = (
-                            (_rs_cogs / _rs_rev) if _rs_rev > 0 else 0.6
-                        )
+                        roic_sim_cogs_ratio = (_rs_cogs / _rs_rev) if _rs_rev > 0 else 0.6
                     else:
                         raise ValueError("empty")
                 except (ConnectionError, KeyError, ValueError):
@@ -501,27 +466,17 @@ def render_roic_tree(
                     )
                     roic_sim_cogs_ratio = 0.6
                 roic_sim_current_ccc = (
-                    roic_sim_current_dio
-                    + roic_sim_current_dso
-                    - roic_sim_current_dpo
+                    roic_sim_current_dio + roic_sim_current_dso - roic_sim_current_dpo
                 )
 
                 # --- 現状値表示 ---
                 st.markdown(f"#### 📌 {roic_sim_target_company} の現状値")
-                col_base1, col_base2, col_base3, col_base4, col_base5 = st.columns(
-                    5
-                )
+                col_base1, col_base2, col_base3, col_base4, col_base5 = st.columns(5)
                 col_base1.metric("現状 ROIC (%)", f"{roic_sim_current_roic:.2f}%")
-                col_base2.metric(
-                    "現状 NOPAT Margin (%)", f"{roic_sim_current_margin:.2f}%"
-                )
-                col_base3.metric(
-                    "現状 IC Turnover (x)", f"{roic_sim_current_turnover:.2f}x"
-                )
+                col_base2.metric("現状 NOPAT Margin (%)", f"{roic_sim_current_margin:.2f}%")
+                col_base3.metric("現状 IC Turnover (x)", f"{roic_sim_current_turnover:.2f}x")
                 col_base4.metric("現状 CCC (日)", f"{roic_sim_current_ccc:.0f}日")
-                col_base5.metric(
-                    "現状 投下資本 (M)", f"{roic_sim_current_ic_m:,.0f}M"
-                )
+                col_base5.metric("現状 投下資本 (M)", f"{roic_sim_current_ic_m:,.0f}M")
 
                 st.markdown("---")
 
@@ -574,19 +529,14 @@ def render_roic_tree(
                 )
                 # CCCによるIC Turnover改善分
                 roic_sim_turnover_from_ccc = (
-                    roic_sim_current_revenue_m / roic_sim_new_ic_m
-                    - roic_sim_current_turnover
+                    roic_sim_current_revenue_m / roic_sim_new_ic_m - roic_sim_current_turnover
                     if roic_sim_new_ic_m > 0
                     else 0.0
                 )
 
                 # --- 全ドライバー統合計算 ---
-                roic_sim_new_margin = (
-                    roic_sim_current_margin + roic_sim_margin_delta
-                )
-                roic_sim_total_turnover_delta = (
-                    roic_sim_turnover_delta + roic_sim_turnover_from_ccc
-                )
+                roic_sim_new_margin = roic_sim_current_margin + roic_sim_margin_delta
+                roic_sim_total_turnover_delta = roic_sim_turnover_delta + roic_sim_turnover_from_ccc
                 roic_sim_new_turnover = max(
                     0.01, roic_sim_current_turnover + roic_sim_total_turnover_delta
                 )
@@ -644,15 +594,9 @@ def render_roic_tree(
                 # --- ウォーターフォールチャート ---
                 st.markdown("#### 📉 ROIC改善ブリッジ分析")
 
-                margin_contribution = (
-                    roic_sim_margin_delta * roic_sim_current_turnover
-                )
-                ccc_turnover_contribution = (
-                    roic_sim_turnover_from_ccc * roic_sim_new_margin
-                )
-                direct_turnover_contribution = (
-                    roic_sim_turnover_delta * roic_sim_new_margin
-                )
+                margin_contribution = roic_sim_margin_delta * roic_sim_current_turnover
+                ccc_turnover_contribution = roic_sim_turnover_from_ccc * roic_sim_new_margin
+                direct_turnover_contribution = roic_sim_turnover_delta * roic_sim_new_margin
                 interaction_effect = (
                     roic_sim_new_roic
                     - roic_sim_current_roic
@@ -736,9 +680,7 @@ def render_roic_tree(
 
                 # --- 感応度ヒートマップ ---
                 st.markdown("---")
-                st.markdown(
-                    "#### 🗺️ 感応度マトリクス（NOPAT Margin × IC Turnover → ROIC）"
-                )
+                st.markdown("#### 🗺️ 感応度マトリクス（NOPAT Margin × IC Turnover → ROIC）")
                 st.markdown(
                     "各セルの数値は、そのマージン・回転率の組み合わせにおける**予測ROIC(%)**を示します。緑が高いほど資本効率が高い状態を意味します。"
                 )
@@ -775,9 +717,7 @@ def render_roic_tree(
                 )
 
                 # 現状位置をマーク
-                closest_margin_idx = int(
-                    np.argmin(np.abs(margin_range - roic_sim_current_margin))
-                )
+                closest_margin_idx = int(np.argmin(np.abs(margin_range - roic_sim_current_margin)))
                 closest_turnover_idx = int(
                     np.argmin(np.abs(turnover_range - roic_sim_current_turnover))
                 )
@@ -824,9 +764,7 @@ def render_roic_tree(
                         if roic_sim_current_turnover > 0
                         else roic_sim_current_margin
                     )
-                    path1_margin_delta = (
-                        path1_margin_needed - roic_sim_current_margin
-                    )
+                    path1_margin_delta = path1_margin_needed - roic_sim_current_margin
 
                     # パス②: IC Turnoverのみ改善
                     # target_roic(%) = current_margin(%) × new_turnover
@@ -835,9 +773,7 @@ def render_roic_tree(
                         if roic_sim_current_margin > 0
                         else roic_sim_current_turnover
                     )
-                    path2_turnover_delta = (
-                        path2_turnover_needed - roic_sim_current_turnover
-                    )
+                    path2_turnover_delta = path2_turnover_needed - roic_sim_current_turnover
 
                     # パス③: 両方均等改善（比率で按分）
                     # target = (margin_pct + dm) × (turnover + dt) を均等スケールで解く
@@ -848,12 +784,8 @@ def render_roic_tree(
                     )
                     path3_margin_needed = roic_sim_current_margin * scale_factor
                     path3_turnover_needed = roic_sim_current_turnover * scale_factor
-                    path3_margin_delta = (
-                        path3_margin_needed - roic_sim_current_margin
-                    )
-                    path3_turnover_delta = (
-                        path3_turnover_needed - roic_sim_current_turnover
-                    )
+                    path3_margin_delta = path3_margin_needed - roic_sim_current_margin
+                    path3_turnover_delta = path3_turnover_needed - roic_sim_current_turnover
 
                     path_df = pd.DataFrame(
                         {

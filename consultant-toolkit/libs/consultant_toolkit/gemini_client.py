@@ -30,7 +30,7 @@ def create_gemini_client(
     Gemini クライアントを生成する。
 
     Args:
-        api_key: API キー。None の場合は GOOGLE_API_KEY 環境変数を使用。
+        api_key: API キー。None の場合は GOOGLE_API_KEY または GEMINI_API_KEY 環境変数を使用。
         use_vertex: Vertex AI を使用するか。
         project: GCP プロジェクト ID (Vertex AI 使用時)。
         location: GCP リージョン (Vertex AI 使用時)。
@@ -48,7 +48,7 @@ def create_gemini_client(
         project = project or os.getenv("GOOGLE_CLOUD_PROJECT")
         return genai.Client(vertexai=True, project=project, location=location)
 
-    resolved_key = api_key or os.getenv("GOOGLE_API_KEY", "")
+    resolved_key = api_key or os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY") or ""
     if not resolved_key:
         raise ValueError("Gemini API キーが設定されていません。")
 

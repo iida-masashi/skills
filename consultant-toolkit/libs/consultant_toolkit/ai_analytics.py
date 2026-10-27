@@ -134,9 +134,9 @@ def analyze_query_with_llm(
     """
     try:
         if not api_key:
-            from consultant_toolkit.env_loader import get_api_key
+            from consultant_toolkit.env_loader import get_gemini_api_key
 
-            api_key = get_api_key("GOOGLE_API_KEY") or get_api_key("GEMINI_API_KEY")
+            api_key = get_gemini_api_key()
 
         if not api_key:
             return "❌ API Key が設定されていません。環境変数 GOOGLE_API_KEY を設定してください。"
@@ -162,17 +162,14 @@ def analyze_query_with_llm(
 """
 
         # Gemini API 呼び出し
-        from consultant_toolkit.gemini_client import DEFAULT_MODEL, create_gemini_client
+        from consultant_toolkit.gemini_client import generate_text
 
-        client = create_gemini_client(api_key=api_key)
-        response = client.models.generate_content(
-            model=DEFAULT_MODEL, contents=prompt
-        )
+        text = generate_text(prompt, api_key=api_key)
 
-        return response.text if response.text else "❌ 応答がありませんでした。"
+        return text if text else "❌ 応答がありませんでした。"
 
     except ImportError:
-        return "❌ Google Generative AI SDK がインストールされていません。\npip install google-generativeai"
+        return "❌ Google GenAI SDK がインストールされていません。\npip install google-genai"
     except (ConnectionError, TimeoutError, ValueError) as e:
         logger.error(f"LLM query failed: {e}")
         return f"❌ エラーが発生しました: {str(e)}"
@@ -235,48 +232,38 @@ def generate_insights(metrics_df: pd.DataFrame) -> list[str]:
     if "ROIC" in metrics_df.columns:
         avg_roic = metrics_df["ROIC"].mean()
         max_roic_company = (
-            metrics_df.loc[metrics_df["ROIC"].idxmax(), "Company"]
-            if "Company" in metrics_df.columns
+            metrics_df.sort_values("ROIC", ascending=False)["Company"].iloc[0]
+            if "Company" in metrics_df.columns and not metrics_df.empty
             else "N/A"
         )
         max_roic = metrics_df["ROIC"].max()
 
-        insights.append(
-            f"平均ROIC: {avg_roic:.2%}、最高は {max_roic_company} ({max_roic:.2%})"
-        )
+        insights.append(f"平均ROIC: {avg_roic:.2%}、最高は {max_roic_company} ({max_roic:.2%})")
 
         if avg_roic < 0.05:
-            insights.append(
-                "⚠️ 平均ROICが5%を下回っています。資本効率の改善が必要です。"
-            )
+            insights.append("⚠️ 平均ROICが5%を下回っています。資本効率の改善が必要です。")
 
     # CCC 分析
     if "CCC" in metrics_df.columns:
         avg_ccc = metrics_df["CCC"].mean()
         min_ccc_company = (
-            metrics_df.loc[metrics_df["CCC"].idxmin(), "Company"]
-            if "Company" in metrics_df.columns
+            metrics_df.sort_values("CCC", ascending=True)["Company"].iloc[0]
+            if "Company" in metrics_df.columns and not metrics_df.empty
             else "N/A"
         )
         min_ccc = metrics_df["CCC"].min()
 
-        insights.append(
-            f"平均CCC: {avg_ccc:.1f}日、最短は {min_ccc_company} ({min_ccc:.1f}日)"
-        )
+        insights.append(f"平均CCC: {avg_ccc:.1f}日、最短は {min_ccc_company} ({min_ccc:.1f}日)")
 
         if avg_ccc > 90:
-            insights.append(
-                "⚠️ 平均CCCが90日を超えています。運転資本効率を改善してください。"
-            )
+            insights.append("⚠️ 平均CCCが90日を超えています。運転資本効率を改善してください。")
 
     # 流動比率分析
     if "current_ratio" in metrics_df.columns:
         avg_current_ratio = metrics_df["current_ratio"].mean()
 
         if avg_current_ratio < 1.0:
-            insights.append(
-                "⚠️ 流動比率が1.0未満です。短期的な支払い能力に懸念があります。"
-            )
+            insights.append("⚠️ 流動比率が1.0未満です。短期的な支払い能力に懸念があります。")
         elif avg_current_ratio > 2.0:
             insights.append("✅ 流動比率が健全です（2.0以上）。")
 

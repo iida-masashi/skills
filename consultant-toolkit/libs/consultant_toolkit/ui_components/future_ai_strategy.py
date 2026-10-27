@@ -30,7 +30,7 @@ def render_ai_strategy(
     api_key_strat = st.text_input(
         "Gemini API Key (AI Consultant)",
         type="password",
-        value=os.getenv("GOOGLE_API_KEY", ""),
+        value=os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY") or "",
         key="ai_consultant_api_key_v3",
     )
 
@@ -66,9 +66,7 @@ def render_ai_strategy(
                 "売上原価率 削減目標 (%)", 0.0, 10.0, 2.0, 0.5, key="ai_cogs_red_v3"
             )
         with col_target2:
-            ccc_red = st.slider(
-                "CCC 改善目標 (日)", 0, 60, 15, 5, key="ai_ccc_red_v3"
-            )
+            ccc_red = st.slider("CCC 改善目標 (日)", 0, 60, 15, 5, key="ai_ccc_red_v3")
 
         if has_data:
             # --- ROIC計算 (共通) ---
@@ -81,23 +79,15 @@ def render_ai_strategy(
             invested_cap_ai = equity_ai + debt_ai
             current_nopat_ai = current_oi_ai * 0.7
             current_roic_ai = (
-                (current_nopat_ai / invested_cap_ai * 100)
-                if invested_cap_ai > 0
-                else 0
+                (current_nopat_ai / invested_cap_ai * 100) if invested_cap_ai > 0 else 0
             )
 
             # シミュレーション計算
             sim_oi_margin_ai = current_oi_margin_ai + cogs_red
             working_cap_reduction = (ccc_red / DAYS_PER_YEAR) * current_cogs_ai
-            sim_invested_cap = max(
-                invested_cap_ai * 0.1, invested_cap_ai - working_cap_reduction
-            )
+            sim_invested_cap = max(invested_cap_ai * 0.1, invested_cap_ai - working_cap_reduction)
             sim_oi_ai = current_revenue_ai * sim_oi_margin_ai / 100
-            sim_roic_ai = (
-                (sim_oi_ai * 0.7 / sim_invested_cap * 100)
-                if sim_invested_cap > 0
-                else 0
-            )
+            sim_roic_ai = (sim_oi_ai * 0.7 / sim_invested_cap * 100) if sim_invested_cap > 0 else 0
 
             col_ba1, col_ba2 = st.columns(2)
             with col_ba1:
@@ -109,9 +99,7 @@ def render_ai_strategy(
             with col_ba2:
                 st.markdown("### 📈 After（改善後）")
                 c1, c2, c3 = st.columns(3)
-                c1.metric(
-                    "営業利益率", f"{sim_oi_margin_ai:.1f}%", f"{cogs_red:+.1f}pp"
-                )
+                c1.metric("営業利益率", f"{sim_oi_margin_ai:.1f}%", f"{cogs_red:+.1f}pp")
                 c2.metric(
                     "CCC",
                     f"{current_ccc_ai - ccc_red:.0f}日",
@@ -176,9 +164,7 @@ def render_ai_strategy(
         col_opt1, col_opt2, col_opt3 = st.columns(3)
         col_opt1.checkbox("SCM・運転資本分析", value=True, key="ai_inc_scm_v3")
         col_opt2.checkbox("CAPEX・投資効率分析", value=True, key="ai_inc_capex_v3")
-        col_opt3.checkbox(
-            "事業ポートフォリオ(PPM)分析", value=True, key="ai_inc_ppm_v3"
-        )
+        col_opt3.checkbox("事業ポートフォリオ(PPM)分析", value=True, key="ai_inc_ppm_v3")
 
         if st.button(
             "🤖 戦略的提言の生成を開始",
@@ -189,9 +175,7 @@ def render_ai_strategy(
             if not api_key_strat:
                 st.error("API Keyを入力してください。")
             else:
-                with st.spinner(
-                    f"AIが『{advisory_mode}』の観点から戦略を策定中です..."
-                ):
+                with st.spinner(f"AIが『{advisory_mode}』の観点から戦略を策定中です..."):
                     try:
                         client = create_gemini_client(api_key=api_key_strat)
                         prompt = f"""あなたは大手戦略コンサルティングファームのマネージング・ディレクターです。
@@ -256,9 +240,7 @@ def render_ai_strategy(
                 key="ai_risk_btn_v5",
             )
         with col_btn2:
-            if st.button(
-                "🗑️ 履歴をリセット", use_container_width=True, key="ai_risk_clear_v5"
-            ):
+            if st.button("🗑️ 履歴をリセット", use_container_width=True, key="ai_risk_clear_v5"):
                 st.session_state.risk_diag_report = None
                 st.session_state.risk_chat_history = []
                 st.rerun()
@@ -269,9 +251,7 @@ def render_ai_strategy(
             elif not has_data:
                 st.error("分析に必要な財務データが読み込まれていません。")
             else:
-                with st.spinner(
-                    f"『{risk_type}』に対するレジリエンス・モデリングを実行中..."
-                ):
+                with st.spinner(f"『{risk_type}』に対するレジリエンス・モデリングを実行中..."):
                     try:
                         client = create_gemini_client(api_key=api_key_strat)
 

@@ -1,4 +1,4 @@
-﻿import json
+import json
 import os
 import re
 import textwrap
@@ -71,9 +71,7 @@ def render_issue_table(
         width="stretch",
         hide_index=hide_index,
         column_config={
-            "issueKey_url": st.column_config.LinkColumn(
-                label="Backlog Link", display_text="Open"
-            ),
+            "issueKey_url": st.column_config.LinkColumn(label="Backlog Link", display_text="Open"),
             "issueKey": "課題キー",
             "type_name": "種別",
             "priority_name": "優先度",
@@ -101,9 +99,7 @@ def process_issues(raw_issues: list[dict]) -> pd.DataFrame:
     df["status_name"] = df["status"].apply(
         lambda x: x["name"] if isinstance(x, dict) else "Unknown"
     )
-    df["is_closed"] = df["status"].apply(
-        lambda x: x["id"] == 4 if isinstance(x, dict) else False
-    )
+    df["is_closed"] = df["status"].apply(lambda x: x["id"] == 4 if isinstance(x, dict) else False)
     df["assignee_name"] = df["assignee"].apply(
         lambda x: x["name"] if isinstance(x, dict) and x else "Unassigned"
     )
@@ -113,28 +109,18 @@ def process_issues(raw_issues: list[dict]) -> pd.DataFrame:
     df["priority_name"] = df["priority"].apply(
         lambda x: x["name"] if isinstance(x, dict) else "Normal"
     )
-    df["priority_id"] = df["priority"].apply(
-        lambda x: x["id"] if isinstance(x, dict) else 3
-    )
+    df["priority_id"] = df["priority"].apply(lambda x: x["id"] if isinstance(x, dict) else 3)
     # 複数カテゴリの場合は最初のものを使用
     df["category_name"] = df["category"].apply(
         lambda x: x[0]["name"] if isinstance(x, list) and len(x) > 0 else "N/A"
     )
     df["estimatedHours"] = (
-        (
-            df["estimatedHours"]
-            if "estimatedHours" in df.columns
-            else pd.Series(0.0, index=df.index)
-        )
+        (df["estimatedHours"] if "estimatedHours" in df.columns else pd.Series(0.0, index=df.index))
         .fillna(0)
         .astype(float)
     )
     df["actualHours"] = (
-        (
-            df["actualHours"]
-            if "actualHours" in df.columns
-            else pd.Series(0.0, index=df.index)
-        )
+        (df["actualHours"] if "actualHours" in df.columns else pd.Series(0.0, index=df.index))
         .fillna(0)
         .astype(float)
     )
@@ -187,9 +173,7 @@ def fetch_backlog_data(
                 break
             all_issues.extend(issues)
             offset += FETCH_PAGE_SIZE
-            my_bar.progress(
-                min(offset / 1000, 1.0), text=f"Fetched {len(all_issues)} issues..."
-            )
+            my_bar.progress(min(offset / 1000, 1.0), text=f"Fetched {len(all_issues)} issues...")
             if len(all_issues) > FETCH_SAFETY_LIMIT:
                 st.warning(f"Reached safety limit ({FETCH_SAFETY_LIMIT} issues).")
                 break
@@ -247,9 +231,7 @@ def get_gemini_client(gemini_api_key: str) -> tuple[Any | None, str | None]:
         return None, f"❌ AI Client Initialization Error: {e}"
 
 
-def _call_gemini(
-    client: Any, prompt: str, thinking_level: str, temperature: float
-) -> str:
+def _call_gemini(client: Any, prompt: str, thinking_level: str, temperature: float) -> str:
     """Gemini APIを呼び出してテキストを返す共通ラッパー。"""
     level_map = {
         "minimal": types.ThinkingLevel.MINIMAL,
@@ -265,9 +247,7 @@ def _call_gemini(
         temperature=temperature,
     )
     any_client = typing.cast(typing.Any, client)
-    response = any_client.models.generate_content(
-        model=AI_MODEL, contents=prompt, config=config
-    )
+    response = any_client.models.generate_content(model=AI_MODEL, contents=prompt, config=config)
     return response.text
 
 
@@ -411,9 +391,7 @@ def main() -> None:
             st.caption(f"最終取得: {st.session_state['fetched_at']}")
 
     if not (space and proj and apikey):
-        st.info(
-            "👈 サイドバーにBacklogの接続情報を入力して「読み込み」をクリックしてね！"
-        )
+        st.info("👈 サイドバーにBacklogの接続情報を入力して「読み込み」をクリックしてね！")
         return
 
     if load_data_btn or reload_btn or "raw_issues" not in st.session_state:
@@ -447,9 +425,7 @@ def main() -> None:
         assignees = ["All"] + list(df["assignee_name"].unique())
         selected_assignee = st.selectbox("担当者 (Assignee)", assignees)
 
-        status_opts = ["All", "Active Only", "Closed Only"] + list(
-            df["status_name"].unique()
-        )
+        status_opts = ["All", "Active Only", "Closed Only"] + list(df["status_name"].unique())
         selected_status = st.selectbox("ステータス (Status)", status_opts, index=1)
 
     # Apply Filters
@@ -508,9 +484,7 @@ def main() -> None:
                     "Overdue": overdue_count,
                     "Hours_Estimated": total_est,
                     "Hours_Actual": total_act,
-                    "Modules_Stats": filtered_df.groupby("category_name")
-                    .size()
-                    .to_dict(),
+                    "Modules_Stats": filtered_df.groupby("category_name").size().to_dict(),
                 }
                 ai_response = get_ai_analysis_jp(
                     json.dumps(summary_for_ai, ensure_ascii=False, indent=2), gkey
@@ -585,24 +559,17 @@ def main() -> None:
             key="burnup_cat_select",
         )
         burn_target_df = (
-            df
-            if selected_burn_cat == "All"
-            else df[df["category_name"] == selected_burn_cat]
+            df if selected_burn_cat == "All" else df[df["category_name"] == selected_burn_cat]
         )
 
         if not burn_target_df.empty:
-            date_range = pd.date_range(
-                start=burn_target_df["created_dt"].min(), end=now, freq="D"
-            )
+            date_range = pd.date_range(start=burn_target_df["created_dt"].min(), end=now, freq="D")
             created_s = pd.to_datetime(burn_target_df["created_dt"]).dt.normalize()
             updated_s = pd.to_datetime(burn_target_df["updated_dt"]).dt.normalize()
             closed_mask = burn_target_df["is_closed"].values
 
             total_counts = (
-                created_s.value_counts()
-                .reindex(date_range, fill_value=0)
-                .sort_index()
-                .cumsum()
+                created_s.value_counts().reindex(date_range, fill_value=0).sort_index().cumsum()
             )
             closed_counts = (
                 updated_s[closed_mask]
@@ -622,9 +589,7 @@ def main() -> None:
                 }
             )
 
-            title_suffix = (
-                " (全体)" if selected_burn_cat == "All" else f" ({selected_burn_cat})"
-            )
+            title_suffix = " (全体)" if selected_burn_cat == "All" else f" ({selected_burn_cat})"
             fig_burn = go.Figure()
             fig_burn.add_trace(
                 go.Scatter(
@@ -652,12 +617,8 @@ def main() -> None:
             total_tasks_all = len(df)
 
             if not closed_all.empty and len(closed_all) >= 2:
-                all_date_range = pd.date_range(
-                    start=df["created_dt"].min(), end=now, freq="D"
-                )
-                closed_series_all = pd.to_datetime(
-                    closed_all["updated_dt"]
-                ).dt.normalize()
+                all_date_range = pd.date_range(start=df["created_dt"].min(), end=now, freq="D")
+                closed_series_all = pd.to_datetime(closed_all["updated_dt"]).dt.normalize()
                 closed_cumsum_all = (
                     closed_series_all.value_counts()
                     .reindex(all_date_range, fill_value=0)
@@ -711,8 +672,7 @@ def main() -> None:
                 )
                 if predicted_completion_date:
                     fig_pred.add_vline(
-                        x=pd.Timestamp(str(predicted_completion_date)).timestamp()
-                        * 1000,
+                        x=pd.Timestamp(str(predicted_completion_date)).timestamp() * 1000,
                         line_dash="dot",
                         line_color="#f39c12",
                         annotation_text=f"予測完了: {predicted_completion_date}",
@@ -731,15 +691,17 @@ def main() -> None:
                     xaxis_title="日付",
                     yaxis_title="累積完了タスク数",
                     legend={
-                        "orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "right", "x": 1
+                        "orientation": "h",
+                        "yanchor": "bottom",
+                        "y": 1.02,
+                        "xanchor": "right",
+                        "x": 1,
                     },
                 )
                 st.plotly_chart(fig_pred, width="stretch")
 
                 if predicted_completion_date:
-                    days_remaining = (
-                        predicted_completion_date - pd.Timestamp(now).date()
-                    ).days
+                    days_remaining = (predicted_completion_date - pd.Timestamp(now).date()).days
                     st.metric(
                         label="📅 予測完了日（線形回帰）",
                         value=str(predicted_completion_date),
@@ -839,9 +801,7 @@ def main() -> None:
             .size()
             .reset_index(name="Count")
         )
-        fig_ind = px.bar(
-            ind_df, x="assignee_name", y="Count", color="status_name", barmode="stack"
-        )
+        fig_ind = px.bar(ind_df, x="assignee_name", y="Count", color="status_name", barmode="stack")
         st.plotly_chart(fig_ind, width="stretch")
 
         # --- ベロシティ・トレンドチャート ---
@@ -856,9 +816,7 @@ def main() -> None:
             velocity_df = velocity_df[velocity_df["week"] >= cutoff].copy()
             velocity_df["week_label"] = velocity_df["week"].dt.strftime("%m/%d")
             velocity_df["moving_avg"] = (
-                velocity_df["completed"]
-                .rolling(window=VELOCITY_MOVING_AVG, min_periods=1)
-                .mean()
+                velocity_df["completed"].rolling(window=VELOCITY_MOVING_AVG, min_periods=1).mean()
             )
 
             fig_velocity = go.Figure()
@@ -885,17 +843,17 @@ def main() -> None:
                 xaxis_title="週（月/日）",
                 yaxis_title="完了タスク数",
                 legend={
-                    "orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "right", "x": 1
+                    "orientation": "h",
+                    "yanchor": "bottom",
+                    "y": 1.02,
+                    "xanchor": "right",
+                    "x": 1,
                 },
             )
             st.plotly_chart(fig_velocity, width="stretch")
 
             recent_4w = velocity_df.tail(VELOCITY_MOVING_AVG)["completed"].mean()
-            prev_4w = (
-                velocity_df.iloc[-8:-4]["completed"].mean()
-                if len(velocity_df) >= 8
-                else None
-            )
+            prev_4w = velocity_df.iloc[-8:-4]["completed"].mean() if len(velocity_df) >= 8 else None
             v_col1, v_col2 = st.columns(2)
             v_col1.metric(
                 label=f"直近{VELOCITY_MOVING_AVG}週 平均ベロシティ",
@@ -910,9 +868,7 @@ def main() -> None:
                     delta_color="normal",
                 )
             else:
-                v_col2.metric(
-                    label="前4週比", value="データ不足", delta="8週分以上で表示"
-                )
+                v_col2.metric(label="前4週比", value="データ不足", delta="8週分以上で表示")
         else:
             st.info("完了タスクがないためベロシティを計算できません。")
 
@@ -950,12 +906,17 @@ def main() -> None:
             & (filtered_df["dueDate_dt"] <= one_week_later)
         ].sort_values("dueDate_dt")
         if not imminent_list.empty:
-            st.warning(
-                f"今後7日以内に期限を迎えるタスクが {len(imminent_list)} 件あります。"
-            )
+            st.warning(f"今後7日以内に期限を迎えるタスクが {len(imminent_list)} 件あります。")
             render_issue_table(
                 imminent_list,
-                ["issueKey", "type_name", "priority_name", "summary", "assignee_name", "dueDate_dt"],
+                [
+                    "issueKey",
+                    "type_name",
+                    "priority_name",
+                    "summary",
+                    "assignee_name",
+                    "dueDate_dt",
+                ],
                 space,
                 domain,
             )
@@ -972,12 +933,8 @@ def main() -> None:
             over_budget_list["Over_Hours"] = (
                 over_budget_list["actualHours"] - over_budget_list["estimatedHours"]
             )
-            over_budget_list = over_budget_list.sort_values(
-                "Over_Hours", ascending=False
-            )
-            st.warning(
-                f"{len(over_budget_list)}件のタスクが予定工数を超過して消化されています。"
-            )
+            over_budget_list = over_budget_list.sort_values("Over_Hours", ascending=False)
+            st.warning(f"{len(over_budget_list)}件のタスクが予定工数を超過して消化されています。")
             render_issue_table(
                 over_budget_list,
                 [
@@ -993,9 +950,7 @@ def main() -> None:
                 domain,
             )
         else:
-            st.info(
-                "現在、予定工数を大幅に超過しているアクティブなタスクはありません。"
-            )
+            st.info("現在、予定工数を大幅に超過しているアクティブなタスクはありません。")
 
         # --- コメントリスク分析 ---
         st.markdown("---")
@@ -1015,9 +970,7 @@ def main() -> None:
                         )
 
                     if HAS_GENAI and gkey:
-                        st.markdown(
-                            get_ai_comment_risk_analysis(all_comments_text, gkey)
-                        )
+                        st.markdown(get_ai_comment_risk_analysis(all_comments_text, gkey))
                     else:
                         st.warning(
                             "Gemini APIキーが設定されていないため、AI分析はスキップされました。"
@@ -1080,10 +1033,7 @@ def main() -> None:
             gantt_df["Start"] = pd.to_datetime(gantt_df["startDate_dt"])
             gantt_df["Finish"] = pd.to_datetime(gantt_df["dueDate_dt"])
             gantt_df["TaskName"] = (
-                gantt_df["issueKey"]
-                + ": "
-                + gantt_df["summary"].str.slice(0, 30)
-                + "..."
+                gantt_df["issueKey"] + ": " + gantt_df["summary"].str.slice(0, 30) + "..."
             )
             gantt_height = max(400, len(gantt_df) * 28 + 100)
             fig_gantt = px.timeline(
@@ -1095,9 +1045,7 @@ def main() -> None:
                 hover_data=["assignee_name", "category_name"],
             )
             fig_gantt.update_yaxes(autorange="reversed")
-            fig_gantt.update_layout(
-                height=gantt_height, margin={"l": 0, "r": 0, "t": 30, "b": 0}
-            )
+            fig_gantt.update_layout(height=gantt_height, margin={"l": 0, "r": 0, "t": 30, "b": 0})
             st.plotly_chart(fig_gantt, width="stretch")
         else:
             st.info(
@@ -1126,17 +1074,11 @@ def main() -> None:
                         st.markdown(f"**Assignee:** {row.get('assignee_name', 'N/A')}")
                         st.markdown(f"**Category:** {row.get('category_name', 'N/A')}")
                     with dc2:
-                        st.markdown(
-                            f"**Estimated Hours:** {row.get('estimatedHours', 'N/A')}"
-                        )
-                        st.markdown(
-                            f"**Actual Hours:** {row.get('actualHours', 'N/A')}"
-                        )
+                        st.markdown(f"**Estimated Hours:** {row.get('estimatedHours', 'N/A')}")
+                        st.markdown(f"**Actual Hours:** {row.get('actualHours', 'N/A')}")
                         st.markdown(f"**Start Date:** {row.get('startDate_dt', 'N/A')}")
                         st.markdown(f"**Due Date:** {row.get('dueDate_dt', 'N/A')}")
-                    description = (
-                        row.get("description") if "description" in row.index else None
-                    )
+                    description = row.get("description") if "description" in row.index else None
                     desc_text = (
                         description
                         if description and str(description) not in ("nan", "None", "")

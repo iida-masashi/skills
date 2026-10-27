@@ -34,9 +34,7 @@ def render_ccc_analysis(
 
             # 直近年のCCC構造
             y = income_statement_df.columns[0]
-            metrics = calculate_ccc_metrics(
-                income_statement_df, balance_sheet_df, y
-            )
+            metrics = calculate_ccc_metrics(income_statement_df, balance_sheet_df, y)
 
             if metrics["revenue"] > 0:
                 ccc_data.append(
@@ -335,9 +333,7 @@ def render_ccc_analysis(
                         )
                         fig_dso.update_layout(
                             title="回収サイトの変動",
-                            yaxis={
-                                "title": "売掛金 (百万円)", "side": "left", "showgrid": False
-                            },
+                            yaxis={"title": "売掛金 (百万円)", "side": "left", "showgrid": False},
                             yaxis2={
                                 "title": "DSO (日)",
                                 "side": "right",
@@ -405,9 +401,7 @@ def render_ccc_analysis(
                         )
                         fig_dpo.update_layout(
                             title="支払サイトの変動",
-                            yaxis={
-                                "title": "買掛金 (百万円)", "side": "left", "showgrid": False
-                            },
+                            yaxis={"title": "買掛金 (百万円)", "side": "left", "showgrid": False},
                             yaxis2={
                                 "title": "DPO (日)",
                                 "side": "right",
@@ -494,9 +488,7 @@ def render_ccc_analysis(
                     )
 
                     c_gen1, c_gen2, c_gen3 = st.columns(3)
-                    c_gen1.metric(
-                        "在庫圧縮効果", f"+ ¥ {cash_generated_inv:,.0f} M"
-                    )
+                    c_gen1.metric("在庫圧縮効果", f"+ ¥ {cash_generated_inv:,.0f} M")
                     c_gen2.metric("早期回収効果", f"+ ¥ {cash_generated_ar:,.0f} M")
                     c_gen3.metric("支払延長効果", f"+ ¥ {cash_generated_ap:,.0f} M")
 

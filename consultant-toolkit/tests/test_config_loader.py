@@ -1,4 +1,4 @@
-﻿"""
+"""
 Unit tests for config_loader module
 
 Tests YAML configuration loading and singleton pattern.
@@ -9,6 +9,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
+import yaml
 from consultant_toolkit.config_loader import (
     ConfigLoader,
     get_config,
@@ -126,7 +127,8 @@ test_section:
         """get_config() should return ConfigLoader instance"""
         # Monkeypatch the default config path
         monkeypatch.setattr(
-            "consultant_toolkit.config_loader.DEFAULT_CONFIG_PATH", Path(temp_config_file)
+            "consultant_toolkit.config_loader.DEFAULT_CONFIG_PATH",
+            Path(temp_config_file),
         )
 
         # Reset singleton
@@ -138,7 +140,8 @@ test_section:
     def test_get_config_value_shorthand(self, temp_config_file, monkeypatch):
         """get() should be shorthand for get_config().get()"""
         monkeypatch.setattr(
-            "consultant_toolkit.config_loader.DEFAULT_CONFIG_PATH", Path(temp_config_file)
+            "consultant_toolkit.config_loader.DEFAULT_CONFIG_PATH",
+            Path(temp_config_file),
         )
 
         # Reset singleton
@@ -169,7 +172,7 @@ companies:
             # Reset singleton
             ConfigLoader._instance = None
 
-            with pytest.raises(Exception):
+            with pytest.raises(yaml.YAMLError):
                 ConfigLoader(temp_path)
         finally:
             os.unlink(temp_path)

@@ -1,105 +1,44 @@
-# Pre-commit hooks configuration
-# See https://pre-commit.com for more information
-
 repos:
-  # General file checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v5.0.0
     hooks:
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
       - id: end-of-file-fixer
       - id: check-yaml
-        args: [--unsafe]  # Allow custom YAML tags
       - id: check-json
       - id: check-toml
       - id: check-added-large-files
         args: ['--maxkb=1000']
       - id: check-merge-conflict
       - id: check-case-conflict
-      - id: mixed-line-ending
-        args: [--fix=lf]
       - id: detect-private-key
+      - id: mixed-line-ending
+        args: ['--fix=lf']
 
-  # Python code formatting
-  - repo: https://github.com/psf/black
-    rev: 25.1.0
-    hooks:
-      - id: black
-        language_version: python3.12
-        args: [--line-length=120]
-        exclude: ^scripts/data_analyzer\.py$  # Exclude pre-existing broken file
-
-  # Import sorting
-  - repo: https://github.com/PyCQA/isort
-    rev: 5.13.2
-    hooks:
-      - id: isort
-        args: [--profile=black, --line-length=120]
-        exclude: ^scripts/data_analyzer\.py$
-
-  # Linting with Ruff
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.6
+    rev: v0.9.10
     hooks:
       - id: ruff
-        args: [ --fix ]
+        args: [--fix, --exit-non-zero-on-fix]
       - id: ruff-format
 
-  # Type checking
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.15.0
     hooks:
       - id: mypy
-        files: ^scripts/utils/
-        args: [--config-file=mypy.ini]
         additional_dependencies:
-          - types-PyYAML
           - types-requests
+          - types-PyYAML
+          - types-tabulate
+          - pandas-stubs
+        args: [--config-file=mypy.ini]
+        files: ^libs/consultant_toolkit/.*\.py$
 
-  # Security checks
   - repo: https://github.com/PyCQA/bandit
     rev: 1.8.3
     hooks:
       - id: bandit
-        args: [-ll, -r, scripts/]
+        args: ['-c', 'pyproject.toml']
+        additional_dependencies: ['bandit[toml]']
         exclude: ^tests/
-
-  # YAML linting
-  - repo: https://github.com/adrienverge/yamllint
-    rev: v1.35.1
-    hooks:
-      - id: yamllint
-        args: [--format, parsable, --strict]
-        exclude: ^\.github/workflows/
-
-  # Markdown linting
-  - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.44.0
-    hooks:
-      - id: markdownlint
-        args: [--fix]
-        exclude: ^\.github/
-
-  # Check for common misspellings
-  - repo: https://github.com/codespell-project/codespell
-    rev: v2.4.1
-    hooks:
-      - id: codespell
-        args: [--ignore-words-list=crate,nd,te,ba]
-        exclude: ^(.*\.csv|.*\.json|.*\.lock)$
-
-# Configuration for specific hooks
-exclude: |
-  (?x)^(
-      \.git/|
-      \.venv/|
-      __pycache__/|
-      .*\.pyc|
-      htmlcov/|
-      \.coverage|
-      \.pytest_cache/|
-      dist/|
-      build/|
-      .*\.egg-info/
-  )$

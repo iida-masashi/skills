@@ -1,4 +1,4 @@
-﻿"""
+"""
 Universal Company Analysis CLI
 
 任意の企業・業界で財務・SCM分析を実行するコマンドラインツール。
@@ -42,9 +42,16 @@ import sys
 import polars as pl
 
 # Import utility modules
-from consultant_toolkit.env_loader import get_api_key, load_environment
+from consultant_toolkit.env_loader import (
+    get_api_key,
+    get_gemini_api_key,
+    load_environment,
+)
 from consultant_toolkit.finance_data import fetch_financial_data, get_safe_value
-from consultant_toolkit.financial_metrics import calculate_ccc, calculate_financial_metrics
+from consultant_toolkit.financial_metrics import (
+    calculate_ccc,
+    calculate_financial_metrics,
+)
 from consultant_toolkit.peer_suggestion import (
     suggest_peers_advanced,
     suggest_peers_basic,
@@ -81,11 +88,7 @@ def fetch_financial_metrics(
 
         # Get latest available date
         latest_date = data.balance_sheet.columns[0]
-        prev_date = (
-            data.balance_sheet.columns[1]
-            if len(data.balance_sheet.columns) > 1
-            else None
-        )
+        prev_date = data.balance_sheet.columns[1] if len(data.balance_sheet.columns) > 1 else None
 
         # Calculate financial metrics using unified functions
         financial_metrics = calculate_financial_metrics(
@@ -97,27 +100,35 @@ def fetch_financial_metrics(
         # Calculate revenue growth
         revenue = financial_metrics["revenue"]
         prev_revenue = (
-            get_safe_value(
-                data.financials, ["Total Revenue", "Operating Revenue"], prev_date, 0.0
-            )
+            get_safe_value(data.financials, ["Total Revenue", "Operating Revenue"], prev_date, 0.0)
             if prev_date
             else 0.0
         )
-        revenue_growth = (
-            ((revenue - prev_revenue) / prev_revenue) * 100 if prev_revenue else 0.0
-        )
+        revenue_growth = ((revenue - prev_revenue) / prev_revenue) * 100 if prev_revenue else 0.0
 
         metrics: dict[str, str | float] = {
             "Symbol": ticker_symbol,
             "Name": str(data.info.get("longName", ticker_symbol)),
             "Revenue": float(revenue) if revenue is not None else 0.0,
             "Revenue Growth (%)": float(revenue_growth) if revenue_growth is not None else 0.0,
-            "Operating Income": float(financial_metrics["operating_income"]) if isinstance(financial_metrics, dict) and "operating_income" in financial_metrics else 0.0,
-            "ROIC (%)": float(financial_metrics["roic"] * 100) if isinstance(financial_metrics, dict) and "roic" in financial_metrics else 0.0,
-            "CCC (Days)": float(ccc_metrics.get("ccc", 0.0)) if isinstance(ccc_metrics, dict) else 0.0,
-            "DIO (Inventory Days)": float(ccc_metrics.get("dio", 0.0)) if isinstance(ccc_metrics, dict) else 0.0,
-            "DSO (Receivable Days)": float(ccc_metrics.get("dso", 0.0)) if isinstance(ccc_metrics, dict) else 0.0,
-            "DPO (Payable Days)": float(ccc_metrics.get("dpo", 0.0)) if isinstance(ccc_metrics, dict) else 0.0,
+            "Operating Income": float(financial_metrics["operating_income"])
+            if isinstance(financial_metrics, dict) and "operating_income" in financial_metrics
+            else 0.0,
+            "ROIC (%)": float(financial_metrics["roic"] * 100)
+            if isinstance(financial_metrics, dict) and "roic" in financial_metrics
+            else 0.0,
+            "CCC (Days)": float(ccc_metrics.get("ccc", 0.0))
+            if isinstance(ccc_metrics, dict)
+            else 0.0,
+            "DIO (Inventory Days)": float(ccc_metrics.get("dio", 0.0))
+            if isinstance(ccc_metrics, dict)
+            else 0.0,
+            "DSO (Receivable Days)": float(ccc_metrics.get("dso", 0.0))
+            if isinstance(ccc_metrics, dict)
+            else 0.0,
+            "DPO (Payable Days)": float(ccc_metrics.get("dpo", 0.0))
+            if isinstance(ccc_metrics, dict)
+            else 0.0,
         }
 
         return metrics
@@ -126,9 +137,7 @@ def fetch_financial_metrics(
         logger.error(f"Network error fetching {ticker_symbol}: {e}", exc_info=True)
         return None
     except KeyError as e:
-        logger.error(
-            f"Data structure error for {ticker_symbol}: missing key {e}", exc_info=True
-        )
+        logger.error(f"Data structure error for {ticker_symbol}: missing key {e}", exc_info=True)
         return None
     except ValueError as e:
         logger.error(f"Invalid data for {ticker_symbol}: {e}", exc_info=True)
@@ -157,9 +166,7 @@ def suggest_peers(target_ticker: str, mode: str = "advanced") -> list[str]:
         return suggest_peers_basic(target_ticker)
 
 
-def _generate_analysis_prompt(
-    target_name: str, target_ticker: str, df: pl.DataFrame
-) -> str:
+def _generate_analysis_prompt(target_name: str, target_ticker: str, df: pl.DataFrame) -> str:
     """
     AI分析用プロンプトを生成
 
@@ -218,13 +225,15 @@ def _call_gemini_api(api_key: str, prompt: str) -> str | None:
         生成されたテキスト、失敗時はNone
     """
     try:
-        from consultant_toolkit.gemini_client import DEFAULT_MODEL, create_gemini_client
+        from consultant_toolkit.gemini_client import (
+            DEFAULT_MODEL,
+            create_gemini_client,
+            generate_text,
+        )
 
         client = create_gemini_client(api_key=api_key)
-        response = client.models.generate_content(
-            model=DEFAULT_MODEL, contents=prompt
-        )
-        return response.text if response.text else None
+        text = generate_text(client, prompt, model=DEFAULT_MODEL)
+        return text if text else None
 
     except ImportError as e:
         logger.error(f"Gemini SDK not installed: {e}")
@@ -296,7 +305,7 @@ def analyze_with_ai(df: pl.DataFrame, target_ticker: str) -> None:
     prompt = _generate_analysis_prompt(target_name, target_ticker, df)
 
     # Try Gemini
-    google_key = get_api_key("GOOGLE_API_KEY") or get_api_key("GEMINI_API_KEY")
+    google_key = get_gemini_api_key()
     if google_key:
         result = _call_gemini_api(google_key, prompt)
         if result:
@@ -322,9 +331,7 @@ def analyze_with_ai(df: pl.DataFrame, target_ticker: str) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="SCM & Financial Analysis CLI (Universal)"
-    )
+    parser = argparse.ArgumentParser(description="SCM & Financial Analysis CLI (Universal)")
     parser.add_argument(
         "--target", required=True, help="Target Ticker Symbol (e.g., 7203.T, 2229.T)"
     )
@@ -333,9 +340,7 @@ def main() -> None:
         required=False,
         help="Competitor Ticker Symbols (comma separated, e.g., 7267.T,7201.T)",
     )
-    parser.add_argument(
-        "--auto-peers", action="store_true", help="Auto-suggest industry peers"
-    )
+    parser.add_argument("--auto-peers", action="store_true", help="Auto-suggest industry peers")
     parser.add_argument(
         "--suggestion-mode",
         choices=["basic", "advanced", "ai"],
@@ -351,7 +356,7 @@ def main() -> None:
     if args.competitors:
         competitors = [c.strip() for c in args.competitors.split(",") if c.strip()]
 
-    # 🌐 Auto-suggest industry peers
+    # Auto-suggest industry peers
     if args.auto_peers or not competitors:
         suggested_peers = suggest_peers(target_ticker, mode=args.suggestion_mode)
         if suggested_peers:
@@ -359,13 +364,11 @@ def main() -> None:
                 if peer not in competitors:
                     competitors.append(peer)
             logger.info(
-                f"🌐 Auto-suggested peers ({args.suggestion_mode} mode): {suggested_peers}"
+                f"[INFO] Auto-suggested peers ({args.suggestion_mode} mode): {suggested_peers}"
             )
 
     if not competitors:
-        logger.warning(
-            "No competitors specified. Analysis will be limited to target company only."
-        )
+        logger.warning("No competitors specified. Analysis will be limited to target company only.")
 
     load_environment()
 

@@ -35,9 +35,7 @@ def render_capex_analysis(
             )
             capex = abs(capex_raw) if capex_raw != 0 else 0
 
-            dep = get_val_safe(
-                cf_data_raw, ["Depreciation And Amortization", "Depreciation"], y
-            )
+            dep = get_val_safe(cf_data_raw, ["Depreciation And Amortization", "Depreciation"], y)
 
             ocf = get_val_safe(
                 cf_data_raw,
@@ -52,9 +50,7 @@ def render_capex_analysis(
             if fcf == 0 and ocf != 0:
                 fcf = ocf - capex
 
-            rev = get_val_safe(
-                income_statement_raw, ["Total Revenue", "Operating Revenue"], y
-            )
+            rev = get_val_safe(income_statement_raw, ["Total Revenue", "Operating Revenue"], y)
 
             if ocf != 0 or capex != 0:
                 # KPI計算
@@ -76,9 +72,7 @@ def render_capex_analysis(
                     }
                 )
 
-        return (
-            pd.DataFrame(cf_data).sort_values("Year") if cf_data else pd.DataFrame()
-        )
+        return pd.DataFrame(cf_data).sort_values("Year") if cf_data else pd.DataFrame()
 
     try:
         df_cf = get_capex_analysis_data(target_ticker)
@@ -127,9 +121,7 @@ def render_capex_analysis(
                         name="FCF",
                         x=df_cf["Year"],
                         y=df_cf["FCF (フリーCF)"],
-                        marker_color=df_cf["FCF (フリーCF)"].apply(
-                            color_by_sign
-                        ),
+                        marker_color=df_cf["FCF (フリーCF)"].apply(color_by_sign),
                     )
                 )
                 fig_fcf.add_trace(
@@ -200,9 +192,7 @@ def render_capex_analysis(
                         name="FCF Margin (%)",
                         x=df_cf["Year"],
                         y=df_cf["FCF Margin"] * 100,
-                        marker_color=df_cf["FCF Margin"].apply(
-                            color_by_sign
-                        ),
+                        marker_color=df_cf["FCF Margin"].apply(color_by_sign),
                     )
                 )
 

@@ -12,9 +12,7 @@ def render_demand_forecast(
     """
     サブタブ 3.2: 需要予測・在庫削減シミュレーション (Forecast Accuracy Impact)
     """
-    st.header(
-        "3.2 🔮 需要予測・在庫削減シミュレーション (Forecast Accuracy Impact)"
-    )
+    st.header("3.2 🔮 需要予測・在庫削減シミュレーション (Forecast Accuracy Impact)")
     st.markdown(
         "「需要予測精度の向上が、適正在庫の削減および営業利益の向上にどれほどのインパクトを与えるかをシミュレーションします。」"
     )

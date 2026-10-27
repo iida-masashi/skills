@@ -1,4 +1,4 @@
-﻿"""
+"""
 Unit tests for env_loader module
 
 Tests environment variable loading and .env file parsing.
@@ -35,9 +35,7 @@ class TestLoadEnvironment:
             load_environment()
 
             # Verify environment variables are set
-            assert (
-                os.getenv("TEST_VAR") == "test_value" or True
-            )  # dotenv behavior varies
+            assert os.getenv("TEST_VAR") == "test_value" or True  # dotenv behavior varies
 
     def test_load_environment_preserves_existing_vars(self, monkeypatch):
         """Should not override existing environment variables"""
@@ -117,9 +115,7 @@ class TestEnvironmentIntegration:
         """Should load .env file and retrieve API keys"""
         # Create .env file
         env_file = tmp_path / ".env"
-        env_file.write_text(
-            "GOOGLE_API_KEY=google_test_key\nOPENAI_API_KEY=openai_test_key\n"
-        )
+        env_file.write_text("GOOGLE_API_KEY=google_test_key\nOPENAI_API_KEY=openai_test_key\n")
 
         # Clear existing vars
         monkeypatch.delenv("GOOGLE_API_KEY", raising=False)

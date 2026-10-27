@@ -1,4 +1,4 @@
-﻿"""
+"""
 Integration tests for Streamlit dashboards
 
 Tests dashboard initialization and key functions without full UI rendering.

@@ -5,7 +5,7 @@ Provides PDF, Excel, and data export capabilities.
 """
 
 import base64
-from datetime import datetime
+from datetime import UTC, datetime
 from io import BytesIO
 
 import pandas as pd
@@ -68,9 +68,7 @@ def plotly_to_image_bytes(
         if format == "svg":
             img_bytes = fig.to_image(format="svg", width=width, height=height)
         else:
-            img_bytes = fig.to_image(
-                format="png", width=width, height=height, scale=scale
-            )
+            img_bytes = fig.to_image(format="png", width=width, height=height, scale=scale)
         return img_bytes
     except (ValueError, OSError):
         # Fallback to HTML if image conversion fails (e.g. kaleido not installed)
@@ -101,6 +99,7 @@ def generate_pdf_report(
         本格的なPDF生成にはreportlabが必要。
         この簡易版はHTMLベースの代替案を提供。
     """
+    now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
     try:
         from io import StringIO
 
@@ -154,7 +153,7 @@ def generate_pdf_report(
             <div class="metric">
                 <strong>企業名:</strong> {company_name}<br>
                 <strong>ティッカー:</strong> {ticker}<br>
-                <strong>生成日時:</strong> {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+                <strong>生成日時:</strong> {now_str}
             </div>
 
             <h2>財務メトリクス</h2>
@@ -186,7 +185,7 @@ def generate_pdf_report(
         <head><title>{company_name} Analysis Report</title></head>
         <body>
             <h1>{company_name} ({ticker}) - Analysis Report</h1>
-            <p>Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
+            <p>Generated: {now_str}</p>
             {metrics_data.to_html()}
         </body>
         </html>
@@ -212,9 +211,10 @@ def generate_markdown_report(
     Returns:
         str: Markdownテキスト
     """
+    now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
     report = f"""# {company_name} ({ticker}) - 財務・SCM分析レポート
 
-**生成日時**: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+**生成日時**: {now_str}
 
 ---
 
@@ -252,6 +252,4 @@ def create_download_link(
         str: HTML download link
     """
     b64 = base64.b64encode(data).decode()
-    return (
-        f'<a href="data:{mime_type};base64,{b64}" download="{filename}">{link_text}</a>'
-    )
+    return f'<a href="data:{mime_type};base64,{b64}" download="{filename}">{link_text}</a>'

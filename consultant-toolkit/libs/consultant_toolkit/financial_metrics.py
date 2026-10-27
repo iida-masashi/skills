@@ -16,9 +16,7 @@ from consultant_toolkit.constants import DAYS_PER_YEAR, DEFAULT_COGS_RATIO, DEFA
 # ========================================
 
 
-def get_val_safe(
-    df: pd.DataFrame, keys: list[str], year: Any, default: float = 0.0
-) -> float:
+def get_val_safe(df: pd.DataFrame, keys: list[str], year: Any, default: float = 0.0) -> float:
     """
     DataFrameから安全に値を取得 (複数キー候補対応)
 
@@ -91,9 +89,7 @@ def calculate_roic(
 
         if ic == 0:
             assets = get_val_safe(bs, ["Total Assets"], year)
-            liabs = get_val_safe(
-                bs, ["Current Liabilities", "Total Current Liabilities"], year
-            )
+            liabs = get_val_safe(bs, ["Current Liabilities", "Total Current Liabilities"], year)
             cash = get_val_safe(
                 bs, ["Cash", "Cash And Cash Equivalents", "Cash And Equivalents"], year
             )
@@ -258,18 +254,14 @@ def calculate_financial_metrics(
     roic_metrics = calculate_roic(pl, bs, year, use_nopat)
     ccc_metrics = calculate_ccc(pl, bs, year)
 
-    roic_dict = (
-        roic_metrics if isinstance(roic_metrics, dict) else {"roic": roic_metrics}
-    )
+    roic_dict = roic_metrics if isinstance(roic_metrics, dict) else {"roic": roic_metrics}
     ccc_dict = ccc_metrics if isinstance(ccc_metrics, dict) else {}
 
     # 統合 (revenue の重複を避ける)
     return {**roic_dict, **ccc_dict}
 
 
-def calculate_liquidity_ratios(
-    balance_sheet: pd.DataFrame, date: Any
-) -> dict[str, float]:
+def calculate_liquidity_ratios(balance_sheet: pd.DataFrame, date: Any) -> dict[str, float]:
     """
     流動性指標を計算
 
@@ -302,15 +294,11 @@ def calculate_liquidity_ratios(
     )
 
     # 流動比率 = 流動資産 / 流動負債
-    current_ratio = (
-        current_assets / current_liabilities if current_liabilities > 0 else 0.0
-    )
+    current_ratio = current_assets / current_liabilities if current_liabilities > 0 else 0.0
 
     # 当座比率 = (流動資産 - 在庫) / 流動負債
     quick_ratio = (
-        (current_assets - inventory) / current_liabilities
-        if current_liabilities > 0
-        else 0.0
+        (current_assets - inventory) / current_liabilities if current_liabilities > 0 else 0.0
     )
 
     # 現金比率 = 現金 / 流動負債
@@ -373,9 +361,7 @@ def calculate_solvency_ratios(
     debt_to_assets = total_debt / total_assets if total_assets > 0 else 0.0
 
     # インタレストカバレッジレシオ = 営業利益 / 支払利息
-    interest_coverage = (
-        operating_income / abs(interest_expense) if interest_expense != 0 else 0.0
-    )
+    interest_coverage = operating_income / abs(interest_expense) if interest_expense != 0 else 0.0
 
     return {
         "debt_to_equity": debt_to_equity,
@@ -407,9 +393,7 @@ def calculate_profitability_ratios(
         >>> profitability = calculate_profitability_ratios(pl, bs, year)
         >>> print(f"ROE: {profitability['roe']:.2%}")
     """
-    revenue = get_val_safe(
-        financials, ["Total Revenue", "Operating Revenue"], date, 0.0
-    )
+    revenue = get_val_safe(financials, ["Total Revenue", "Operating Revenue"], date, 0.0)
     gross_profit = get_val_safe(financials, ["Gross Profit"], date, 0.0)
     operating_income = get_val_safe(financials, ["Operating Income", "EBIT"], date, 0.0)
     net_income = get_val_safe(

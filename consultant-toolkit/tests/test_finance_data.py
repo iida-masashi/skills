@@ -1,4 +1,4 @@
-﻿"""
+"""
 Unit tests for finance_data module
 
 Tests yfinance data fetching and batch operations with mocking.
@@ -21,9 +21,7 @@ class TestGetSafeValue:
 
     def test_get_value_with_first_key(self):
         """Should return value when first key exists"""
-        df = pd.DataFrame(
-            {"2024": [100.0, 200.0]}, index=["Total Revenue", "Operating Income"]
-        )
+        df = pd.DataFrame({"2024": [100.0, 200.0]}, index=["Total Revenue", "Operating Income"])
         result = get_safe_value(df, ["Total Revenue", "Revenue"], "2024")
         assert result == 100.0
 
@@ -41,9 +39,7 @@ class TestGetSafeValue:
 
     def test_nan_value_skips_to_next_key(self):
         """Should try next key when current value is NaN"""
-        df = pd.DataFrame(
-            {"2024": [float("nan"), 200.0]}, index=["Total Revenue", "Revenue"]
-        )
+        df = pd.DataFrame({"2024": [float("nan"), 200.0]}, index=["Total Revenue", "Revenue"])
         result = get_safe_value(df, ["Total Revenue", "Revenue"], "2024")
         assert result == 200.0
 
@@ -58,9 +54,7 @@ class TestFetchFinancialData:
         mock_ticker = Mock()
         mock_ticker.info = {"longName": "Test Company"}
         mock_ticker.financials = pd.DataFrame({"2024": [1000]}, index=["Total Revenue"])
-        mock_ticker.balance_sheet = pd.DataFrame(
-            {"2024": [5000]}, index=["Total Assets"]
-        )
+        mock_ticker.balance_sheet = pd.DataFrame({"2024": [5000]}, index=["Total Assets"])
         mock_ticker_class.return_value = mock_ticker
 
         # Execute

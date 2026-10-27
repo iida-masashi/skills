@@ -38,9 +38,7 @@ class TestAnalyzeCompanyCLI:
         """Should fail when required --target argument is missing"""
         script_path = project_root / "scripts" / "analyze_company_cli.py"
 
-        result = subprocess.run(
-            [sys.executable, str(script_path)], capture_output=True, text=True
-        )
+        result = subprocess.run([sys.executable, str(script_path)], capture_output=True, text=True)
 
         assert result.returncode != 0
         assert "required" in result.stderr.lower() or "error" in result.stderr.lower()
@@ -137,9 +135,7 @@ class TestScriptSyntaxValidity:
                 text=True,
             )
 
-            assert result.returncode == 0, (
-                f"Syntax error in {script.name}: {result.stderr}"
-            )
+            assert result.returncode == 0, f"Syntax error in {script.name}: {result.stderr}"
 
 
 if __name__ == "__main__":

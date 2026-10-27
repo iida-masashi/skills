@@ -52,7 +52,7 @@ def suggest_peers_basic(target_ticker: str) -> list[str]:
     Returns:
         推奨される競合企業のリスト
     """
-    config_path = Path(__file__).parent.parent / "config" / "industry_peers.json"
+    config_path = Path(__file__).parent / "config" / "industry_peers.json"
 
     if not config_path.exists():
         logger.warning(f"industry_peers.json not found at {config_path}")
@@ -70,15 +70,11 @@ def suggest_peers_basic(target_ticker: str) -> list[str]:
                 # 日本企業（.T）が対象の場合は domestic_peers を先に返す
                 is_japan = target_ticker.endswith(".T")
                 if is_japan:
-                    peers = config.get("domestic_peers", []) + config.get(
-                        "global_peers", []
-                    )
+                    peers = config.get("domestic_peers", []) + config.get("global_peers", [])
                 else:
-                    peers = config.get("global_peers", []) + config.get(
-                        "domestic_peers", []
-                    )
+                    peers = config.get("global_peers", []) + config.get("domestic_peers", [])
                 logger.info(
-                    f"🌐 Industry: {config.get('description')} - Suggested peers: {peers}"
+                    f"[INFO] Industry: {config.get('description')} - Suggested peers: {peers}"
                 )
                 return [p for p in peers if p != target_ticker]
 
@@ -108,14 +104,12 @@ def suggest_peers_advanced(
     Returns:
         推奨される競合企業のリスト（優先度順）
     """
-    logger.info(f"🔍 Advanced peer suggestion for {target_ticker}...")
+    logger.info(f"[INFO] Advanced peer suggestion for {target_ticker}...")
 
     # 1. 対象企業の情報を取得
     target_info = get_company_info(target_ticker)
     if not target_info:
-        logger.warning(
-            "Failed to get target company info. Falling back to basic suggestion."
-        )
+        logger.warning("Failed to get target company info. Falling back to basic suggestion.")
         return suggest_peers_basic(target_ticker)
 
     target_industry = target_info["industry"]
@@ -123,7 +117,7 @@ def suggest_peers_advanced(
     target_market_cap = target_info["market_cap"]
     target_country = target_info["country"]
 
-    logger.info(f"📊 Target: {target_info['name']}")
+    logger.info(f"[INFO] Target: {target_info['name']}")
     logger.info(f"   Industry: {target_industry}, Sector: {target_sector}")
     logger.info(f"   Market Cap: ${target_market_cap:,.0f}, Country: {target_country}")
 
@@ -148,9 +142,7 @@ def suggest_peers_advanced(
         if not peer_info:
             continue
 
-        score = _calculate_peer_score(
-            target_info, peer_info, prefer_same_country, size_tolerance
-        )
+        score = _calculate_peer_score(target_info, peer_info, prefer_same_country, size_tolerance)
 
         scored_peers.append(
             {
@@ -168,11 +160,9 @@ def suggest_peers_advanced(
     # 6. 上位を返す
     top_peers = [p["ticker"] for p in scored_peers[:max_peers]]
 
-    logger.info(f"✅ Top {len(top_peers)} peers suggested:")
+    logger.info(f"[OK] Top {len(top_peers)} peers suggested:")
     for i, p_dict in enumerate(scored_peers[:max_peers], 1):
-        logger.info(
-            f"   {i}. {p_dict['ticker']} - {p_dict['name']} (Score: {p_dict['score']:.2f})"
-        )
+        logger.info(f"   {i}. {p_dict['ticker']} - {p_dict['name']} (Score: {p_dict['score']:.2f})")
 
     return top_peers
 
@@ -284,10 +274,10 @@ def suggest_peers_with_ai(
         AIが提案した競合企業リスト
     """
     try:
-        from consultant_toolkit.env_loader import get_api_key as get_env_key
+        from consultant_toolkit.env_loader import get_gemini_api_key
 
         if not api_key:
-            api_key = get_env_key("GOOGLE_API_KEY") or get_env_key("GEMINI_API_KEY")
+            api_key = get_gemini_api_key()
 
         if not api_key:
             logger.warning("No API key for AI suggestion. Falling back to advanced.")
@@ -321,20 +311,17 @@ def suggest_peers_with_ai(
 出力:
 """
 
-        from consultant_toolkit.gemini_client import DEFAULT_MODEL, create_gemini_client
+        from consultant_toolkit.gemini_client import generate_text
 
-        client = create_gemini_client(api_key=api_key)
-        response = client.models.generate_content(
-            model=DEFAULT_MODEL, contents=prompt
-        )
+        text = generate_text(prompt, api_key=api_key)
 
-        if response.text:
+        if text:
             # ティッカーシンボルを抽出
-            tickers = [t.strip().upper() for t in response.text.split(",") if t.strip()]
+            tickers = [t.strip().upper() for t in text.split(",") if t.strip()]
             # 対象企業を除外
             tickers = [t for t in tickers if t != target_ticker]
 
-            logger.info(f"🤖 AI suggested peers: {tickers}")
+            logger.info(f"[AI] AI suggested peers: {tickers}")
             return tickers[:max_peers]
 
     except (ImportError, ConnectionError, ValueError, KeyError) as e:

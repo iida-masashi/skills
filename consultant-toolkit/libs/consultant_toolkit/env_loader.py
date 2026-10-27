@@ -42,7 +42,7 @@ def load_environment(override: bool = True) -> bool:
     """
     env_paths = [
         Path.cwd() / ".env",
-        Path(__file__).parent.parent.parent / ".env",
+        Path(__file__).resolve().parents[2] / ".env",
     ]
 
     for env_path in env_paths:
@@ -76,3 +76,16 @@ def get_api_key(env_var: str, fallback: str | None = None) -> str | None:
         >>> api_key = get_api_key("GOOGLE_API_KEY")
     """
     return os.getenv(env_var, fallback)
+
+
+def get_gemini_api_key(fallback: str | None = None) -> str | None:
+    """
+    Gemini API キーを取得（GOOGLE_API_KEY と GEMINI_API_KEY の両方をサポート）
+
+    Args:
+        fallback: どちらも未設定の場合のフォールバック値
+
+    Returns:
+        str | None: Gemini API Key
+    """
+    return os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY") or fallback

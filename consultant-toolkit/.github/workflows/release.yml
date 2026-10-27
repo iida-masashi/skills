@@ -4,68 +4,88 @@ on:
   push:
     tags:
       - 'v*.*.*'
-
-permissions:
-  contents: write
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
 
 jobs:
   release:
     name: Create Release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        python-version: '3.11'
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+    - name: Install dependencies
+      run: uv sync
 
-      - name: Run tests
-        run: |
-          pytest tests/ -m "not integration" -v
+    - name: Run full test suite
+      run: uv run pytest tests/ -v -m "not slow and not network and not edgar and not ai"
 
-      - name: Extract version from tag
-        id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+    - name: Generate changelog
+      id: changelog
+      run: |
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          VERSION="${GITHUB_REF#refs/tags/}"
+        fi
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Generate changelog
-        id: changelog
-        run: |
-          echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
-          git log $(git describe --tags --abbrev=0 HEAD^)..HEAD --pretty=format:"- %s" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+        PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          name: Release v${{ steps.get_version.outputs.VERSION }}
-          body: |
-            ## Changes in this Release
+        if [ -z "$PREV_TAG" ]; then
+          CHANGELOG=$(git log --pretty=format:"- %s (%h)" --no-merges)
+        else
+          CHANGELOG=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
+        fi
 
-            ${{ steps.changelog.outputs.CHANGELOG }}
+        EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+        echo "CHANGELOG<<$EOF" >> $GITHUB_OUTPUT
+        echo "$CHANGELOG" >> $GITHUB_OUTPUT
+        echo "$EOF" >> $GITHUB_OUTPUT
 
-            ## Installation
+    - name: Create release archive
+      run: |
+        VERSION="${{ steps.changelog.outputs.VERSION }}"
+        mkdir -p release
+        git archive --format=zip --output="release/consultant-toolkit-${VERSION}.zip" HEAD
+        git archive --format=tar.gz --output="release/consultant-toolkit-${VERSION}.tar.gz" HEAD
 
-            ```bash
-            git clone https://github.com/your-org/consultant-toolkit.git
-            cd consultant-toolkit
-            git checkout v${{ steps.get_version.outputs.VERSION }}
-            pip install -r requirements.txt
-            ```
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.changelog.outputs.VERSION }}
+        name: Release ${{ steps.changelog.outputs.VERSION }}
+        body: |
+          ## What's Changed
 
-            ## Documentation
+          ${{ steps.changelog.outputs.CHANGELOG }}
 
-            See [README.md](README.md) for usage instructions.
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ## Installation
+
+          ```bash
+          git clone https://github.com/${{ github.repository }}.git
+          cd consultant-toolkit
+          git checkout ${{ steps.changelog.outputs.VERSION }}
+          uv sync
+          ```
+        files: |
+          release/consultant-toolkit-*.zip
+          release/consultant-toolkit-*.tar.gz
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

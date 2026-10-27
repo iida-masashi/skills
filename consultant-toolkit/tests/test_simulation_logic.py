@@ -30,16 +30,12 @@ class TestCalculateSimulatedFinancials:
 
     def test_revenue_growth(self):
         """売上成長率の適用"""
-        result = calculate_simulated_financials(
-            **self.base, revenue_growth_pct=10.0
-        )
+        result = calculate_simulated_financials(**self.base, revenue_growth_pct=10.0)
         assert abs(result["revenue"] - 110_000) < 0.01
 
     def test_cogs_change(self):
         """原価率変更"""
-        result = calculate_simulated_financials(
-            **self.base, cogs_change_pp=-5.0
-        )
+        result = calculate_simulated_financials(**self.base, cogs_change_pp=-5.0)
         # COGS ratio: 65 - 5 = 60%
         assert result["cogs"] == 60_000
 
@@ -55,9 +51,7 @@ class TestCalculateSimulatedFinancials:
 
     def test_negative_dio_clamped_to_zero(self):
         """DIOがマイナスにならない"""
-        result = calculate_simulated_financials(
-            **self.base, dio_change_days=-100
-        )
+        result = calculate_simulated_financials(**self.base, dio_change_days=-100)
         assert result["dio"] == 0.0
 
     def test_capex_change_affects_revenue(self):

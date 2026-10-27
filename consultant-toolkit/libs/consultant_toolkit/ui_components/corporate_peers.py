@@ -47,15 +47,9 @@ def render_corporate_peers(
                     if income_statement.empty or balance_sheet.empty:
                         return None
                     latest_y = income_statement.columns[0]
-                    metrics = calculate_financial_metrics(
-                        income_statement, balance_sheet, latest_y
-                    )
-                    total_assets = get_val_safe(
-                        balance_sheet, ["Total Assets"], latest_y
-                    )
-                    net_income = get_val_safe(
-                        income_statement, ["Net Income"], latest_y
-                    )
+                    metrics = calculate_financial_metrics(income_statement, balance_sheet, latest_y)
+                    total_assets = get_val_safe(balance_sheet, ["Total Assets"], latest_y)
+                    net_income = get_val_safe(income_statement, ["Net Income"], latest_y)
                     equity = get_val_safe(
                         balance_sheet,
                         ["Stockholders Equity", "Total Equity Gross Minority Interest"],
@@ -75,15 +69,11 @@ def render_corporate_peers(
                             revenue_growth = (revenue / prev_rev) - 1.0
                     return {
                         "Company": name,
-                        "Operating Margin (%)": (op_income / revenue * 100)
-                        if revenue > 0
-                        else 0,
+                        "Operating Margin (%)": (op_income / revenue * 100) if revenue > 0 else 0,
                         "ROIC (%)": metrics.get("roic", 0) * 100,
                         "ROE (%)": (net_income / equity * 100) if equity > 0 else 0,
                         "CCC (Days)": metrics.get("ccc", 0),
-                        "Asset Turnover (x)": (revenue / total_assets)
-                        if total_assets > 0
-                        else 0,
+                        "Asset Turnover (x)": (revenue / total_assets) if total_assets > 0 else 0,
                         "Revenue Growth (%)": revenue_growth * 100,
                     }
                 except (ConnectionError, KeyError, ValueError, ZeroDivisionError):
@@ -91,9 +81,7 @@ def render_corporate_peers(
 
             bench_data = []
             with ThreadPoolExecutor(max_workers=8) as executor:
-                futures = [
-                    executor.submit(_calc_one, item) for item in companies_dict.items()
-                ]
+                futures = [executor.submit(_calc_one, item) for item in companies_dict.items()]
                 for future in as_completed(futures):
                     result = future.result()
                     if result is not None:
@@ -180,18 +168,14 @@ def render_corporate_peers(
                             metrics = calculate_financial_metrics(
                                 income_statement_df, balance_sheet_df, y
                             )
-                            if (
-                                metrics["revenue"] > 0
-                                and metrics["invested_capital"] > 0
-                            ):
+                            if metrics["revenue"] > 0 and metrics["invested_capital"] > 0:
                                 rows.append(
                                     {
                                         "Company": name,
                                         "Year": str(y.date())[:4],
                                         "Revenue_M": metrics["revenue"] / 1e6,
                                         "NOPAT_M": max(0, metrics["nopat"] / 1e6),
-                                        "InvestedCapital_M": metrics["invested_capital"]
-                                        / 1e6,
+                                        "InvestedCapital_M": metrics["invested_capital"] / 1e6,
                                         "ROIC": metrics["roic"],
                                     }
                                 )
@@ -204,8 +188,7 @@ def render_corporate_peers(
             all_data = []
             with ThreadPoolExecutor(max_workers=8) as executor:
                 futures = [
-                    executor.submit(_calc_roic_series, item)
-                    for item in companies_dict.items()
+                    executor.submit(_calc_roic_series, item) for item in companies_dict.items()
                 ]
                 for future in as_completed(futures):
                     all_data.extend(future.result())
@@ -253,12 +236,12 @@ def render_corporate_peers(
             fig_comp_ppm.update_traces(textposition="top center")
 
             if len(fig_comp_ppm.layout.updatemenus) > 0:
-                fig_comp_ppm.layout.updatemenus[0].buttons[0].args[1]["frame"][
-                    "duration"
-                ] = ANIMATION_DURATION_MS
-                fig_comp_ppm.layout.updatemenus[0].buttons[0].args[1]["transition"][
-                    "duration"
-                ] = ANIMATION_TRANSITION_MS
+                fig_comp_ppm.layout.updatemenus[0].buttons[0].args[1]["frame"]["duration"] = (
+                    ANIMATION_DURATION_MS
+                )
+                fig_comp_ppm.layout.updatemenus[0].buttons[0].args[1]["transition"]["duration"] = (
+                    ANIMATION_TRANSITION_MS
+                )
 
             fig_comp_ppm.update_layout(
                 xaxis={"tickformat": "¥,.0f"}, yaxis={"tickformat": ".1%"}, height=700
@@ -355,12 +338,8 @@ def render_corporate_peers(
                     # データテーブル
                     st.markdown("##### セグメント詳細")
                     display_df = segment_df.copy()
-                    display_df["Revenue"] = display_df["Revenue"].apply(
-                        lambda x: f"{x:,.0f}M"
-                    )
-                    display_df["Percentage"] = display_df["Percentage"].apply(
-                        lambda x: f"{x:.1f}%"
-                    )
+                    display_df["Revenue"] = display_df["Revenue"].apply(lambda x: f"{x:,.0f}M")
+                    display_df["Percentage"] = display_df["Percentage"].apply(lambda x: f"{x:.1f}%")
                     st.dataframe(display_df, use_container_width=True, hide_index=True)
 
                 # 棒グラフ
@@ -401,7 +380,9 @@ def render_corporate_peers(
                     risk_msg = f"「{top_segment_name}」が{top_segment_pct:.1f}%を占めているわ。主力事業としては健全だけど、**多角化余地**はあるわね。"
                 else:
                     risk_level = "🟢 分散良好"
-                    risk_msg = "事業ポートフォリオは比較的バランスが取れているわ。リスク分散できてるわね。"
+                    risk_msg = (
+                        "事業ポートフォリオは比較的バランスが取れているわ。リスク分散できてるわね。"
+                    )
 
                 st.info(f"💡 **Consultant's Insight:** {risk_level}\n{risk_msg}")
 
@@ -448,9 +429,7 @@ def render_corporate_peers(
                     # データテーブル
                     st.markdown("##### 地域詳細")
                     display_geo = geo_df.copy()
-                    display_geo["Revenue"] = display_geo["Revenue"].apply(
-                        lambda x: f"{x:,.0f}M"
-                    )
+                    display_geo["Revenue"] = display_geo["Revenue"].apply(lambda x: f"{x:,.0f}M")
                     display_geo["Percentage"] = display_geo["Percentage"].apply(
                         lambda x: f"{x:.1f}%"
                     )
@@ -483,18 +462,13 @@ def render_corporate_peers(
                     key="corporate_peers_segment_json",
                 )
 
-                custom_fy = st.number_input(
-                    "会計年度", min_value=2020, max_value=2030, value=2023
-                )
+                custom_fy = st.number_input("会計年度", min_value=2020, max_value=2030, value=2023)
 
                 if st.button("登録"):
                     try:
                         segments_dict = json.loads(segment_json)
                         # #8: 構造バリデーション
-                        if (
-                            not isinstance(segments_dict, dict)
-                            or len(segments_dict) == 0
-                        ):
+                        if not isinstance(segments_dict, dict) or len(segments_dict) == 0:
                             st.error(
                                 "セグメントは1件以上のキーを持つオブジェクトで入力してください。"
                             )
@@ -512,9 +486,7 @@ def render_corporate_peers(
                             else:
                                 st.session_state["seg_validation_pending"] = False
 
-                            if not st.session_state.get(
-                                "seg_validation_pending", False
-                            ):
+                            if not st.session_state.get("seg_validation_pending", False):
                                 add_segment_mapping(
                                     ticker=custom_ticker,
                                     company_name=custom_company,

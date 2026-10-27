@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
@@ -45,17 +46,11 @@ def render_financial_trends(
                 operating_income = get_val_safe(
                     income_statement, ["Operating Income", "EBIT"], year
                 )
-                gross_profit = get_val_safe(
-                    income_statement, ["Gross Profit"], year
-                )
+                gross_profit = get_val_safe(income_statement, ["Gross Profit"], year)
 
                 if revenue > 0:
-                    operating_margin = (
-                        operating_income / revenue if operating_income != 0 else 0.0
-                    )
-                    gross_margin = (
-                        gross_profit / revenue if gross_profit != 0 else 0.0
-                    )
+                    operating_margin = operating_income / revenue if operating_income != 0 else 0.0
+                    gross_margin = gross_profit / revenue if gross_profit != 0 else 0.0
 
                     history_data.append(
                         {
@@ -196,10 +191,8 @@ def render_financial_trends(
             "以下は **デモデータ** による表示です。実際の財務数値ではありません。"
         )
 
-        mock_history_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-            "data",
-            "mock_parts_data_history.csv",
+        mock_history_path = str(
+            Path(__file__).resolve().parents[3] / "data" / "mock_parts_data_history.csv"
         )
         ensure_historical_marginal_profit_data(mock_history_path)
 
@@ -231,12 +224,12 @@ def render_financial_trends(
 
             fig_ppm_anim.update_traces(textposition="top center")
             if len(fig_ppm_anim.layout.updatemenus) > 0:
-                fig_ppm_anim.layout.updatemenus[0].buttons[0].args[1]["frame"][
-                    "duration"
-                ] = ANIMATION_DURATION_MS
-                fig_ppm_anim.layout.updatemenus[0].buttons[0].args[1]["transition"][
-                    "duration"
-                ] = ANIMATION_TRANSITION_MS
+                fig_ppm_anim.layout.updatemenus[0].buttons[0].args[1]["frame"]["duration"] = (
+                    ANIMATION_DURATION_MS
+                )
+                fig_ppm_anim.layout.updatemenus[0].buttons[0].args[1]["transition"]["duration"] = (
+                    ANIMATION_TRANSITION_MS
+                )
 
             fig_ppm_anim.update_layout(
                 xaxis={"tickformat": "¥,.0f"},

@@ -38,9 +38,7 @@ def calculate_simulated_financials(
     sim_cogs = total_sim_revenue * (sim_cogs_ratio / 100.0)
     sim_opex = total_sim_revenue * (sim_opex_ratio / 100.0)
     sim_oi = total_sim_revenue - sim_cogs - sim_opex
-    sim_oi_margin = (
-        (sim_oi / total_sim_revenue * 100.0) if total_sim_revenue > 0 else 0.0
-    )
+    sim_oi_margin = (sim_oi / total_sim_revenue * 100.0) if total_sim_revenue > 0 else 0.0
 
     # 運転資本・CCC計算
     sim_dio = max(0.0, current_dio + dio_change_days)

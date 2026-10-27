@@ -131,9 +131,7 @@ def fetch_financial_data_batch(
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         # Submit all tasks
         future_to_ticker = {
-            executor.submit(
-                fetch_financial_data, ticker, include_cash_flow, history_period
-            ): ticker
+            executor.submit(fetch_financial_data, ticker, include_cash_flow, history_period): ticker
             for ticker in ticker_symbols
         }
 
@@ -149,9 +147,7 @@ def fetch_financial_data_batch(
     return results
 
 
-def get_safe_value(
-    df: pd.DataFrame, keys: list, column: Any, default: float = 0.0
-) -> float:
+def get_safe_value(df: pd.DataFrame, keys: list, column: Any, default: float = 0.0) -> float:
     """
     DataFrameから安全に値を取得 (複数キー候補対応)
 

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Tests for error handling and recovery scenarios
 
 Tests how the system handles various error conditions.

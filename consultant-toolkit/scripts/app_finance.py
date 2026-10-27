@@ -1,4 +1,4 @@
-﻿"""
+"""
 SCM Financial Galaxy Dashboard
 
 任意企業の財務・SCM指標を可視化するStreamlitダッシュボード。
@@ -158,9 +158,7 @@ try:
     target_company_name = target_ticker_obj.info.get("longName", target_ticker)
 
     if search_method == "name_search":
-        st.sidebar.success(
-            f"✓ {target_company_name} ({target_ticker}) - 企業名から検索"
-        )
+        st.sidebar.success(f"✓ {target_company_name} ({target_ticker}) - 企業名から検索")
     else:
         st.sidebar.success(f"✓ {target_company_name}")
 except Exception:
@@ -228,9 +226,7 @@ elif "手動入力" in competitor_mode:
     manual_input = st.sidebar.text_area(
         "競合ティッカー（改行区切り）", value="", help="例:\nAAPL\nMSFT\nGOOGL"
     )
-    selected_competitors = [
-        t.strip().upper() for t in manual_input.split("\n") if t.strip()
-    ]
+    selected_competitors = [t.strip().upper() for t in manual_input.split("\n") if t.strip()]
 else:  # 設定から読込
     default_companies = list(COMPANIES.values())
     selected_competitors = st.sidebar.multiselect(
@@ -322,25 +318,19 @@ try:
             export_pdf = st.button(
                 "📄 PDF",
                 disabled=not _has_export_data,
-                help=None
-                if _has_export_data
-                else "分析タブを開くとデータが読み込まれます",
+                help=None if _has_export_data else "分析タブを開くとデータが読み込まれます",
             )
         with col2:
             export_excel = st.button(
                 "📊 Excel",
                 disabled=not _has_export_data,
-                help=None
-                if _has_export_data
-                else "分析タブを開くとデータが読み込まれます",
+                help=None if _has_export_data else "分析タブを開くとデータが読み込まれます",
             )
         with col3:
             export_data_btn = st.button(
                 "💾 Data",
                 disabled=not _has_export_data,
-                help=None
-                if _has_export_data
-                else "分析タブを開くとデータが読み込まれます",
+                help=None if _has_export_data else "分析タブを開くとデータが読み込まれます",
             )
 except ValueError:
     pass

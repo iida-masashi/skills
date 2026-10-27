@@ -1,1 +1,1 @@
-﻿# Test package for consultant-toolkit
+# Test package for consultant-toolkit

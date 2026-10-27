@@ -70,23 +70,17 @@ class TestLoadBaseFinancials:
 
     def test_success_has_real_data(self):
         """正常取得時 has_real_data=True。"""
-        fin = load_base_financials(
-            "TEST", _mock_load_financial_data, _mock_get_val_safe
-        )
+        fin = load_base_financials("TEST", _mock_load_financial_data, _mock_get_val_safe)
         assert fin.has_real_data is True
 
     def test_revenue_extracted(self):
         """売上高が正しく取得される。"""
-        fin = load_base_financials(
-            "TEST", _mock_load_financial_data, _mock_get_val_safe
-        )
+        fin = load_base_financials("TEST", _mock_load_financial_data, _mock_get_val_safe)
         assert abs(fin.revenue - 1_000_000) < 0.01
 
     def test_margins_calculated(self):
         """マージン率が正しく計算される。"""
-        fin = load_base_financials(
-            "TEST", _mock_load_financial_data, _mock_get_val_safe
-        )
+        fin = load_base_financials("TEST", _mock_load_financial_data, _mock_get_val_safe)
         # COGS/Rev = 650000/1000000 = 65%
         assert abs(fin.cogs_ratio - 65.0) < 0.01
         # OpEx/Rev = 200000/1000000 = 20%
@@ -96,18 +90,14 @@ class TestLoadBaseFinancials:
 
     def test_roic_calculated(self):
         """ROIC が計算される（ゼロでない）。"""
-        fin = load_base_financials(
-            "TEST", _mock_load_financial_data, _mock_get_val_safe
-        )
+        fin = load_base_financials("TEST", _mock_load_financial_data, _mock_get_val_safe)
         assert fin.roic != 0.0
         # ROIC = NOPAT / IC * 100; IC = equity + debt = 700000
         assert fin.invested_capital == 700_000
 
     def test_ccc_components(self):
         """CCC 構成要素（DIO/DSO/DPO）が計算される。"""
-        fin = load_base_financials(
-            "TEST", _mock_load_financial_data, _mock_get_val_safe
-        )
+        fin = load_base_financials("TEST", _mock_load_financial_data, _mock_get_val_safe)
         # DIO = inventory / cogs * 365
         expected_dio = 100_000 / 650_000 * 365
         assert abs(fin.dio - expected_dio) < 0.1
@@ -134,9 +124,7 @@ class TestLoadBaseFinancials:
 
     def test_no_cashflow_defaults_to_zero(self):
         """get_cashflow_data を渡さない場合 capex/ocf/fcf=0。"""
-        fin = load_base_financials(
-            "TEST", _mock_load_financial_data, _mock_get_val_safe
-        )
+        fin = load_base_financials("TEST", _mock_load_financial_data, _mock_get_val_safe)
         assert fin.capex == 0.0
         assert fin.ocf == 0.0
         assert fin.fcf == 0.0
@@ -155,17 +143,13 @@ class TestLoadBaseFinancials:
 
     def test_raw_dataframes_preserved(self):
         """元の DataFrame が raw_ フィールドに保持される。"""
-        fin = load_base_financials(
-            "TEST", _mock_load_financial_data, _mock_get_val_safe
-        )
+        fin = load_base_financials("TEST", _mock_load_financial_data, _mock_get_val_safe)
         assert not fin.raw_income_statement.empty
         assert not fin.raw_balance_sheet.empty
 
     def test_latest_year_set(self):
         """latest_year が設定される。"""
-        fin = load_base_financials(
-            "TEST", _mock_load_financial_data, _mock_get_val_safe
-        )
+        fin = load_base_financials("TEST", _mock_load_financial_data, _mock_get_val_safe)
         assert fin.latest_year == pd.Timestamp("2024-01-01")
 
     def test_zero_revenue_fallback_margins(self):

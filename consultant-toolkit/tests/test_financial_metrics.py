@@ -1,4 +1,4 @@
-﻿"""
+"""
 Unit tests for financial_metrics module
 
 Tests ROIC, CCC calculations and safe value extraction functions.
@@ -23,9 +23,7 @@ class TestGetValSafe:
 
     def test_get_value_with_first_key(self):
         """Should return value when first key matches"""
-        df = pd.DataFrame(
-            {"2024": [100, 200]}, index=["Total Revenue", "Operating Income"]
-        )
+        df = pd.DataFrame({"2024": [100, 200]}, index=["Total Revenue", "Operating Income"])
         result = get_val_safe(df, ["Total Revenue", "Revenue"], "2024")
         assert result == 100.0
 

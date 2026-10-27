@@ -13,7 +13,7 @@ import yaml
 logger = logging.getLogger(__name__)
 
 # デフォルト設定ファイルのパス
-DEFAULT_CONFIG_PATH = Path(__file__).parent.parent / "config" / "app_config.yaml"
+DEFAULT_CONFIG_PATH = Path(__file__).parent / "config" / "app_config.yaml"
 
 
 class ConfigLoader:

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Unit tests for retry mechanism
 
 Tests retry decorator and safe execution wrapper.
@@ -49,9 +49,9 @@ class TestRetryDecorator:
         """Should raise exception after max retries exceeded"""
         mock_func = Mock(side_effect=ConnectionError("Persistent error"))
 
-        decorated = retry_on_error(
-            max_retries=2, delay=0.01, exceptions=(ConnectionError,)
-        )(mock_func)
+        decorated = retry_on_error(max_retries=2, delay=0.01, exceptions=(ConnectionError,))(
+            mock_func
+        )
 
         with pytest.raises(ConnectionError, match="Persistent error"):
             decorated()
@@ -158,18 +158,14 @@ class TestSafeExecute:
         )
 
         assert result == "result"
-        mock_func.assert_called_once_with(
-            "arg1", "arg2", kwarg1="value1", kwarg2="value2"
-        )
+        mock_func.assert_called_once_with("arg1", "arg2", kwarg1="value1", kwarg2="value2")
 
     def test_custom_error_message_logged(self):
         """Should log custom error message when provided"""
         mock_func = Mock(side_effect=RuntimeError("Boom"))
 
         with patch("consultant_toolkit.retry.logger") as mock_logger:
-            result = safe_execute(
-                mock_func, default=None, error_msg="Custom error occurred"
-            )
+            result = safe_execute(mock_func, default=None, error_msg="Custom error occurred")
 
             assert result is None
             # Verify logger was called with custom message

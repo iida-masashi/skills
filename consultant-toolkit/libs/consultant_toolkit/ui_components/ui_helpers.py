@@ -63,12 +63,8 @@ class BaseFinancials:
 
     # メタ
     latest_year: Any = None
-    raw_income_statement: pd.DataFrame = field(
-        default_factory=lambda: pd.DataFrame()
-    )
-    raw_balance_sheet: pd.DataFrame = field(
-        default_factory=lambda: pd.DataFrame()
-    )
+    raw_income_statement: pd.DataFrame = field(default_factory=lambda: pd.DataFrame())
+    raw_balance_sheet: pd.DataFrame = field(default_factory=lambda: pd.DataFrame())
 
 
 # ========================================
@@ -109,39 +105,27 @@ def load_base_financials(
     latest_year = income_statement.columns[0]
 
     # --- 収益・コスト ---
-    revenue = get_val_safe_fn(
-        income_statement, ["Total Revenue", "Operating Revenue"], latest_year
-    )
+    revenue = get_val_safe_fn(income_statement, ["Total Revenue", "Operating Revenue"], latest_year)
     cogs = get_val_safe_fn(
         income_statement,
         ["Cost Of Revenue", "Cost of Goods Sold"],
         latest_year,
     )
-    opex = get_val_safe_fn(
-        income_statement, ["Operating Expense"], latest_year
-    )
-    oi = get_val_safe_fn(
-        income_statement, ["Operating Income"], latest_year
-    )
+    opex = get_val_safe_fn(income_statement, ["Operating Expense"], latest_year)
+    oi = get_val_safe_fn(income_statement, ["Operating Income"], latest_year)
 
     # --- B/S ---
-    inventory = get_val_safe_fn(
-        balance_sheet, ["Inventory"], latest_year
-    )
+    inventory = get_val_safe_fn(balance_sheet, ["Inventory"], latest_year)
     receivables = get_val_safe_fn(
         balance_sheet, ["Accounts Receivable", "Receivables"], latest_year
     )
-    payables = get_val_safe_fn(
-        balance_sheet, ["Accounts Payable", "Payables"], latest_year
-    )
+    payables = get_val_safe_fn(balance_sheet, ["Accounts Payable", "Payables"], latest_year)
     equity = get_val_safe_fn(
         balance_sheet,
         ["Stockholders Equity", "Total Equity Gross Minority Interest"],
         latest_year,
     )
-    debt = get_val_safe_fn(
-        balance_sheet, ["Total Debt"], latest_year
-    )
+    debt = get_val_safe_fn(balance_sheet, ["Total Debt"], latest_year)
     invested_capital = equity + debt
 
     # --- マージン (safe division) ---
@@ -178,9 +162,7 @@ def load_base_financials(
                 latest_year,
             )
             capex = abs(capex_raw)
-            ocf = get_val_safe_fn(
-                cf_data, ["Operating Cash Flow"], latest_year
-            )
+            ocf = get_val_safe_fn(cf_data, ["Operating Cash Flow"], latest_year)
             fcf = ocf - capex
         except (ConnectionError, KeyError, ValueError):
             pass

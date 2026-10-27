@@ -1,4 +1,4 @@
-﻿import argparse
+import argparse
 from pathlib import Path
 
 import pandas as pd
@@ -54,7 +54,7 @@ def fetch_finance_data(ticker_symbol, include_trends=False):
         for k, v in summary_data.items():
             f.write(f"{k}: {v}\n")
 
-    print("\n--- 📊 Company Overview ---")
+    print("\n--- [INFO] Company Overview ---")
     for k, v in summary_data.items():
         if v is not None:
             if isinstance(v, float):
@@ -67,8 +67,8 @@ def fetch_finance_data(ticker_symbol, include_trends=False):
             else:
                 print(f"{k:20s}: {v}")
 
-    print(f"\n✅ Price history saved to: {hist_path.absolute()}")
-    print(f"✅ Summary saved to: {summary_path.absolute()}")
+    print(f"\n[OK] Price history saved to: {hist_path.absolute()}")
+    print(f"[OK] Summary saved to: {summary_path.absolute()}")
 
     # 3. Financial Trends (if requested)
     if include_trends:
@@ -76,19 +76,13 @@ def fetch_finance_data(ticker_symbol, include_trends=False):
         balance = data.balance_sheet
 
         if not income.empty and not balance.empty:
-            print("\n--- 📈 Financial Trends (Annual) ---")
+            print("\n--- [INFO] Financial Trends (Annual) ---")
 
             try:
                 # Extract key financial metrics across years
-                revenue = (
-                    income.loc["Total Revenue"]
-                    if "Total Revenue" in income.index
-                    else None
-                )
+                revenue = income.loc["Total Revenue"] if "Total Revenue" in income.index else None
                 ebit = income.loc["EBIT"] if "EBIT" in income.index else None
-                net_income = (
-                    income.loc["Net Income"] if "Net Income" in income.index else None
-                )
+                net_income = income.loc["Net Income"] if "Net Income" in income.index else None
                 equity = (
                     balance.loc["Stockholders Equity"]
                     if "Stockholders Equity" in balance.index
@@ -99,9 +93,7 @@ def fetch_finance_data(ticker_symbol, include_trends=False):
                     trends = pd.DataFrame(
                         {
                             "Revenue": revenue,
-                            "Net Income": net_income
-                            if net_income is not None
-                            else pd.Series(),
+                            "Net Income": net_income if net_income is not None else pd.Series(),
                             "EBIT": ebit if ebit is not None else pd.Series(),
                             "ROE_Proxy": (net_income / equity * 100)
                             if net_income is not None
@@ -112,12 +104,12 @@ def fetch_finance_data(ticker_symbol, include_trends=False):
 
                     trends_path = output_dir / "financial_trends.csv"
                     trends.to_csv(trends_path)
-                    print(f"\n✅ Financial trends saved to: {trends_path.absolute()}")
+                    print(f"\n[OK] Financial trends saved to: {trends_path.absolute()}")
                 else:
-                    print("⚠️  Insufficient data for trend analysis")
+                    print("[WARN] Insufficient data for trend analysis")
 
             except KeyError as e:
-                print(f"⚠️  Financial data structure issue: {e}")
+                print(f"[WARN] Financial data structure issue: {e}")
 
 
 if __name__ == "__main__":
@@ -125,9 +117,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--ticker", required=True, help="Ticker symbol (e.g., AAPL, 7203.T, 2229.T)"
     )
-    parser.add_argument(
-        "--trends", action="store_true", help="Include financial trends analysis"
-    )
+    parser.add_argument("--trends", action="store_true", help="Include financial trends analysis")
 
     args = parser.parse_args()
     fetch_finance_data(args.ticker, include_trends=args.trends)

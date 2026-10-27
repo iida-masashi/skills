@@ -81,7 +81,7 @@ def retry_on_error(
     return decorator
 
 
-def safe_execute[T](
+def safe_execute(
     func: Callable[..., T],
     *args,
     default: T | None = None,

@@ -208,7 +208,20 @@ def mock_calculate_financial_metrics(pl, bs, year, use_nopat=True):
 def mock_calculate_ccc_metrics(pl, bs, year):
     """テスト用 calculate_ccc_metrics。"""
     m = mock_calculate_financial_metrics(pl, bs, year)
-    return {k: m[k] for k in ("revenue", "cogs", "inventory", "receivables", "payables", "dio", "dso", "dpo", "ccc")}
+    return {
+        k: m[k]
+        for k in (
+            "revenue",
+            "cogs",
+            "inventory",
+            "receivables",
+            "payables",
+            "dio",
+            "dso",
+            "dpo",
+            "ccc",
+        )
+    }
 
 
 def mock_calculate_comprehensive_metrics(pl, bs, year, companies_dict, get_val_safe_fn):

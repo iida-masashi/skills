@@ -1,4 +1,4 @@
-﻿"""
+"""
 Edge case tests for financial metrics calculations
 
 Tests boundary conditions, extreme values, and error scenarios.
@@ -178,9 +178,7 @@ class TestCCCEdgeCases:
 
     def test_ccc_with_all_zeros(self):
         """Should handle all zero inputs gracefully"""
-        result = calculate_ccc(
-            revenue=0, cogs=0, inventory=0, receivables=0, payables=0
-        )
+        result = calculate_ccc(revenue=0, cogs=0, inventory=0, receivables=0, payables=0)
 
         assert result["dio"] == 0.0
         assert result["dso"] == 0.0
@@ -223,9 +221,7 @@ class TestGetValSafeEdgeCases:
 
     def test_get_val_safe_with_negative_infinity(self):
         """Should handle negative infinity values"""
-        df = pd.DataFrame(
-            {"2024": [-np.inf, 200.0]}, index=["Total Revenue", "Revenue"]
-        )
+        df = pd.DataFrame({"2024": [-np.inf, 200.0]}, index=["Total Revenue", "Revenue"])
 
         result = get_val_safe(df, ["Total Revenue", "Revenue"], "2024")
 
@@ -246,9 +242,7 @@ class TestGetValSafeEdgeCases:
     def test_get_val_safe_with_very_large_dataframe(self):
         """Should efficiently handle large DataFrames"""
         # Create large DataFrame with 10000 rows
-        large_df = pd.DataFrame(
-            {"2024": range(10000)}, index=[f"Row_{i}" for i in range(10000)]
-        )
+        large_df = pd.DataFrame({"2024": range(10000)}, index=[f"Row_{i}" for i in range(10000)])
 
         result = get_val_safe(large_df, ["Row_5000"], "2024")
 
