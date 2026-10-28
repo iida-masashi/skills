@@ -16,7 +16,7 @@ Vault → Quartz → 公開ホスティングの公開フロー全体をワン�
 | **awa**（既定） | `D:\Vault\awa` | `D:\Vault\awa\_work\_sync_to_quartz.py` | `C:\Users\iidam\quartz` | `iida-masashi/awa-garden`（public） | GitHub Pages | `https://iida-masashi.github.io/awa-garden/` |
 | **religion** | `D:\Vault\religion` | `D:\Vault\religion\_work\_sync_to_quartz_religion.py` | `C:\Users\iidam\quartz-religion` | `iida-masashi/religion-garden`（public） | GitHub Pages | `https://iida-masashi.github.io/religion-garden/` |
 | **solution** | `D:\Vault\solution` | `D:\Vault\solution\_work\_sync_to_quartz_solution.py` | `C:\Users\iidam\quartz-solution` | `iida-masashi/solution-garden`（**private**、未作成） | Cloudflare Pages / Local | `https://solution-garden.pages.dev/` |
-| **cpg** | `D:\Vault\cpg`（Vault自体がQuartzリポジトリ兼gitリポジトリ） | `D:\Vault\cpg\_work\_sync_to_quartz_cpg.py`（content先はVault外） | ―（Vault自体がQuartzリポジトリ、下記参照） | `iida-masashi/cpg-vault`（**private**） | Cloudflare Pages（GitHub Actions経由でwrangler deploy） | `https://cpg-vault.pages.dev/`（Basic認証必須） |
+| **cpg** | `D:\Vault\cpg`（Vault自体がQuartzリポジトリ兼gitリポジトリ） | `D:\Vault\cpg\_work\_sync_to_quartz_cpg.py`（content先はVault外） | ―（Vault自体がQuartzリポジトリ、下記参照） | `iida-masashi/cpg-vault`（**private**） / Azure Repos `ConsumerProducts/ConsumerProductsKnowledgeGraph` | Azure Static Web Apps（Azure Pipelines経由） / Cloudflare Pages（GitHub Actions経由） | `https://gentle-grass-03f1ea800.1.azurestaticapps.net/`（Entra ID認証必須） / `https://cpg-vault.pages.dev/`（Basic認証必須） |
 
 以降、選択したターゲットの行を `<vault>` `<sync-script>` `<quartz-repo>` `<gh-repo>` `<pages-url>` として読み替える（cpgターゲットは`<quartz-repo>` = `<vault>` = `D:\Vault\cpg`として扱う。contentミラー先だけが例外的にVault外。下記「cpgターゲットの特殊性」参照）。
 

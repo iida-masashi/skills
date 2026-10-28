@@ -21,9 +21,9 @@ Mermaid 11 では、`subgraph` の識別子（ID）に中黒（`・`）やスラ
 
 ---
 
-## 🛡️ 9大構文・視認性バリデーションルール
+## 🛡️ 10大構文・視認性バリデーションルール
 
-本スキルでは、以下の9つのルールを厳格に検査します：
+本スキルでは、以下の10個のルールを厳格に検査します：
 
 | ルールID | 種別 | 判定内容 | 修正・対応方針 |
 | :--- | :--- | :--- | :--- |
@@ -33,9 +33,10 @@ Mermaid 11 では、`subgraph` の識別子（ID）に中黒（`・`）やスラ
 | **Rule 4: INVALID_ARROW** | 構文 | 不正な矢印演算子（例: `-->>`, `-->-->` 等） | 標準の `-->` または `-.->`, `==>` を使用する |
 | **Rule 5: UNQUOTED_EDGE_LABEL** | 構文 | 双方向リンクの未クォートラベル（例: `<-->\|label\|`） | 必ずダブルクォートで囲む（例: `<--> \|"label"\|`） |
 | **Rule 6: HAZARDOUS_SUBGRAPH_ID** | 構文 | `subgraph` ID に中黒（`・`）やスラッシュ、括弧などの記号を含む | IDから記号を除去し、表示名は `subgraph ID["表示名"]` で指定する |
-| **Rule 7: DARK_FILL_WITHOUT_WHITE_TEXT** | 視認性 | 暗色背景（YIQ輝度 < 130）のノードに白文字（`color:#fff`）が未指定 | `classDef` または `style` に必ず `color:#ffffff` を追加する |
+| **Rule 7: DARK_FILL_WITHOUT_WHITE_TEXT** | 視認性 | 暗色背景（YIQ輝度 < 130）のノード（`["..."]`, `[("...")]`, `(["..."])`, `(("..."))`, `{"..."}`, `{{"..."}}`）に白文字（`color:#fff`）が未指定 | ラベルを `<div style='color:#ffffff;'>...</div>` で囲む（`--fix` で自動修正可） |
 | **Rule 8: MERMAID_COMMENT_HAZARD** | 互換性 | コードブロック内に `%%` コメントが存在（Quartz OFMが削除し破損） | コメント行を削除するか、コードブロック外の注記にする |
 | **Rule 9: WHITE_TEXT_WITHOUT_DARK_FILL** | 視認性 | ラベルが白文字なのに、暗色の fill（`style`/`classDef`/`class`/`:::`/div内`background:`）が無い。既定背景はライトテーマで白に近く、文字が読めない | 文字を黒（`color:#000000`）にし、淡色 fill を明示する（例 `style X fill:#f1f5f9,stroke:#475569,color:#000000`）。白文字を残すなら暗色 fill を付ける |
+| **Rule 10: UNESCAPED_PSEUDO_HTML_TAG** | 構文/互換性 | Mermaidブロック内に `<PROJECT_ID>` や `<STRING>` 等の非標準山括弧タグが存在（Quartzの `mermaid.inline.ts` が `innerHTML` 代入時に未閉じHTMLタグと誤認し、ブロック末尾に `</project_id>` を自動挿入して `Parse error: got 'TAGSTART'` でクラッシュする） | 標準HTMLタグ（`div`, `br`, `span`, `b`, `i`, `strong`, `em`, `small`, `sub`, `sup`, `u`, `code`, `p`, `s`）以外の山括弧 `<...>` は使わず、`PROJECT_ID` 等に置き換える |
 
 ---
 

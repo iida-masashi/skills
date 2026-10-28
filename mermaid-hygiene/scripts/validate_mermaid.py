@@ -10,6 +10,7 @@ Checks Mermaid diagrams in markdown files for:
   7. DARK_FILL_WITHOUT_WHITE_TEXT: Dark background fill without white text (Contrast/Readability)
   8. MERMAID_COMMENT_HAZARD: %% inside a mermaid block (Quartz OFM deletes it)
   9. WHITE_TEXT_WITHOUT_DARK_FILL: White label text on a light/default fill (unreadable in light theme)
+  10. UNESCAPED_PSEUDO_HTML_TAG: Non-standard <PLACEHOLDER> tags inside Mermaid blocks (Quartz innerHTML auto-closes them and crashes Mermaid)
 """
 
 from __future__ import annotations
@@ -238,11 +239,14 @@ class MermaidValidator:
             # Rule 7: Dark background fill without explicit white text (Contrast/Readability issue)
             # In Mermaid 11 / Quartz HTML labels, classDef 'color' is overridden by base styles.
             # Nodes with dark fills MUST have <div style='... color:#ffffff;'> in their labels.
-            node_m = re.finditer(r'([a-zA-Z0-9_\-]+)\s*\["([^"]+)"\](?::::([a-zA-Z0-9_\-]+))?', line)
+            node_m = re.finditer(
+                r'([a-zA-Z0-9_\-]+)\s*(\["|\[\("|\(\["|\(\("|\{"|\{\{")([^"]+)("\]|"\)\]|"\]\)|"\)\)|"\}|"\}\})(?::::([a-zA-Z0-9_\-]+))?',
+                line,
+            )
             for nm in node_m:
                 node_id = nm.group(1)
-                label_text = nm.group(2)
-                node_class = nm.group(3)
+                label_text = nm.group(3)
+                node_class = nm.group(5)
 
                 is_node_dark = (node_class in dark_classes) or (node_id in dark_nodes)
                 if not is_node_dark:
@@ -304,6 +308,35 @@ class MermaidValidator:
                     )
                 )
 
+            # Rule 13: Unescaped pseudo-HTML tag (<PROJECT_ID>, <STRING>, etc.) inside Mermaid block
+            # Quartz mermaid.inline.ts sets node.innerHTML = oldText, causing the browser to parse
+            # <PROJECT_ID> as an unclosed HTML tag and append </project_id> at the end of the block,
+            # crashing Mermaid with Parse error: got 'TAGSTART'.
+            for tag_m in re.finditer(r"</?([A-Za-z_][A-Za-z0-9_\-]*)[^>\n]*>", stripped):
+                full_tag = tag_m.group(0)
+                tag_name = tag_m.group(1).lower()
+                if full_tag in ("<-->", "<->", "<--", "<=="):
+                    continue
+                allowed_html_tags = {
+                    "br", "div", "span", "b", "i", "strong", "em",
+                    "small", "sub", "sup", "u", "code", "p", "s",
+                }
+                if tag_name not in allowed_html_tags:
+                    issues.append(
+                        MermaidLintIssue(
+                            file=file,
+                            line_number=line_no,
+                            severity="ERROR",
+                            rule="UNESCAPED_PSEUDO_HTML_TAG",
+                            message=(
+                                f"Mermaidブロック内に非標準の山括弧タグ '{full_tag}' が含まれています。"
+                                "ブラウザ/QuartzのinnerHTML処理で未閉じHTMLタグと誤認され、末尾に閉じタグが自動挿入されて "
+                                "Mermaid構文エラー (got 'TAGSTART') を引き起こすため、山括弧 '<' '>' を除去してください。"
+                            ),
+                            snippet=stripped[:80],
+                        )
+                    )
+
         return issues
 
     @staticmethod
@@ -352,7 +385,13 @@ class MermaidValidator:
 
             def replace_node(m: re.Match) -> str:
                 nonlocal fixed_count
-                node_id, label, cls_name = m.group(1), m.group(2), m.group(3)
+                node_id, open_delim, label, close_delim, cls_name = (
+                    m.group(1),
+                    m.group(2),
+                    m.group(3),
+                    m.group(4),
+                    m.group(5),
+                )
                 is_dark = (cls_name in dark_classes) or (node_id in dark_nodes)
                 if not is_dark:
                     bg_m = re.search(r"background(?:-color)?:\s*(#[0-9a-fA-F]{3,6}|[a-zA-Z]+)", label)
@@ -361,12 +400,12 @@ class MermaidValidator:
                 if is_dark and not has_explicit_white:
                     fixed_count += 1
                     suffix = f":::{cls_name}" if cls_name else ""
-                    return f'{node_id}["<div style=\'color:#ffffff;\'>{label}</div>"]{suffix}'
+                    return f"{node_id}{open_delim}<div style='color:#ffffff;'>{label}</div>{close_delim}{suffix}"
                 return m.group(0)
 
             for k in range(i + 1, j):
                 lines[k] = re.sub(
-                    r'([a-zA-Z0-9_\-]+)\s*\["([^"]+)"\](?::::([a-zA-Z0-9_\-]+))?',
+                    r'([a-zA-Z0-9_\-]+)\s*(\["|\[\("|\(\["|\(\("|\{"|\{\{")([^"]+)("\]|"\)\]|"\]\)|"\)\)|"\}|"\}\})(?::::([a-zA-Z0-9_\-]+))?',
                     replace_node,
                     lines[k],
                 )
