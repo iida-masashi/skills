@@ -1,0 +1,47 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  azureSubscription: 'sc-azure-<app-short>'
+  resourceGroup: 'rg-<app-name>'
+  acrName: 'acr<appnameshort>'
+  acrLoginServer: 'acr<appnameshort>.azurecr.io'
+  containerAppName: '<app-name>'
+  imageRepository: '<app-name>'
+  imageTag: '$(Build.BuildId)'
+
+steps:
+  - checkout: self
+
+  - task: AzureCLI@2
+    displayName: 'Build, Push Docker Image to ACR & Deploy to Azure Container Apps'
+    inputs:
+      azureSubscription: '$(azureSubscription)'
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        set -euo pipefail
+
+        echo "=== 1. Logging in to Azure Container Registry ($(acrName)) ==="
+        az acr login --name "$(acrName)"
+
+        IMAGE_VERSIONED="$(acrLoginServer)/$(imageRepository):$(imageTag)"
+        IMAGE_LATEST="$(acrLoginServer)/$(imageRepository):latest"
+
+        echo "=== 2. Building Docker image: $IMAGE_VERSIONED ==="
+        docker build -t "$IMAGE_VERSIONED" -t "$IMAGE_LATEST" .
+
+        echo "=== 3. Pushing Docker image to ACR ==="
+        docker push "$IMAGE_VERSIONED"
+        docker push "$IMAGE_LATEST"
+
+        echo "=== 4. Deploying image to Azure Container App ($(containerAppName)) ==="
+        az containerapp update \
+          --name "$(containerAppName)" \
+          --resource-group "$(resourceGroup)" \
+          --image "$IMAGE_VERSIONED"

@@ -1,0 +1,30 @@
+{
+  "data": {
+    "subscriptionId": "4496ce24-6036-4f21-b6ae-f5cff32f10d5",
+    "subscriptionName": "CP-Knowledge",
+    "environment": "AzureCloud",
+    "scopeLevel": "Subscription",
+    "creationMode": "Manual"
+  },
+  "name": "sc-azure-<app-short>",
+  "type": "azurerm",
+  "url": "https://management.azure.com/",
+  "authorization": {
+    "parameters": {
+      "tenantid": "286fdaa8-4b1d-40d1-9a66-15e89c06cef2",
+      "serviceprincipalid": "<MANAGED_IDENTITY_CLIENT_ID>"
+    },
+    "scheme": "WorkloadIdentityFederation"
+  },
+  "isShared": false,
+  "isReady": true,
+  "serviceEndpointProjectReferences": [
+    {
+      "projectReference": {
+        "id": "<AZDO_PROJECT_ID>",
+        "name": "<AZDO_PROJECT_NAME>"
+      },
+      "name": "sc-azure-<app-short>"
+    }
+  ]
+}

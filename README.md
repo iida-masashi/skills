@@ -40,6 +40,7 @@ Claude Code と Gemini CLI の両方から共有して使う、自作エージ�
 | [`context-compression-skill`](./context-compression-skill/) | ビルド・テスト・巨大ファイル・表データ・広域検索・Web調査など大量出力をコンテキストに入れる前に圧縮したいとき（中核ルールはグローバル CLAUDE.md / GEMINI.md に常駐、本スキルは詳細版。Claude Code では `hook-guard.ps1` の PreToolUse ガードと連携） | なし |
 | [`web-search`](./web-search/) | Web検索・URL取得を行いたいとき（標準でGemini API優先、失敗時はClaudeネイティブのWebSearch/WebFetchにフォールバック） | `<gemini-scripts-dir>`に`gemini_websearch.py`/`gemini_webfetch.py`と`.env`、`convMD` uvプロジェクトが別途必要 |
 | [`gcp-docker-deploy`](./gcp-docker-deploy/) | Dockerizedアプリ（Streamlit/FastAPI/Node.js等）をGitHub Actions経由でGoogle Cloud（Cloud RunまたはVM）にデプロイしたいとき、Cloud Run/VMの選定に迷うとき、WIF/サービスアカウント鍵のどちらで認証するか決めたいとき | `gcloud`/`gh` CLI、Artifact Registry、Workload Identity Federation設定（またはサービスアカウントJSON鍵）。手順のみでスクリプトは持たない |
+| [`azure-docker-deploy`](./azure-docker-deploy/) | リポジトリをAzure DevOps Reposに登録し、Azure Container Registry (ACR) でDockerイメージをビルドしてAzure Container Apps (ACA) に自動デプロイするCI/CD（Azure Pipelines + ユーザー割り当てマネージドIDによるWorkload Identity Federation）を構築したいとき | `az` CLI（`azure-devops`拡張）、WAM有効化（`enable_broker_on_windows=true`）、Azureサブスクリプション（`CP-Knowledge`等）。手順とYAML/JSONテンプレート一式 |
 
 ## 自動デプロイ（GitHub Actions）
 
