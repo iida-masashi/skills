@@ -926,8 +926,16 @@ def main() -> None:
     )
     ap.add_argument(
         "--verify-quotes",
+        dest="verify_quotes",
         action="store_true",
-        help="生存URLのHTML本文を取得し、3列目の原文引用がページ内に実在するか正規化部分一致で検証する",
+        default=True,
+        help="（既定で有効）生存URLのHTML本文を取得し、3列目の原文引用がページ内に実在するか正規化部分一致で検証する",
+    )
+    ap.add_argument(
+        "--no-verify-quotes",
+        dest="verify_quotes",
+        action="store_false",
+        help="原文引用の実在検証を無効にする（URL取得が増えるのを避けたいとき）",
     )
     ap.add_argument(
         "--subject",
