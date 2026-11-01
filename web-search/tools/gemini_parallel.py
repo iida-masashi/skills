@@ -69,13 +69,21 @@ def run_one(idx: int, query: str, out_dir: Path, args: argparse.Namespace) -> di
         )
         text, ec = p.stdout.decode("utf-8", "replace").strip(), p.returncode
         err_path.write_bytes(p.stderr)
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as exc:
         text, ec = "", "timeout"
+        err_bytes = exc.stderr if isinstance(exc.stderr, bytes) else (exc.stderr or "").encode("utf-8", "replace")
+        err_path.write_bytes(err_bytes or f"TimeoutExpired after {args.timeout}s\n".encode())
     # 長いgrounding転送URLを実URLへ置換（Claude側の流入量削減＋出典として記録可能にする）
     redirects = set(REDIRECT_RE.findall(text))
     if redirects:
+        resolved: dict[str, str | None] = {}
         with ThreadPoolExecutor(max_workers=min(8, len(redirects))) as ex:
-            resolved = dict(zip(redirects, ex.map(resolve_redirect, redirects)))
+            future_to_url = {ex.submit(resolve_redirect, u): u for u in redirects}
+            for fut, u in future_to_url.items():
+                try:
+                    resolved[u] = fut.result()
+                except (OSError, RuntimeError, ValueError):
+                    resolved[u] = None
         for u, real in resolved.items():
             text = text.replace(u, real or "(出典URL解決失敗)")
     out_path.write_text(f"# {query}\n\n{text}\n", encoding="utf-8")

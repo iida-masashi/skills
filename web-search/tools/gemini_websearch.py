@@ -28,14 +28,16 @@ from pydantic import BaseModel, ValidationError
 
 sys.path.insert(0, str(Path(__file__).parent))
 from gemini_webfetch import (
-    ENV_PATH,
-    _is_empty_quote,
+    DEFAULT_MODEL,
+    THINKING_LEVEL_CHOICES,
     _truncate,
+    apply_claim_safety_downgrades,
     configure_utf8_stdio,
+    extract_response_text,
     fetch_raw,
     generate_with_retry,
-    load_env,
     make_client,
+    normalize_thinking_level,
     resolve_redirect,
 )
 
@@ -178,7 +180,7 @@ def audit_grounding(
             ref_sources.append({"index": src_idx + 1, "title": sources[src_idx]["title"], "url": sources[src_idx]["url"]})
         segments.append({
             "text": _clean_for_match(seg.text),
-            "has_grounding": bool(indices),
+            "has_grounding": bool(ref_sources),
             "sources": ref_sources,
         })
 
@@ -208,7 +210,7 @@ def audit_grounding(
 
 def search_raw(
     query: str,
-    model: str = "gemini-3.8-flash",
+    model: str = DEFAULT_MODEL,
     no_resolve: bool = False,
     client: genai.Client | None = None,
     no_audit: bool = False,
@@ -217,13 +219,14 @@ def search_raw(
     """検索を実行し、回答本文・出典リスト・検索クエリ・裏付け監査を辞書で返す。"""
     client = client or make_client()
 
-    config_kwargs = {
+    config_kwargs: dict = {
         "tools": [types.Tool(google_search=types.GoogleSearch())],
         "system_instruction": get_system_instruction(),
     }
-    if thinking_level is not None:
+    normalized_level = normalize_thinking_level(thinking_level, model)
+    if normalized_level is not None:
         config_kwargs["thinking_config"] = types.ThinkingConfig(
-            thinking_level=types.ThinkingLevel[thinking_level.upper()]
+            thinking_level=normalized_level
         )
 
     response = generate_with_retry(
@@ -232,6 +235,7 @@ def search_raw(
         contents=query,
         config=types.GenerateContentConfig(**config_kwargs),
     )
+    resp_text = extract_response_text(response)
 
     sources = []
     # chunk_index_to_source: grounding_chunk_indicesが指す元のchunkインデックス→sources内インデックスの対応。
@@ -278,12 +282,12 @@ def search_raw(
     if grounding:
         raw_supports = getattr(grounding, "grounding_supports", []) or []
     if not no_audit and grounding:
-        audit_result = audit_grounding(response.text or "", raw_supports, sources, chunk_index_to_source)
+        audit_result = audit_grounding(resp_text, raw_supports, sources, chunk_index_to_source)
 
     grounded = bool(sources) and bool(search_queries)
 
     return {
-        "text": response.text or "",
+        "text": resp_text,
         "sources": sources,
         "search_queries": search_queries,
         "supports_audit": audit_result,
@@ -355,7 +359,7 @@ def verify_claim(
     sources: list,
     chunk_index_to_source: dict[int, int],
     client: genai.Client,
-    model: str = "gemini-3.8-flash",
+    model: str = DEFAULT_MODEL,
     thinking_level: str | None = None,
 ) -> dict:
     """grounding_supportsのセグメント単位でclaimを作り、URLごとに1回だけ問い合わせて集約する。
@@ -427,17 +431,11 @@ def verify_claim(
                     "detail": "モデル応答から該当idが欠落したため判定不能",
                 })
 
-        if not result["fetch_ok"]:
-            reason = result.get("fetch_ng_reason") or "取得ステータスがSUCCESSでない"
-            for item in items:
-                if item.get("verdict") != "不明":
-                    item["detail"] = f"[自動格下げ: {reason}] " + item.get("detail", "")
-                    item["verdict"] = "不明"
-        for item in items:
-            if item.get("verdict") == "裏付けあり" and _is_empty_quote(item.get("quote")):
-                item["quote"] = ""
-                item["detail"] = "[自動格下げ: quoteが空] " + item.get("detail", "")
-                item["verdict"] = "不明"
+        apply_claim_safety_downgrades(
+            items,
+            fetch_ok=result["fetch_ok"],
+            fetch_failure_reason=result.get("fetch_ng_reason") or "取得ステータスがSUCCESSでない",
+        )
 
         return {"url": url, "title": url_titles.get(url, url), "items": items, "fetch_ok": result["fetch_ok"]}
 
@@ -469,7 +467,7 @@ def verify_claim(
 
 def search(
     query: str,
-    model: str = "gemini-3.8-flash",
+    model: str = DEFAULT_MODEL,
     no_resolve: bool = False,
     as_json: bool = False,
     do_verify: bool = False,
@@ -479,7 +477,6 @@ def search(
     no_sources: bool = False,
     thinking_level: str | None = None,
 ) -> None:
-    load_env(ENV_PATH)
     client = make_client()
 
     if do_refute:
@@ -584,8 +581,8 @@ def main() -> None:
     parser.add_argument("--no-resolve", action="store_true", help="出典URLのリダイレクト解決を無効化する")
     parser.add_argument("--json", action="store_true", help="結果をJSONで出力する")
     parser.add_argument(
-        "--model", default="gemini-3.8-flash",
-        help="使用するGeminiモデル（既定: gemini-3.8-flash。例: gemini-3.1-pro-preview）",
+        "--model", default=DEFAULT_MODEL,
+        help=f"使用するGeminiモデル（既定: {DEFAULT_MODEL}。例: gemini-4-argon, gemini-3.5-flash-lite）",
     )
     parser.add_argument(
         "--verify-claim", action="store_true",
@@ -609,8 +606,8 @@ def main() -> None:
              "--verify-claim併用時の出典URL内訳には影響しない）",
     )
     parser.add_argument(
-        "--thinking-level", choices=["minimal", "low", "medium", "high"], default=None,
-        help="思考プロセス（Thinking）の深さを指定する（既定: モデルごとのデフォルト。gemini-3.8-flashはMEDIUM）。"
+        "--thinking-level", choices=list(THINKING_LEVEL_CHOICES), default=None,
+        help=f"思考プロセス（Thinking）の深さを指定する（既定: モデルごとのデフォルト。{DEFAULT_MODEL}はMEDIUM）。"
              "複雑な論理・数理の突合精度を高めたい場合はhigh推奨",
     )
     args = parser.parse_args()

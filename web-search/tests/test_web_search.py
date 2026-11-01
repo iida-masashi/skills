@@ -229,3 +229,99 @@ class TestGeminiParallel:
         p_idx = captured_cmd.index("-p")
         assert captured_cmd[p_idx + 1].isascii()
         assert "日本語の調査クエリ" in captured_input.decode("utf-8")
+
+    def test_run_one_timeout_writes_stderr_log(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        import subprocess
+
+        monkeypatch.setattr(gemini_parallel.shutil, "which", lambda _: "gemini")
+
+        def fake_run(cmd, *, input, capture_output, timeout, cwd, check=False):
+            raise subprocess.TimeoutExpired(cmd=cmd, timeout=timeout, stderr=b"partial stderr output")
+
+        monkeypatch.setattr(gemini_parallel.subprocess, "run", fake_run)
+        args = argparse.Namespace(max_lines=10, model="gemini-3.8-flash", timeout=5)
+        res = gemini_parallel.run_one(2, "タイムアウト調査", tmp_path, args)
+
+        assert res["ec"] == "timeout"
+        err_log = (tmp_path / "q02.stderr.log").read_text(encoding="utf-8")
+        assert "partial stderr output" in err_log
+
+
+class TestClientAndThinkingConfig:
+    def test_normalize_thinking_level_minimal_fallback(self, capsys: pytest.CaptureFixture[str]) -> None:
+        from google.genai import types
+
+        lvl_flash = gemini_webfetch.normalize_thinking_level("minimal", "gemini-3.8-flash")
+        assert lvl_flash == types.ThinkingLevel.LOW
+        assert "フォールバック" in capsys.readouterr().err
+
+        lvl_argon = gemini_webfetch.normalize_thinking_level("minimal", "gemini-4-argon")
+        assert lvl_argon == types.ThinkingLevel.LOW
+        assert "フォールバック" in capsys.readouterr().err
+
+        lvl_lite = gemini_webfetch.normalize_thinking_level("minimal", "gemini-3.5-flash-lite")
+        assert lvl_lite == types.ThinkingLevel.MINIMAL
+        assert capsys.readouterr().err == ""
+
+    def test_make_client_prioritizes_vertex_and_defaults_to_global(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(gemini_webfetch, "load_env", lambda _: None)
+        monkeypatch.setenv("GEMINI_API_KEY", "dummy-api-key")
+        monkeypatch.setenv("GOOGLE_GENAI_USE_ENTERPRISE", "true")
+        monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "my-gcp-project")
+        monkeypatch.delenv("GOOGLE_CLOUD_LOCATION", raising=False)
+        monkeypatch.delenv("GOOGLE_GENAI_USE_VERTEXAI", raising=False)
+
+        captured_kwargs: dict = {}
+
+        def fake_client(**kwargs):
+            captured_kwargs.update(kwargs)
+            return MagicMock()
+
+        monkeypatch.setattr(gemini_webfetch.genai, "Client", fake_client)
+        gemini_webfetch.make_client()
+
+        assert captured_kwargs["vertexai"] is True
+        assert captured_kwargs["project"] == "my-gcp-project"
+        assert captured_kwargs["location"] == "global"
+
+    def test_extract_response_text_handles_value_error(self) -> None:
+        class BlockedResponse:
+            @property
+            def text(self) -> str:
+                raise ValueError("Candidate was blocked by safety settings")
+
+        assert gemini_webfetch.extract_response_text(BlockedResponse()) == ""
+
+    def test_fetch_as_json_output(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+        import json
+
+        monkeypatch.setattr(
+            gemini_webfetch,
+            "fetch_raw",
+            lambda *args, **kwargs: {
+                "text": "要約テキスト本文",
+                "statuses": [{"status": "URL_RETRIEVAL_STATUS_SUCCESS", "retrieved_url": "https://example.com/a"}],
+                "fetch_ok": True,
+                "fetch_ng_reason": None,
+                "requested_url": "https://example.com/a",
+            },
+        )
+        gemini_webfetch.fetch("https://example.com/a", as_json=True)
+        out = json.loads(capsys.readouterr().out)
+        assert out["url"] == "https://example.com/a"
+        assert out["text"] == "要約テキスト本文"
+        assert out["fetch_ok"] is True
+
+    def test_audit_grounding_non_web_chunk_not_marked_grounded(self) -> None:
+        text = "A社の2025年度売上高は1,200億円に達した。"
+        supports = [
+            SimpleNamespace(
+                segment=SimpleNamespace(text="A社の2025年度売上高は1,200億円に達した"),
+                grounding_chunk_indices=[0],
+            )
+        ]
+        # chunk_index_to_source is empty because chunk 0 was not a valid web chunk
+        audit = gemini_websearch.audit_grounding(text, supports, [], {})
+        assert audit["verified_segments"][0]["has_grounding"] is False
+        assert audit["is_fully_grounded"] is False
+        assert audit["ungrounded_snippets"] == ["A社の2025年度売上高は1,200億円に達した"]

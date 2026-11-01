@@ -20,8 +20,8 @@ Web検索・URL取得を行うスキル。**標準ではGemini APIを使い、�
 以下がこのスキルの**既定の動作**です。ハルシネーション（数値捏造・推測補完・時制混同）を減らす方向のガードが既定で適用されますが、**これらはモデルへの指示とコード側の後付き突合であり、独立した事実検証ではありません**。特に「文単位の裏付け監査」は出典への帰属をモデル自身が申告したメタデータの突合に過ぎない点に注意してください。
 
 * **厳格グラウンディング規律**: システムプロンプトで「検索結果／取得ページにない数値・推測補完の厳禁」「記載がない場合は記載なしと回答」を指示。`gemini_websearch.py`（Google検索）・`gemini_webfetch.py`（URL取得）の両方に適用。
-* **temperatureは既定値のまま**: Gemini 3系は公式に「temperatureを既定値1.0から下げるとループ・推論劣化の恐れがある」と明記されており、このスキルも両スクリプトともtemperatureを指定しない（モデル既定に従う）。ハルシネーション抑制はグラウンディング規律・裏付け監査側で担う。
-* **現在基準日（Anchor Date）注入**: 実行日の日付（例: `2026-09-10`）を注入し、「今期」「最新」等の時制の取り違えを防止（`gemini_websearch.py`のみ）。
+* **temperature等のサンプリングパラメータは非指定**: Gemini 3.8 / 4 Argon 系では公式にサンプリングパラメータ（`temperature` / `top_p` / `top_k`）が非推奨（Deprecated・無視）となっており、このスキルも両スクリプトとも指定しない。推論の深さは `--thinking-level`、ハルシネーション抑制はグラウンディング規律・裏付け監査側で担う。
+* **現在基準日（Anchor Date）注入**: 実行日の日付（例: `2026-11-01`）を注入し、「今期」「最新」等の時制の取り違えを防止（`gemini_websearch.py`のみ）。
 * **発行検索クエリの可視化**: Geminiが内部で実際にGoogle検索に投げたクエリ（`web_search_queries`）を表示。**検索クエリが0件・出典が0件の場合は「検索未実行／回答は事前学習知識のみの可能性」の警告を本文の前に表示する**（`gemini_websearch.py`）。
 * **文単位の裏付け監査（既定で有効）**: レスポンスの `grounding_supports` を文単位（`。！？`区切り）で突合し、出典への帰属が申告されていない文（モデル自身の推測の疑いがある箇所）を検知して警告。数字を含む文は長さに関わらず必ず監査対象にする。`grounding_supports`自体が空の場合は「監査不能」と表示する（「OK」とは表示しない）。
 * **取得失敗の明示**: `gemini_webfetch.py`は`URL_RETRIEVAL_STATUS_SUCCESS`以外の場合、要約本文より前に取得ステータスと警告を表示する。
@@ -29,7 +29,7 @@ Web検索・URL取得を行うスキル。**標準ではGemini APIを使い、�
 
 このスキルディレクトリ自体が独立したuvプロジェクト（依存は`google-genai`および`pydantic`）。初回のみ `uv sync --directory "C:/Users/iidam/claude-gemini-skills/web-search"` で依存解決する。
 
-両スクリプトはAPIキー/Vertex AI設定を既定で `C:\Users\iidam\gemini\.env` から自動読み込みする（環境変数`GEMINI_SKILL_ENV_PATH`でパスを上書き可能）。
+両スクリプトはAPIキー/Vertex AI設定を既定で `C:\Users\iidam\gemini\.env` から自動読み込みする（環境変数`GEMINI_SKILL_ENV_PATH`でパスを上書き可能。`GOOGLE_GENAI_USE_VERTEXAI=true` または `GOOGLE_GENAI_USE_ENTERPRISE=true` が設定されている場合は Vertex AI / Agent Platform の `location="global"` を優先使用する）。
 
 ### Web検索（検索クエリを投げて要約・出典・裏付け監査を得る）
 
@@ -41,7 +41,8 @@ uv run --directory "C:/Users/iidam/claude-gemini-skills/web-search" python tools
 
 - `--json`: 回答、出典、発行クエリ、裏付け監査結果をJSON形式で出力する。後続処理（Agent側での自動反復）に使う場合はこちら。
 - `--no-audit`: 文単位の裏付け監査表示を省略する（出力をシンプルにしたい場合や極限まで軽量化したい場合）。
-- `--thinking-level {minimal,low,medium,high}`: 思考プロセス（Thinking）の深さを指定する（既定はモデル既定値。`gemini-3.8-flash`は既定でMEDIUM）。複雑な論理・数値突合の精度を上げたい場合は`high`を指定する。legacyな`thinking_budget`パラメータとは同時指定不可のため、このスキルは`thinking_level`のみを使う。
+- `--model MODEL`: 使用するGeminiモデルを指定する（既定は `gemini-3.8-flash`。最上位フラッグシップの `gemini-4-argon` や軽量な `gemini-3.5-flash-lite` 等に切り替え可能）。
+- `--thinking-level {minimal,low,medium,high}`: 思考プロセス（Thinking）の深さを指定する（既定はモデル既定値。`gemini-3.8-flash` / `gemini-4-argon` は既定でMEDIUM）。複雑な論理・数値突合の精度を上げたい場合は`high`を指定する。なお、`minimal` は `gemini-3.5-flash-lite` 向けであり、`gemini-3.8-flash` や `gemini-4-argon` で指定した場合は自動的に `low` へフォールバックする。
 - `--no-resolve`: 出典URLのリダイレクト解決（実URLへの逆引き）自体を省略し、さらに軽量化する。
 - `--no-sources`: 出典URL一覧（`--- 出典 ---`ブロック）の表示を省略し、件数だけ表示する。一次資料として記録する予定がない一般検索（「◯◯とは」程度の確認）で有効。`--verify-claim`併用時の出典URL内訳表示には影響しない（そちらは検証目的でURLが必要なため）。
 - `--max-chars N`: 回答本文をN文字で打ち切って出力する。このスクリプトの標準出力はBash/PowerShellツール経由でそのままClaude側のコンテキストに読み込まれるため、結論だけ分かればよい場面ではこれで流入量を絞れる（出典一覧・判定結果には影響しない）。
@@ -54,6 +55,7 @@ uv run --directory "C:/Users/iidam/claude-gemini-skills/web-search" python tools
 
 出力: `--- 取得ステータス ---`（`URL_RETRIEVAL_STATUS_SUCCESS`または`FAILED`等と実際に取得できたURL。取得情報が無い場合もその旨を表示）+ SUCCESS以外の場合は`[WARNING]`取得失敗警告 + Geminiによる回答本文。なお、GoogleのリダイレクトURL（`vertexaisearch...`）が渡された場合も自動で実URLへ逆引き解決してから取得します。
 
+- `--json`: 取得結果を `{url, text, statuses, fetch_ok, fetch_ng_reason}` のJSON形式で出力する。
 - `--max-chars N`: 同上（`--check`使用時は元々短い判定結果しか返らないため影響しない）。
 
 **追加の指示は「要約して」ではなく欲しい情報だけを狙って書く。** Gemini側の回答自体が短くなり、標準出力＝Claude側のコンテキスト消費が減る。例:

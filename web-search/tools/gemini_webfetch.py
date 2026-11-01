@@ -38,10 +38,19 @@ from google.genai import types
 from pydantic import BaseModel, ValidationError
 
 ENV_PATH: Final[Path] = Path(os.environ.get("GEMINI_SKILL_ENV_PATH", r"C:\Users\iidam\gemini\.env"))
+DEFAULT_MODEL: Final[str] = "gemini-3.8-flash"
+THINKING_LEVEL_CHOICES: Final[tuple[str, ...]] = ("minimal", "low", "medium", "high")
 FETCH_FAILURE_TOKEN: Final[str] = "RETRIEVAL_FAILED"
 DEFAULT_INSTRUCTION: Final[str] = (
     "このページの内容を要約して。ページにない情報は補わず、"
     f"取得できなかった場合は本文全体を「{FETCH_FAILURE_TOKEN}」とだけ出力して。"
+)
+
+_MINIMAL_UNSUPPORTED_PREFIXES: Final[tuple[str, ...]] = (
+    "gemini-3.8",
+    "gemini-4",
+    "gemini-3.1-pro",
+    "gemini-3-pro",
 )
 
 _SECOND_LEVEL_TLDS: Final[frozenset[str]] = frozenset({
@@ -198,19 +207,80 @@ def load_env(path: Path) -> None:
 def make_client() -> genai.Client:
     load_env(ENV_PATH)
 
+    use_vertex = (
+        os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "").lower() == "true"
+        or os.environ.get("GOOGLE_GENAI_USE_ENTERPRISE", "").lower() == "true"
+    )
     api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-    use_vertex = os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "").lower() == "true"
 
-    if api_key:
-        return genai.Client(api_key=api_key, vertexai=False)
     if use_vertex:
         return genai.Client(
             vertexai=True,
             project=os.environ.get("GOOGLE_CLOUD_PROJECT"),
-            location=os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1"),
+            location=os.environ.get("GOOGLE_CLOUD_LOCATION", "global"),
         )
-    print("ERROR: GEMINI_API_KEY / GOOGLE_API_KEY か Vertex AI設定が見つかりません。", file=sys.stderr)
+    if api_key:
+        return genai.Client(api_key=api_key, vertexai=False)
+    print(
+        "ERROR: GEMINI_API_KEY / GOOGLE_API_KEY か Vertex AI設定 "
+        "(GOOGLE_GENAI_USE_VERTEXAI=true / GOOGLE_GENAI_USE_ENTERPRISE=true) が見つかりません。",
+        file=sys.stderr,
+    )
     sys.exit(1)
+
+
+def normalize_thinking_level(thinking_level: str | None, model: str) -> types.ThinkingLevel | None:
+    """モデルに応じたThinkingLevelを返す。minimal非対応モデルの場合は警告を出してLOWへフォールバックする。"""
+    if thinking_level is None:
+        return None
+    level_upper = thinking_level.upper()
+    model_lower = model.lower()
+    if (
+        level_upper == "MINIMAL"
+        and "flash-lite" not in model_lower
+        and model_lower.startswith(_MINIMAL_UNSUPPORTED_PREFIXES)
+    ):
+        print(
+            f"[WARNING] モデル '{model}' は thinking_level='minimal' に非対応のため 'low' にフォールバックします。",
+            file=sys.stderr,
+        )
+        level_upper = "LOW"
+    return types.ThinkingLevel[level_upper]
+
+
+def extract_response_text(response: object) -> str:
+    """Geminiレスポンスから安全に本文テキストを取得する（ブロック時や非テキストパートのみの場合の例外を防ぐ）。"""
+    try:
+        text = getattr(response, "text", None)
+        return text if isinstance(text, str) else ""
+    except (ValueError, AttributeError):
+        return ""
+
+
+def apply_claim_safety_downgrades(
+    items: list[dict],
+    *,
+    fetch_ok: bool,
+    fetch_failure_reason: str,
+) -> None:
+    """URL取得失敗時および原文引用(quote)欠落時に、判定(verdict)を機械的に『不明』へ格下げする。"""
+    if not fetch_ok:
+        for item in items:
+            if item.get("verdict") != "不明":
+                item["detail"] = (
+                    f"[自動格下げ: {fetch_failure_reason}（モデルの判定「{item.get('verdict')}」は採用せず不明扱いとした）] "
+                    + item.get("detail", "")
+                )
+                item["verdict"] = "不明"
+
+    for item in items:
+        if item.get("verdict") == "裏付けあり" and _is_empty_quote(item.get("quote")):
+            item["quote"] = ""
+            item["detail"] = (
+                "[自動格下げ: 「裏付けあり」だが原文引用(quote)が空のため不明扱いとした] "
+                + item.get("detail", "")
+            )
+            item["verdict"] = "不明"
 
 
 def _is_retryable_error(exc: Exception) -> bool:
@@ -315,7 +385,7 @@ def _is_fetch_ok(statuses: Sequence[dict], requested_url: str | None = None) -> 
 def fetch_raw(
     url: str,
     instruction: str = DEFAULT_INSTRUCTION,
-    model: str = "gemini-3.8-flash",
+    model: str = DEFAULT_MODEL,
     client: genai.Client | None = None,
     thinking_level: str | None = None,
     response_schema: dict | None = None,
@@ -328,13 +398,14 @@ def fetch_raw(
 
     client = client or make_client()
 
-    config_kwargs = {
+    config_kwargs: dict = {
         "tools": [types.Tool(url_context=types.UrlContext())],
         "system_instruction": get_system_instruction(),
     }
-    if thinking_level is not None:
+    normalized_level = normalize_thinking_level(thinking_level, model)
+    if normalized_level is not None:
         config_kwargs["thinking_config"] = types.ThinkingConfig(
-            thinking_level=types.ThinkingLevel[thinking_level.upper()]
+            thinking_level=normalized_level
         )
     if response_schema is not None:
         config_kwargs["response_mime_type"] = "application/json"
@@ -359,7 +430,7 @@ def fetch_raw(
     fetch_ok, ng_reason = _is_fetch_ok(statuses, requested_url=url)
 
     return {
-        "text": response.text or "",
+        "text": extract_response_text(response),
         "statuses": statuses,
         "fetch_ok": fetch_ok,
         "fetch_ng_reason": ng_reason,
@@ -370,7 +441,7 @@ def fetch_raw(
 def check_claim_raw(
     url: str,
     claim: str,
-    model: str = "gemini-3.8-flash",
+    model: str = DEFAULT_MODEL,
     client: genai.Client | None = None,
     thinking_level: str | None = None,
 ) -> dict:
@@ -385,32 +456,18 @@ def check_claim_raw(
         # スキーマ通りのJSON化に失敗した場合はraw textを1項目として扱う（完全なフォールバック）
         items = [{"claim": claim, "verdict": "不明", "quote": "", "detail": result["text"][:300]}]
 
-    # モデルの自己申告（プロンプトの指示）だけに頼らず、コード側でも取得ステータスを
-    # 強制チェックする。SUCCESS以外なのに「裏付けあり/なし」と断定してくる場合が
-    # 実際に観測されているため（Geminiが検索インデックスのキャッシュ等から
-    # それらしい判定を埋めてしまう one-off のハルシネーション）、
-    # ここで機械的に「不明」へ格下げし、理由を明記する。
     statuses = result["statuses"]
-    if not result["fetch_ok"]:
-        if result.get("fetch_ng_reason"):
-            status_names = result["fetch_ng_reason"]
-        else:
-            status_names = ", ".join(s["status"] for s in statuses) if statuses else "ステータス不明（取得情報なし）"
-        for item in items:
-            if item.get("verdict") != "不明":
-                item["detail"] = (
-                    f"[自動格下げ: URL取得ステータスが{status_names}のため、"
-                    f"モデルの判定「{item.get('verdict')}」は採用せず不明扱いとした] " + item.get("detail", "")
-                )
-                item["verdict"] = "不明"
+    if result.get("fetch_ng_reason"):
+        failure_reason = f"URL取得ステータスが{result['fetch_ng_reason']}のため"
+    else:
+        status_names = ", ".join(s["status"] for s in statuses) if statuses else "ステータス不明（取得情報なし）"
+        failure_reason = f"URL取得ステータスが{status_names}のため"
 
-    # 「裏付けあり」なのにquote（原文引用）が空・プレースホルダの場合は、根拠のない断定の疑いがあるため格下げする。
-    # ページに実際にその引用が存在するかまでは検証していないが、最低限の裏取りの痕跡を要求する。
-    for item in items:
-        if item.get("verdict") == "裏付けあり" and _is_empty_quote(item.get("quote")):
-            item["quote"] = ""
-            item["detail"] = "[自動格下げ: 「裏付けあり」だが原文引用(quote)が空のため不明扱いとした] " + item.get("detail", "")
-            item["verdict"] = "不明"
+    apply_claim_safety_downgrades(
+        items,
+        fetch_ok=result["fetch_ok"],
+        fetch_failure_reason=failure_reason,
+    )
 
     return {"url": result.get("requested_url", url), "items": items, "statuses": statuses, "fetch_ok": result["fetch_ok"]}
 
@@ -424,11 +481,25 @@ def _truncate(text: str, max_chars: int | None) -> str:
 def fetch(
     url: str,
     instruction: str = DEFAULT_INSTRUCTION,
-    model: str = "gemini-3.8-flash",
+    model: str = DEFAULT_MODEL,
     max_chars: int | None = None,
     thinking_level: str | None = None,
+    as_json: bool = False,
 ) -> None:
     result = fetch_raw(url, instruction, model, thinking_level=thinking_level)
+    text = result["text"]
+    suspect_failure = not result["fetch_ok"] or FETCH_FAILURE_TOKEN in text or not text.strip()
+
+    if as_json:
+        payload = {
+            "url": result.get("requested_url", url),
+            "text": _truncate(text, max_chars),
+            "statuses": result["statuses"],
+            "fetch_ok": result["fetch_ok"] and not suspect_failure,
+            "fetch_ng_reason": result.get("fetch_ng_reason"),
+        }
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
 
     if result["statuses"]:
         print("--- 取得ステータス ---")
@@ -438,15 +509,20 @@ def fetch(
     else:
         print("--- 取得ステータス ---\n(取得情報なし：url_context_metadataが返されていません)\n")
 
-    text = result["text"]
-    if not result["fetch_ok"] or FETCH_FAILURE_TOKEN in text or not text.strip():
+    if suspect_failure:
         reason = f"（{result['fetch_ng_reason']}）" if result.get("fetch_ng_reason") else ""
         print(f"[WARNING] 【取得失敗の疑い{reason}：以下の内容は正常に取得できたページの要約ではない可能性があります】\n")
 
     print(_truncate(text, max_chars))
 
 
-def check(url: str, claim: str, model: str = "gemini-3.8-flash", as_json: bool = False, thinking_level: str | None = None) -> None:
+def check(
+    url: str,
+    claim: str,
+    model: str = DEFAULT_MODEL,
+    as_json: bool = False,
+    thinking_level: str | None = None,
+) -> None:
     result = check_claim_raw(url, claim, model=model, thinking_level=thinking_level)
 
     if as_json:
@@ -484,15 +560,15 @@ def main() -> None:
     )
     parser.add_argument("--json", action="store_true", help="結果をJSONで出力する")
     parser.add_argument(
-        "--model", default="gemini-3.8-flash",
-        help="使用するGeminiモデル（既定: gemini-3.8-flash。例: gemini-3.1-pro-preview）",
+        "--model", default=DEFAULT_MODEL,
+        help=f"使用するGeminiモデル（既定: {DEFAULT_MODEL}。例: gemini-4-argon, gemini-3.5-flash-lite）",
     )
     parser.add_argument(
         "--max-chars", type=int, default=None,
         help="回答本文をこの文字数で打ち切る（呼び出し元＝Claude側のコンテキスト消費を抑えたい時に指定。--checkには影響しない）",
     )
     parser.add_argument(
-        "--thinking-level", choices=["minimal", "low", "medium", "high"], default=None,
+        "--thinking-level", choices=list(THINKING_LEVEL_CHOICES), default=None,
         help="思考プロセス（Thinking）の深さを指定する（既定: モデルごとのデフォルト）。--checkで判定精度を上げたい場合はhigh推奨",
     )
     args = parser.parse_args()
@@ -510,7 +586,14 @@ def main() -> None:
             )
         else:
             instruction = DEFAULT_INSTRUCTION
-        fetch(args.url, instruction, model=args.model, max_chars=args.max_chars, thinking_level=args.thinking_level)
+        fetch(
+            args.url,
+            instruction,
+            model=args.model,
+            max_chars=args.max_chars,
+            thinking_level=args.thinking_level,
+            as_json=args.json,
+        )
 
 
 if __name__ == "__main__":
