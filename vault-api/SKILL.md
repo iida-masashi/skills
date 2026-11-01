@@ -1,6 +1,6 @@
 ---
 name: vault-api
-description: Obsidian Local REST API 経由で Vault を操作する PowerShell スクリプト群（検索・読み取り・一覧・追記・フォルダ作成・移動・削除・孤立/薄ノート検出）。
+description: Obsidian Local REST API 経由で Vault を操作する PowerShell スクリプト群（Vault 内の検索・既存ノートの重複確認・読み取り・一覧・追記・フォルダ作成・移動・削除・孤立/薄ノート検出）。
 disable-model-invocation: false
 ---
 
@@ -50,10 +50,22 @@ Vaultを切り替える際は、**Obsidianアプリ側でも対象Vaultを開い
 ### 全文検索
 
 ```bash
-pwsh -NoProfile -File <このスキルのtools>/vault-search.ps1 -Query "検索語" -Limit 20 [-Vault <vault名>]
+pwsh -NoProfile -File <このスキルのtools>/vault-search.ps1 -Query "検索語" [-Vault <vault名>]
 ```
 
-例：「検索語」を検索 → コンテキスト付きで結果を表示
+**出力は既定でトークン節約向けに絞ってある**（実測: 旧既定 43〜73KB → 現既定 約2KB、`-FilesOnly` 約0.8KB）。
+
+| オプション | 既定 | 内容 |
+|---|---|---|
+| `-FilesOnly`（別名 `-Summary`） | off | ファイル名とヒット数だけ。**既存ノートの重複確認はまずこれ** |
+| `-Limit N`（別名 `-Top`） | 5 | 表示ファイル数（0=無制限） |
+| `-MaxPerFile N` | 2 | 1ファイルで表示するヒット数 |
+| `-ContextLength N` | 40 | ヒット前後の文字数 |
+| `-IncludeSources` | off | `sources/` `node_modules/` `dist/` `_work/` `quartz/` `.obsidian/` 配下も対象にする（既定は除外し、除外件数を表示） |
+
+並び順はファイル名に検索語を含むノート → ヒット数の多い順。Markdown リンクの URL・生 URL・60字超の長いトークンは出力前に潰す。複数語の検索（例 `CPF SAP`）は語単位で緩くヒットするため、まず `-FilesOnly` で絞る。
+
+例：「検索語」を検索 → ヒット上位ノートを短い文脈つきで表示
 
 ### ファイル読み取り
 
@@ -265,7 +277,9 @@ Invoke-ObsidianCommand -CommandId 'app:reload' -Vault <vault名>
 | **Read/Grep/Glob（標準）** | Obsidian起動不要、高速 | Obsidian独自機能（タグ・dataview等）不可 |
 
 **推奨使い分け**：
-- **全文検索でコンテキスト付き結果が欲しい** → `vault-search`
+- **既存ノートの重複確認・どこに書いてあるか** → `vault-search -FilesOnly`（約1KB）→ 該当ファイルだけ Grep/部分 Read
+- **全文検索でコンテキスト付き結果が欲しい** → `vault-search`（既定のまま。広い語は先に `-FilesOnly`）
+- **新規ノートの健全性（リンク解決・到達・alias衝突）** → `maintenance/vault-verify-notes.ps1`（約0.5KBで3点検証。API系で最も有利）
 - **大量のファイル走査が必要** → Grep/Glob
 - **frontmatter編集・追記** → Edit/Write
 - **wikilink構造を理解した検索** → `vault-search`
