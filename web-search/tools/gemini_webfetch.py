@@ -22,8 +22,11 @@ APIキー/Vertex AI設定は既定で C:/Users/iidam/gemini/.env から読み込
 import argparse
 import contextlib
 import http.client
+import ipaddress
 import json
 import os
+import re
+import socket
 import sys
 import time
 import urllib.error
@@ -31,7 +34,7 @@ import urllib.request
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Final, Literal
-from urllib.parse import urljoin, urlparse
+from urllib.parse import quote, urljoin, urlparse, urlsplit, urlunsplit
 
 from google import genai
 from google.genai import types
@@ -64,6 +67,38 @@ _SECOND_LEVEL_TLDS: Final[frozenset[str]] = frozenset({
 _EMPTY_QUOTE_PLACEHOLDERS: Final[frozenset[str]] = frozenset({
     "", "なし", "該当なし", "記載なし", "引用なし", "n/a", "na", "none", "null", "-", "ー", "―",
 })
+
+_LOW_QUALITY_EXACT_DOMAINS: Final[frozenset[str]] = frozenset({
+    "reddit.com",
+    "note.com",
+    "ameblo.jp",
+    "5ch.net",
+    "2ch.sc",
+    "chiebukuro.yahoo.co.jp",
+    "oshiete.goo.ne.jp",
+    "hatenablog.com",
+    "hatenablog.jp",
+    "hatenadiary.jp",
+    "livedoor.jp",
+    "fc2.com",
+})
+
+_LOW_QUALITY_SUFFIXES: Final[tuple[str, ...]] = (
+    ".reddit.com",
+    ".note.com",
+    ".ameblo.jp",
+    ".5ch.net",
+    ".2ch.sc",
+    ".blog.shinobi.jp",
+    ".hatenablog.com",
+    ".hatenablog.jp",
+    ".hatenadiary.jp",
+    ".livedoor.jp",
+    ".fc2.com",
+)
+
+_WARN_SPAM_DOMAIN_RE: Final[re.Pattern[str]] = re.compile(r"^(?:[\w\-]+\.)*warn[\w\-]*\.com$")
+_TRAILING_URL_GARBAGE_RE: Final[re.Pattern[str]] = re.compile(r"[=)\].,;>\"'」』】、。．]+$")
 
 
 def configure_utf8_stdio() -> None:
@@ -207,20 +242,42 @@ def load_env(path: Path) -> None:
 def make_client() -> genai.Client:
     load_env(ENV_PATH)
 
+    creds_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+    creds_missing = False
+    if creds_path and not Path(creds_path).exists():
+        creds_missing = True
+        os.environ.pop("GOOGLE_APPLICATION_CREDENTIALS", None)
+        print(
+            f"[WARN] GOOGLE_APPLICATION_CREDENTIALS file missing ({creds_path}), ignoring.",
+            file=sys.stderr,
+        )
+
     use_vertex = (
         os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "").lower() == "true"
         or os.environ.get("GOOGLE_GENAI_USE_ENTERPRISE", "").lower() == "true"
     )
+    force_vertex = os.environ.get("GEMINI_SKILL_FORCE_VERTEX", "").lower() == "true"
     api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
 
-    if use_vertex:
+    if api_key and (not force_vertex or creds_missing):
+        if use_vertex and creds_missing:
+            print("[WARN] creds file missing, falling back to API key", file=sys.stderr)
+        return genai.Client(api_key=api_key, vertexai=False)
+
+    if use_vertex or force_vertex:
+        if creds_missing:
+            print(
+                f"ERROR: GOOGLE_APPLICATION_CREDENTIALS のファイルが見つからず ({creds_path})、"
+                "フォールバック先の GEMINI_API_KEY / GOOGLE_API_KEY も設定されていません。",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         return genai.Client(
             vertexai=True,
             project=os.environ.get("GOOGLE_CLOUD_PROJECT"),
             location=os.environ.get("GOOGLE_CLOUD_LOCATION", "global"),
         )
-    if api_key:
-        return genai.Client(api_key=api_key, vertexai=False)
+
     print(
         "ERROR: GEMINI_API_KEY / GOOGLE_API_KEY か Vertex AI設定 "
         "(GOOGLE_GENAI_USE_VERTEXAI=true / GOOGLE_GENAI_USE_ENTERPRISE=true) が見つかりません。",
@@ -345,6 +402,213 @@ def _hosts_match(host_a: str, host_b: str) -> bool:
     if host_a == host_b:
         return True
     return _registrable_domain(host_a) == _registrable_domain(host_b)
+
+
+def is_low_quality_url(url: str) -> bool:
+    """SNS・個人ブログ・匿名掲示板・Q&Aサイト・スパム系まとめドメインかを判定する。"""
+    host = _normalize_host(url)
+    if not host:
+        return False
+    if host in _LOW_QUALITY_EXACT_DOMAINS:
+        return True
+    if host.endswith(_LOW_QUALITY_SUFFIXES):
+        return True
+    return bool(_WARN_SPAM_DOMAIN_RE.match(host))
+
+
+def clean_extracted_url(url: str) -> str:
+    """テキストから抽出した生URL末尾のゴミ文字（リダイレクト置換残骸の'='や閉じ括弧・句読点等）を除去する。"""
+    if not url:
+        return ""
+    return _TRAILING_URL_GARBAGE_RE.sub("", url.strip())
+
+
+def encode_url_for_request(url: str) -> str:
+    """URL内の非ASCII文字をパーセントエンコードする（既存の%XXは二重エンコードしない）。"""
+    if not url:
+        return ""
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return quote(url, safe=":/?#[]@!$&'()*+,;=%-._~")
+    netloc = parts.netloc
+    if not netloc.isascii():
+        with contextlib.suppress(UnicodeError):
+            if "@" in netloc:
+                userinfo, _, hostport = netloc.rpartition("@")
+                userinfo_enc = quote(userinfo, safe=":!$&'()*+,;=%-._~")
+            else:
+                userinfo_enc = ""
+                hostport = netloc
+            host, sep, port = hostport.partition(":")
+            host_idna = host.encode("idna").decode("ascii")
+            netloc = f"{userinfo_enc + '@' if userinfo_enc else ''}{host_idna}{sep}{port}"
+    path = quote(parts.path, safe="/:@!$&'()*+,;=%-._~")
+    query = quote(parts.query, safe="/?:@!$&'()*+,;=%-._~")
+    fragment = quote(parts.fragment, safe="/?:@!$&'()*+,;=%-._~")
+    return urlunsplit((parts.scheme, netloc, path, query, fragment))
+
+
+def _is_disallowed_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """ループバック・プライベート・リンクローカル・マルチキャスト・予約済み・未指定IPかを判定する。"""
+    if (
+        isinstance(ip, ipaddress.IPv6Address)
+        and ip.ipv4_mapped is not None
+        and _is_disallowed_ip(ip.ipv4_mapped)
+    ):
+        return True
+    return bool(
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+    )
+
+
+def _parse_ip_candidate(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+    """通常のIP表記に加え、10進整数(2130706433)や16進/8進表記(0x7f000001等)をIPアドレスとして解釈する。"""
+    clean_host = host.strip("[]")
+    with contextlib.suppress(ValueError):
+        return ipaddress.ip_address(clean_host)
+
+    if re.fullmatch(r"(?:0[xX][0-9a-fA-F]+|0[oO]?[0-7]+|\d+)", clean_host):
+        with contextlib.suppress(ValueError):
+            val = int(clean_host, 0)
+            if 0 <= val <= 0xFFFFFFFF:
+                return ipaddress.IPv4Address(val)
+
+    parts = clean_host.split(".")
+    if 2 <= len(parts) <= 4 and all(
+        re.fullmatch(r"(?:0[xX][0-9a-fA-F]+|0[oO]?[0-7]+|\d+)", p) for p in parts
+    ):
+        with contextlib.suppress(ValueError):
+            nums = [
+                int(p, 8 if (p.startswith("0") and len(p) > 1 and not p.lower().startswith(("0x", "0o"))) else 0)
+                for p in parts
+            ]
+            if len(nums) == 4 and all(0 <= n <= 255 for n in nums):
+                return ipaddress.IPv4Address((nums[0] << 24) | (nums[1] << 16) | (nums[2] << 8) | nums[3])
+            if len(nums) == 2 and 0 <= nums[0] <= 255 and 0 <= nums[1] <= 0xFFFFFF:
+                return ipaddress.IPv4Address((nums[0] << 24) | nums[1])
+            if len(nums) == 3 and 0 <= nums[0] <= 255 and 0 <= nums[1] <= 255 and 0 <= nums[2] <= 0xFFFF:
+                return ipaddress.IPv4Address((nums[0] << 24) | (nums[1] << 16) | nums[2])
+    return None
+
+
+def is_safe_public_url(url: str) -> bool:
+    """SSRF対策: http/https以外のスキーム、localhost/.local、プライベート/ループバック等のIPを拒否する。"""
+    if not url:
+        return False
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+
+    if parsed.scheme.lower() not in ("http", "https"):
+        return False
+
+    host = (parsed.hostname or "").lower().rstrip(".")
+    if not host:
+        return False
+    if host == "localhost" or host.endswith((".local", ".localhost", ".internal")):
+        return False
+
+    ip_cand = _parse_ip_candidate(host)
+    if ip_cand is not None:
+        return not _is_disallowed_ip(ip_cand)
+
+    try:
+        addr_infos = socket.getaddrinfo(host, None)
+    except OSError:
+        # 数値・16進ドット表記の変形ホストで名前解決に失敗した場合は安全側でブロック、
+        # 通常のドメイン名でDNS解決できない場合（テスト用モックドメイン等を含む）は後続のurlopenに委ねる
+        return not all(re.fullmatch(r"[0-9a-fA-FxXoO]+", p) for p in host.split(".") if p)
+
+    for info in addr_infos:
+        sockaddr = info[4]
+        if not sockaddr:
+            continue
+        addr_str = str(sockaddr[0]).split("%", 1)[0]
+        ip_obj = _parse_ip_candidate(addr_str)
+        if ip_obj is not None and _is_disallowed_ip(ip_obj):
+            return False
+    return True
+
+
+class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """リダイレクト先URLに対してもSSRF検査を行い、最大5回までに制限するハンドラ。"""
+
+    max_redirections = 5
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        resolved_new = urljoin(req.full_url, newurl)
+        if not is_safe_public_url(resolved_new):
+            raise PermissionError(f"SSRF blocked redirect to unsafe URL: {resolved_new}")
+        return super().redirect_request(req, fp, code, msg, headers, encode_url_for_request(resolved_new))
+
+
+urllib.request.install_opener(urllib.request.build_opener(SafeRedirectHandler()))
+
+
+def check_url_alive(url: str, timeout: float = 5.0) -> tuple[bool, int | str]:
+    """URLの疎通確認を行い、明確なデッドリンク(404/410)や到達不能・SSRFブロックを検出する。
+
+    403/401/405/429等はBot対策・WAFによるブロックが多いため生存(True)とみなす。
+    戻り値は (alive, status_code_or_reason)。
+    """
+    cleaned = clean_extracted_url(url)
+    if not cleaned:
+        return False, "EMPTY_URL"
+    if "grounding-api-redirect" in cleaned:
+        return True, 302
+
+    current_url = encode_url_for_request(cleaned)
+    if not is_safe_public_url(current_url):
+        return False, "BLOCKED"
+
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Range": "bytes=0-1024",
+    }
+    for _ in range(5):
+        if not is_safe_public_url(current_url):
+            return False, "BLOCKED"
+        req = urllib.request.Request(current_url, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                final_url = (resp.geturl() if hasattr(resp, "geturl") else current_url) or current_url
+                if final_url != current_url and not is_safe_public_url(final_url):
+                    return False, "BLOCKED"
+                code = getattr(resp, "status", 200) or 200
+                return (code not in (404, 410)), code
+        except PermissionError:
+            return False, "BLOCKED"
+        except urllib.error.HTTPError as e:
+            code = e.code
+            location = e.headers.get("Location") if e.headers else None
+            e.close()
+            if code in (301, 302, 303, 307, 308) and location:
+                next_url = urljoin(current_url, location)
+                if not is_safe_public_url(next_url):
+                    return False, "BLOCKED"
+                current_url = encode_url_for_request(next_url)
+                continue
+            if code in (404, 410):
+                return False, code
+            return True, code
+        except urllib.error.URLError as e:
+            if isinstance(getattr(e, "reason", None), PermissionError) or "SSRF blocked" in str(e):
+                return False, "BLOCKED"
+            return False, "UNREACHABLE"
+        except (OSError, ValueError, http.client.HTTPException):
+            return False, "UNREACHABLE"
+    return False, "UNREACHABLE"
 
 
 def _is_fetch_ok(statuses: Sequence[dict], requested_url: str | None = None) -> tuple[bool, str | None]:

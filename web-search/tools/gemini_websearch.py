@@ -36,6 +36,7 @@ from gemini_webfetch import (
     extract_response_text,
     fetch_raw,
     generate_with_retry,
+    is_low_quality_url,
     make_client,
     normalize_thinking_level,
     resolve_redirect,
@@ -60,7 +61,14 @@ def get_system_instruction() -> str:
         "1. 提供されたGoogle検索結果（Grounding情報）に明確に記載されている事実・数値のみを回答してください。\n"
         "2. 検索結果に書かれていない数値を、あなたの事前学習知識や推測で補完・創作することは厳禁です。\n"
         "3. 検索結果に記載がない場合は『検索結果に記載なし』と正直に回答してください。\n"
-        "4. 金額、増減率、年度（3月期/12月期等）、企業名は検索結果の表記を正確に反映してください。"
+        "4. 金額、増減率、年度、企業名は検索結果の表記を正確に反映してください。\n"
+        "5. 会計年度の表記は必ず決算月を含む「YYYY年M月期」形式（例: 2026年3月期）に統一し、"
+        "資料に FY25 等の表記がある場合は「2026年3月期（資料表記: FY25）」のように併記してください。"
+        "「FY25」「2024年度」「今期」単独の記載は禁止します。\n"
+        "6. 質問文に含まれる前提（特定の買収・提携・製品展開・組織の存在等）を既定事実として扱わず、"
+        "まずその前提自体が一次情報で確認できるかを検証してください。確認できない場合は冒頭で『前提を確認できず』と明記してください。\n"
+        "7. 買収額・投資額・財務数値等を記載する際は、いつの時点・どの性質の数値か"
+        "（例: 公表時暫定値／完了時確定値、連結／単体、事業利益／営業利益）を必ず明記してください。"
     )
 
 
@@ -270,11 +278,13 @@ def search_raw(
             if not web:
                 continue
             resolved = resolved_map.get(web.uri) if not no_resolve else None
+            final_url = resolved or web.uri
             chunk_index_to_source[chunk_idx] = len(sources)
             sources.append({
                 "title": web.title,
-                "url": resolved or web.uri,
+                "url": final_url,
                 "resolved": bool(resolved),
+                "low_quality": is_low_quality_url(final_url),
             })
 
     audit_result = None
@@ -535,7 +545,8 @@ def search(
         print("\n--- 出典 ---")
         for i, src in enumerate(result["sources"], 1):
             suffix = "" if src["resolved"] or no_resolve else " (解決失敗、リダイレクトURLのまま)"
-            print(f"[{i}] {src['title']} - {src['url']}{suffix}")
+            lq_warn = " [WARNING: 低品質・非一次情報ドメイン]" if src.get("low_quality") else ""
+            print(f"[{i}] {src['title']} - {src['url']}{suffix}{lq_warn}")
     elif result["sources"] and no_sources:
         print(f"\n--- 出典 --- ({len(result['sources'])}件、--no-sourcesのため省略)")
 

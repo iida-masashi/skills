@@ -18,9 +18,10 @@ uv sync --directory claude-gemini-skills/web-search
 
 APIキー/認証は既定で `<gemini-workdir>\.env` から自動読み込みされる（`GEMINI_SKILL_ENV_PATH`で上書き可）。両スクリプトとも起動時に以下の順で認証情報を解決する。
 
-1. `GOOGLE_GENAI_USE_VERTEXAI=true` または `GOOGLE_GENAI_USE_ENTERPRISE=true` → Vertex AI / Agent Platform（ADC認証、`GOOGLE_CLOUD_PROJECT`・`GOOGLE_CLOUD_LOCATION`は既定`global`）
-2. 上記が無く `GEMINI_API_KEY` または `GOOGLE_API_KEY`（`.env`にあれば） → APIキー認証（`vertexai=False`）
-3. どちらもなければ標準エラーにメッセージを出して終了（exit 1）
+1. `GOOGLE_APPLICATION_CREDENTIALS` が設定されており、そのファイルが実在しない場合は環境変数から自動除外して標準エラー（`stderr`）に `[WARN] GOOGLE_APPLICATION_CREDENTIALS file missing ...` を出力する（`--json` の標準出力は汚染しない）。
+2. `GEMINI_API_KEY` または `GOOGLE_API_KEY` が設定されている場合 → APIキー認証（`vertexai=False`）を優先使用する（`GOOGLE_GENAI_USE_VERTEXAI=true` 等が `.env` に同居していてADC認証ファイルが欠損している場合でも `[WARN] creds file missing, falling back to API key` を出して安全にフォールバックする。明示的にVertex AIを強制したい場合は `GEMINI_SKILL_FORCE_VERTEX=true` を設定）。
+3. APIキーが無く `GOOGLE_GENAI_USE_VERTEXAI=true` または `GOOGLE_GENAI_USE_ENTERPRISE=true` → Vertex AI / Agent Platform（ADC認証、`GOOGLE_CLOUD_PROJECT`・`GOOGLE_CLOUD_LOCATION`は既定`global`）。
+4. いずれも利用できない場合は標準エラーに人間が読めるエラーメッセージを出して終了（exit 1）。
 
 すでにOS環境変数に同名キーが設定されている場合は`.env`の値で上書きしない。
 
@@ -29,7 +30,7 @@ APIキー/認証は既定で `<gemini-workdir>\.env` から自動読み込みさ
 ### Web検索
 
 ```powershell
-uv run --directory claude-gemini-skills/web-search python tools/gemini_websearch.py "検索クエリ"
+uv run --project "C:/Users/iidam/claude-gemini-skills/web-search" python "C:/Users/iidam/claude-gemini-skills/web-search/tools/gemini_websearch.py" "検索クエリ"
 ```
 
 出力: （出典0件の場合は先頭に`[WARNING]`検索未実行警告） + Geminiの回答本文 + `--- 検索クエリ ---`（Geminiが実際にGoogle検索した語句） + `--- 出典 ---`（実URL解決済み） + `--- 文単位の裏付け監査 (Grounding Audit) ---`（Status: 帰属あり・未検証 / WARNING / 監査不能）。
@@ -47,7 +48,7 @@ uv run --directory claude-gemini-skills/web-search python tools/gemini_websearch
 ### URL取得（WebFetch相当）
 
 ```powershell
-uv run --directory claude-gemini-skills/web-search python tools/gemini_webfetch.py "<URL>" ["追加の指示（省略可）"]
+uv run --project "C:/Users/iidam/claude-gemini-skills/web-search" python "C:/Users/iidam/claude-gemini-skills/web-search/tools/gemini_webfetch.py" "<URL>" ["追加の指示（省略可）"]
 ```
 
 追加の指示を省略した場合のデフォルトは要約＋グラウンディング規律＋取得失敗トークン(`RETRIEVAL_FAILED`)指示。
@@ -65,7 +66,9 @@ uv run --directory claude-gemini-skills/web-search python tools/gemini_webfetch.
 
 ## Highlights
 
-- **常時ハルシネーション抑制アーキテクチャ** — (1)検索結果外の推測補完を厳禁とするシステム指示、(2)時制の混乱を防ぐ現在基準日（Anchor Date）の動的注入、(3)発行された検索クエリ（`web_search_queries`）の可視化、(4)検索未実行・出典0件の場合の警告バナーが標準で機能します。サンプリングパラメータ（`temperature`等）はGemini 3.8 / 4 Argon系の公式仕様で非推奨（Deprecated・無視）となっており、両スクリプトとも指定せず`thinking_level`とグラウンディング規律で制御します。
+- **常時ハルシネーション抑制アーキテクチャ** — (1)検索結果外の推測補完・URL推測生成を厳禁とするシステム指示、(2)会計年度の決算月明記（`YYYY年M月期`＋原典表記の併記）と数値時点（発表時暫定／完了時確定等）および質問前提の一次確認を強制するプロンプト規律、(3)時制の混乱を防ぐ現在基準日（Anchor Date）の動的注入、(4)発行された検索クエリ（`web_search_queries`）の可視化、(5)検索未実行・出典0件の場合の警告バナー、(6)SNS・匿名掲示板・個人ブログ・スパムまとめサイト等の低品質ドメインに対する自動警告（`[WARNING: 低品質・非一次情報ドメイン]` / `[LOW-QUALITY-DOMAIN]`）が標準で機能します。サンプリングパラメータ（`temperature`等）はGemini 3.8 / 4 Argon系の公式仕様で非推奨（Deprecated・無視）となっており、両スクリプトとも指定せず`thinking_level`とグラウンディング規律で制御します。
+- **財務数値・ROIC・会計指標の一次資料原則** — 決算数値・ROIC・買収額等の厳密な財務数値を確定させる際は、Web検索を一次資料（有価証券報告書・決算短信・統合報告書・適時開示PDF）のURL特定のみに使い、特定したPDFをローカルで `convmd` 等により変換・直接読解して確定させます。
+- **`gemini_parallel.py` のURL検証・フロントマター・引用突合** — 並列調査結果（`qNN.md`）にはYAMLフロントマター（`query`, `timestamp`, `model`, `status`, `elapsed_sec`, `dead_links`, `unreachable_links`, `low_quality_links`, `unverified_lines`, `unsupported_lines`, `conclusion_unverified`, `stripped_reasoning_lines`, `quote_mismatch`, `no_quote`, `off_topic_links`）と先頭の `[検証サマリ]` バナー（`> [検証サマリ] URL n件 / 生存 a / 404 b / 確認不能 c / 低品質 d / 未検証行 e / 引用不一致 f / 裏付けなし m`、および結論未確認時の2種類の `[警告]` バナー）が記録されます。Gemini CLIの内部思考ログ（`💡thought` / `CRITICAL INSTRUCTION` 等）の自動ストリップ、日本語URLのパーセントエンコード疎通確認と助詞密着フォールバック、Markdownリンク `[text](url)` およびMarkdown表セル構造を壊さないタグ配置、SSRF防御（ループバック・プライベートIP・非http(s)スキームを `[UNCHECKED: BLOCKED]` で遮断）、死んだURLのみの事実行（`[UNVERIFIED]`）および根拠URL・引用突合に基づく結論行自動格下げ（生存・確認不能URLが0件または事実行がすべて裏付けなし（`[UNVERIFIED]` / `[QUOTE-MISMATCH]` / `[NO-QUOTE]`）の場合は `[CONCLUSION-UNVERIFIED]`、事実行の50%以上が裏付けなしの場合は `[CONCLUSION-LOW-CONFIDENCE]`）を標準搭載しています。さらに `--no-unchecked-tags`（`[UNCHECKED: ...]` タグの抑止）、`--verify-quotes`（各URL列 `i` の直後 `i+1` 列の原文引用をNFKC正規化部分一致で突合し不一致に `[QUOTE-MISMATCH]`・空引用に `[NO-QUOTE]` を付与、標準出力の `[qNN]` 行にも `quote-mismatch=n` を付記。PDFは `[UNCHECKED: PDF]`・非HTMLは `[UNCHECKED: TYPE]`・2MB超は `[UNCHECKED: TRUNCATED]`）、`--subject`（主題外ドメインへの `[OFF-TOPIC]` 付与）も利用可能です。文字コード判定は ①宣言charset（`Content-Type` → `<meta charset>`）の strict デコード → ②ISO-2022-JP エスケープ検出 → ③`utf-8` strict → ④`cp932` / `euc_jp` の strict デコード＆半角カナ・私用領域・制御文字率による採点比較（同点時は `cp932` 優先） → ⑤`utf-8` (replace) の順で行います（※宣言のない極端に短い日本語ページ（8文字未満）では誤判定の可能性があります）。呼び出し時は cwd を変えない `uv run --project` の使用を推奨します。
 - **文単位の裏付け監査（既定で有効）** — Gemini APIの `grounding_supports` メタデータを自動突合。回答本文のどの文がどのWeb出典に帰属が申告されているかを追跡し、帰属が申告されていない文章（モデルの推測・事前学習記憶の疑いがある箇所）を自動検知して警告します（Status: WARNING。`grounding_supports`自体が空なら「監査不能」）。これはモデルの自己申告の突合であり独立検証ではない点に注意。
 - **高速実URL並列解決** — 出典URL（`vertexaisearch...`）は302 FoundのLocationヘッダーのみをキャプチャし、相手先サーバーの403ブロックや巨大PDFダウンロードによるタイムアウトを回避。重複排除＋ThreadPoolExecutor（最大8スレッド）により0.1〜0.2秒で全件の実URLを確定します。
 - **Gemini API優先＋Claude WebSearch/WebFetchフォールバック** — ClaudeのWebSearchはセッション単位の回数上限があり枯渇しやすいが、Geminiは別課金枠で消費しない。ClaudeのWebFetchは証明書エラー等で失敗するサイトがあるが、Geminiの`url_context`ツールはGoogle側の取得経路を使うため成功する場合がある。

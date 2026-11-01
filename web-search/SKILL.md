@@ -19,22 +19,24 @@ Web検索・URL取得を行うスキル。**標準ではGemini APIを使い、�
 
 以下がこのスキルの**既定の動作**です。ハルシネーション（数値捏造・推測補完・時制混同）を減らす方向のガードが既定で適用されますが、**これらはモデルへの指示とコード側の後付き突合であり、独立した事実検証ではありません**。特に「文単位の裏付け監査」は出典への帰属をモデル自身が申告したメタデータの突合に過ぎない点に注意してください。
 
-* **厳格グラウンディング規律**: システムプロンプトで「検索結果／取得ページにない数値・推測補完の厳禁」「記載がない場合は記載なしと回答」を指示。`gemini_websearch.py`（Google検索）・`gemini_webfetch.py`（URL取得）の両方に適用。
+* **厳格グラウンディング規律**: システムプロンプトで「検索結果／取得ページにない数値・推測補完の厳禁」「記載がない場合は記載なしと回答」「会計年度は必ず決算月付きの『YYYY年M月期』形式に統一（FY25等の単独表記禁止）」「質問文の前提を既定事実とせず一次情報で確認（確認できなければ『前提を確認できず』）」「買収額・財務数値は時点（公表時暫定／完了時確定等）を明記」を指示。`gemini_websearch.py`（Google検索）・`gemini_webfetch.py`（URL取得）の両方に適用。
 * **temperature等のサンプリングパラメータは非指定**: Gemini 3.8 / 4 Argon 系では公式にサンプリングパラメータ（`temperature` / `top_p` / `top_k`）が非推奨（Deprecated・無視）となっており、このスキルも両スクリプトとも指定しない。推論の深さは `--thinking-level`、ハルシネーション抑制はグラウンディング規律・裏付け監査側で担う。
 * **現在基準日（Anchor Date）注入**: 実行日の日付（例: `2026-11-01`）を注入し、「今期」「最新」等の時制の取り違えを防止（`gemini_websearch.py`のみ）。
 * **発行検索クエリの可視化**: Geminiが内部で実際にGoogle検索に投げたクエリ（`web_search_queries`）を表示。**検索クエリが0件・出典が0件の場合は「検索未実行／回答は事前学習知識のみの可能性」の警告を本文の前に表示する**（`gemini_websearch.py`）。
 * **文単位の裏付け監査（既定で有効）**: レスポンスの `grounding_supports` を文単位（`。！？`区切り）で突合し、出典への帰属が申告されていない文（モデル自身の推測の疑いがある箇所）を検知して警告。数字を含む文は長さに関わらず必ず監査対象にする。`grounding_supports`自体が空の場合は「監査不能」と表示する（「OK」とは表示しない）。
+* **低品質・非一次情報ドメインの自動警告**: 出典URLがSNS・匿名掲示板・個人ブログ・Q&Aサイト・スパム系まとめサイト（`reddit.com`, `note.com`, `ameblo.jp`, `5ch.net`, `*.blog.shinobi.jp`, `warn*.com` 等）である場合、出典一覧に `[WARNING: 低品質・非一次情報ドメイン]`（`gemini_parallel.py`では `[LOW-QUALITY-DOMAIN]`）を自動付与する。
 * **取得失敗の明示**: `gemini_webfetch.py`は`URL_RETRIEVAL_STATUS_SUCCESS`以外の場合、要約本文より前に取得ステータスと警告を表示する。
 * **高速実URL並列解決**: 302 Location ヘッダーの即時抽出により、巨大PDFや403遮断サイトでも実URLの欠落・タイムアウトなし（最大8並列）。
 
 このスキルディレクトリ自体が独立したuvプロジェクト（依存は`google-genai`および`pydantic`）。初回のみ `uv sync --directory "C:/Users/iidam/claude-gemini-skills/web-search"` で依存解決する。
 
-両スクリプトはAPIキー/Vertex AI設定を既定で `C:\Users\iidam\gemini\.env` から自動読み込みする（環境変数`GEMINI_SKILL_ENV_PATH`でパスを上書き可能。`GOOGLE_GENAI_USE_VERTEXAI=true` または `GOOGLE_GENAI_USE_ENTERPRISE=true` が設定されている場合は Vertex AI / Agent Platform の `location="global"` を優先使用する）。
+両スクリプトはAPIキー/Vertex AI設定を既定で `C:\Users\iidam\gemini\.env` から自動読み込みする（環境変数`GEMINI_SKILL_ENV_PATH`でパスを上書き可能）。
+- **認証フェイルセーフ**: `GOOGLE_APPLICATION_CREDENTIALS` が存在しないファイルを指している場合は環境変数から自動除外して標準エラー（`stderr`）に警告を出し、`GEMINI_API_KEY` / `GOOGLE_API_KEY` によるAPIキー認証（`vertexai=False`）へ安全にフォールバックする（明示的にVertex AIを優先強制したい場合は `GEMINI_SKILL_FORCE_VERTEX=true` を設定）。
 
 ### Web検索（検索クエリを投げて要約・出典・裏付け監査を得る）
 
 ```powershell
-uv run --directory "C:/Users/iidam/claude-gemini-skills/web-search" python tools/gemini_websearch.py "検索クエリ"
+uv run --project "C:/Users/iidam/claude-gemini-skills/web-search" python "C:/Users/iidam/claude-gemini-skills/web-search/tools/gemini_websearch.py" "検索クエリ"
 ```
 
 出力: （出典0件の場合は先頭に`[WARNING]`検索未実行警告）+ Geminiによる回答本文 + `--- 検索クエリ ---` + `--- 出典 ---` + `--- 文単位の裏付け監査 (Grounding Audit) ---`（Status: 帰属あり・未検証 / WARNING / 監査不能）。
@@ -50,7 +52,7 @@ uv run --directory "C:/Users/iidam/claude-gemini-skills/web-search" python tools
 ### URL取得（特定URLの内容を取得・要約する、WebFetch相当）
 
 ```powershell
-uv run --directory "C:/Users/iidam/claude-gemini-skills/web-search" python tools/gemini_webfetch.py "<URL>" ["追加の指示（省略可、既定は要約）"]
+uv run --project "C:/Users/iidam/claude-gemini-skills/web-search" python "C:/Users/iidam/claude-gemini-skills/web-search/tools/gemini_webfetch.py" "<URL>" ["追加の指示（省略可、既定は要約）"]
 ```
 
 出力: `--- 取得ステータス ---`（`URL_RETRIEVAL_STATUS_SUCCESS`または`FAILED`等と実際に取得できたURL。取得情報が無い場合もその旨を表示）+ SUCCESS以外の場合は`[WARNING]`取得失敗警告 + Geminiによる回答本文。なお、GoogleのリダイレクトURL（`vertexaisearch...`）が渡された場合も自動で実URLへ逆引き解決してから取得します。
@@ -62,10 +64,10 @@ uv run --directory "C:/Users/iidam/claude-gemini-skills/web-search" python tools
 
 ```powershell
 # 悪い例: 全文要約は本文が長くなりがち
-uv run --directory "C:/Users/iidam/claude-gemini-skills/web-search" python tools/gemini_webfetch.py "<URL>" "このページの内容を詳しく要約して"
+uv run --project "C:/Users/iidam/claude-gemini-skills/web-search" python "C:/Users/iidam/claude-gemini-skills/web-search/tools/gemini_webfetch.py" "<URL>" "このページの内容を詳しく要約して"
 
 # 良い例: 欲しい数値・事実だけに絞る
-uv run --directory "C:/Users/iidam/claude-gemini-skills/web-search" python tools/gemini_webfetch.py "<URL>" "このページに記載されている削減時間・対象工場数の数値だけを、原文の表現のまま抜き出して。他の説明は不要"
+uv run --project "C:/Users/iidam/claude-gemini-skills/web-search" python "C:/Users/iidam/claude-gemini-skills/web-search/tools/gemini_webfetch.py" "<URL>" "このページに記載されている削減時間・対象工場数の数値だけを、原文の表現のまま抜き出して。他の説明は不要"
 ```
 
 ## オプション機能：さらに厳密な検証モード（明示的に指定したときだけ使う）
@@ -95,17 +97,21 @@ uv run --directory "C:/Users/iidam/claude-gemini-skills/web-search" python tools
 ### 並列Web調査（Gemini CLIエージェントに丸ごと委譲）
 
 ```powershell
-uv run --directory "C:/Users/iidam/claude-gemini-skills/web-search" python tools/gemini_parallel.py -o "<scratchpad>/research" "調査1" "調査2" "調査3"
+uv run --project "C:/Users/iidam/claude-gemini-skills/web-search" python "C:/Users/iidam/claude-gemini-skills/web-search/tools/gemini_parallel.py" -o "<scratchpad>/research" "調査1" "調査2" "調査3"
 # 調査が多い場合: 1行1調査のファイル（空行・#行は無視）
-uv run --directory "C:/Users/iidam/claude-gemini-skills/web-search" python tools/gemini_parallel.py -o "<scratchpad>/research" -f queries.txt
+uv run --project "C:/Users/iidam/claude-gemini-skills/web-search" python "C:/Users/iidam/claude-gemini-skills/web-search/tools/gemini_parallel.py" -o "<scratchpad>/research" -f queries.txt
 ```
 
-- 各調査は `<out_dir>/qNN.md` に保存される（stderrは `qNN.stderr.log`）。標準出力は `[qNN] OK/FAIL 秒数 パス` と各回答の先頭 `--preview` 文字（既定400、`0`で非表示）だけ。全文が要る調査だけ後から `qNN.md` を読む。
-- 回答中のGoogle転送URL（`vertexaisearch...grounding-api-redirect`）は実URLに自動置換される。解決できなかったものは `(出典URL解決失敗)` になる。
-- オプション: `-j`並列数（既定4）、`-m`モデル、`--max-lines`回答の行数上限の指示（既定10）、`--timeout`1調査の秒数上限（既定300）。1件でも失敗すると exit 1。
-- **調査内容は具体的に書く**（対象・期間・欲しい項目・出力形式）。プロンプトには「出典にない事実の推測禁止・記載なしは記載なし・完全URL付き・今日の日付」の規律が自動で付く。
+- **パス指定（`--project` 推奨）**: `uv run --project "C:/Users/iidam/claude-gemini-skills/web-search"` を使うことで呼び出し元のカレントディレクトリ（cwd）が維持されるため、`-f` や `-o` に相対パスをそのまま渡せる（`uv run --directory` を使う場合は cwd が移動するため絶対パス指定が必須）。
+- 各調査は `<out_dir>/qNN.md` にYAMLフロントマター（`query`, `timestamp`, `model`, `status`, `elapsed_sec`, `dead_links`, `unreachable_links`, `low_quality_links`, `unverified_lines`, `unsupported_lines`, `conclusion_unverified`, `stripped_reasoning_lines`, `quote_mismatch`, `no_quote`, `off_topic_links`）および先頭のサマリバナー（`> [検証サマリ] URL n件 / 生存 a / 404 b / 確認不能 c / 低品質 d / 未検証行 e / 引用不一致 f / 裏付けなし m`、および結論未確認時の2種類の警告バナー：生存URL不足時は `> [警告] 根拠となる生存URLが不足しています。結論は一次資料で未確認として扱ってください。`、引用不一致・両方該当時は `> [警告] 根拠行の多くで、URLが死んでいるか、引用がページに存在しません。結論は一次資料で未確認として扱ってください。`）付きで保存される（stderrは `qNN.stderr.log`）。標準出力は `[qNN] OK/FAIL 秒数 パス`（死んだURLや未検証行がある場合は `[WARN] dead=X unverified=Y`、結論未確認時は `⚠ conclusion-unverified`、引用不一致が1件以上ある場合は `quote-mismatch=n` を付記）と各回答の先頭 `--preview` 文字（既定400、`0`で非表示）だけ。全文が要る調査だけ後から `qNN.md` を読む。
+- Gemini CLIが回答先頭に出力することがある内部思考ログ（`💡thought` / `Thought:` / `thinking` ブロックや `CRITICAL INSTRUCTION` / `I will use` 等のメタ独白行）は自動で除去され、除去行数がフロントマターの `stripped_reasoning_lines` に記録される（除去後に空になる場合は安全のため元のテキストを保持し `status: OK(empty-after-strip)` とする）。
+- 回答中のGoogle転送URL（`vertexaisearch...grounding-api-redirect`、末尾の `=` パディング含む）は実URLに自動置換される。解決できなかったものは `(出典URL解決失敗)` になる。さらに本文中の生URL（日本語パスを含むURLも自動パーセントエンコードして検査し、表示は可読な日本語のまま保持。助詞密着時は助詞除去URLへ自動フォールバック）に対してもHTTP疎通チェック・SSRF検査・低品質ドメイン判定を行い、404/410には `[DEAD-LINK: 404]`、401/403/429や到達不能には `[UNCHECKED: 403|UNREACHABLE]`、プライベートIPや非http(s)スキームには `[UNCHECKED: BLOCKED]`、SNS・個人ブログ等には `[LOW-QUALITY-DOMAIN]` を付与する（Markdownリンク `[text](url)` の場合は `)` の直後にタグを配置しリンク構文を壊さない）。
+- **死んだURLのみの行・裏付けなし行・結論行の自動格下げ**: 箇条書き行または `|` 区切り・Markdown表の事実行に含まれる出典URLがすべて `[DEAD-LINK: 404|410]` の場合、その行の先頭（Markdown表の行は第1セル先頭 `| [UNVERIFIED] ... |`）に自動で `[UNVERIFIED]` を付与する。事実行のうち `[UNVERIFIED]` / `[QUOTE-MISMATCH]` / `[NO-QUOTE]` のいずれかが付いた行を `unsupported_lines`（裏付けなし行、行単位でカウントし `[UNCHECKED: ...]` は対象外）として集計し、①生存・確認不能URLが0件、または②事実行がすべて裏付けなし（`unsupported_lines == fact_lines_with_urls`）の場合は結論行に `[CONCLUSION-UNVERIFIED]` を、③事実行の50%以上が裏付けなし（`unsupported_lines / fact_lines_with_urls >= 0.5`）の場合は `[CONCLUSION-LOW-CONFIDENCE]` を自動付与する。
+- オプション: `-j`並列数（既定4）、`-m`モデル、`--max-lines`回答の行数上限の指示（既定10）、`--timeout`1調査の秒数上限（既定300）、`--no-unchecked-tags`（`[UNCHECKED: ...]` タグの抑止）、`--verify-quotes`（生存HTMLページの本文を取得し、各URL列 `i` の直後にある `i+1` 列目の原文引用をNFKC正規化部分一致で突合。不一致に `[QUOTE-MISMATCH]`・空引用に `[NO-QUOTE]` を付与。Shift_JIS / EUC-JP 等の日本語文字コード自動判定対応。PDFは `[UNCHECKED: PDF]`、非HTMLは `[UNCHECKED: TYPE]`、2MB超の巨大ページは `[UNCHECKED: TRUNCATED]`）、`--subject "固有名詞"`（複数指定可。URL・タイトル・本文に主題が含まれない出典に `[OFF-TOPIC]` を付与）。1件でも失敗すると exit 1。
+- **調査内容は具体的に書く**（対象・期間・欲しい項目・出力形式）。プロンプトには「事実 | 完全URL | 原文引用（60字以内）」「存在しないURLの推測生成禁止」「会計年度はYYYY年M月期」「前提の一次情報確認・数値の時点明記」の規律が自動で付く。
 - 所要時間は1件30〜60秒程度で、並列数の範囲なら件数が増えてもほぼ同じ。2件以上ならバックグラウンド実行（Bashの`run_in_background`）にして待つ間に他の作業をしてよい。
 - **Claude側では検証しない**: ノート等に記録する数値・関係性・実在性の主張だけを、`gemini_webfetch.py "<URL>" --check "<主張>"` で個別に裏取りする（これもGemini側で完結）。
+- **財務数値・ROIC・会計指標の一次資料原則（C10）**: 決算数値・ROIC・買収額・セグメント利益等の厳密な財務数値を確定させる際は、Web検索の要約テキストをそのまま正とせず、**Web検索は一次資料（有価証券報告書・決算短信・統合報告書・適時開示PDF）のURL特定のみに使い、特定したPDFをローカルに取得して `convmd` 等でMarkdown変換・直接読解して確定させること**。
 
 ## ソフトウェア開発タスクでの使い分け（依存更新・ライブラリ調査など）
 
