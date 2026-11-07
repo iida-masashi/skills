@@ -65,6 +65,11 @@ cpgは2026-09-09にawaと同じ見た目のQuartzサイトへ移行し、さら�
      python scripts/audit_vault_links.py --vault <vault> --fix-variants [--apply]
      ```
      Vault内の未作成ノートへのリンク（赤リンク）を検出。特に「売↔賣」「弥↔彌」「島↔嶋」「高↔髙」などの漢字の表記揺れ（異体字）を自動検出し、`--apply` で安全に一括正規化。
+   - **同名 basename 監査**（同名ノートは Quartz で bare リンクを曖昧にして壊す）:
+     ```bash
+     python scripts/audit_vault_links.py --vault <vault> --dup-basenames
+     ```
+     重複があれば公開前に区別名へ改名する（直し方は vault-work `rules/01_editing_and_verification.md`「同名 basename」）。
    - **タグ監査＆正規化 (`scripts/audit_vault_tags.py`)**:
      ```bash
      python scripts/audit_vault_tags.py --vault <vault> --audit
@@ -89,14 +94,15 @@ cpgは2026-09-09にawaと同じ見た目のQuartzサイトへ移行し、さら�
 3. **Post-Build Internal Link Audit (事後監査・検証)**:
    - **Quartzリンク切れ監査 (`scripts/audit_quartz_links.py`)**:
      ```bash
-     python scripts/audit_quartz_links.py --public-dir <quartz-repo>/public [--report-file report.md]
+     python scripts/audit_quartz_links.py --public-dir <quartz-repo>/public [--report-file report.md] [--detail]
      ```
+     `--detail`（レポートにも常に出力）でリンク切れターゲットごとのリンク元ページを表示する。約7,000ページの走査で120秒を超えるため、**Bash の `run_in_background: true` で実行**する。
      生成されたHTML群を走査し、ブラウザ上で404になる内部リンクが存在しないかを完全検証。
 
 4. **`--sync-only` ならここで停止**（下記「Sync-only モード」参照）。commit/push は行わない。
 
 5. **Pre-Commit 監査 & 承認確認（重要規律）**:
-   - `python scripts/audit_mermaid_styling.py <vault>` でダイアグラムのアクセシビリティを検証。
+   - `python scripts/audit_mermaid_styling.py <vault>` でダイアグラムのアクセシビリティを参考情報として確認する。**公開前のゲートは `validate_mermaid.py`（0件）**。`audit_mermaid_styling` は暗い背景色のないノードも指摘し、`classDef` で白文字にすると `validate_mermaid.py` が `DARK_FILL_WITHOUT_WHITE_TEXT` で落とすため、基準が食い違う。暗色 fill を使っていない図の指摘は無視してよい。
    - **必ずユーザーに変更ファイル一覧、変更概要、コミットメッセージ案を提示し、明示的な承認指示を待つ（自動コミット・自動プッシュ厳禁）。**
 
 6. **Commit & Push**: ユーザー承認後、安全に実行

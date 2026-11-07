@@ -268,6 +268,7 @@ def main() -> None:
     parser.add_argument("--find-variants", action="store_true", help="Detect CJK glyph-variant bugs among red-links")
     parser.add_argument("--fix-variants", action="store_true", help="Fix glyph-variant bugs (dry-run by default)")
     parser.add_argument("--apply", action="store_true", help="Apply fixes to files (with --fix-variants)")
+    parser.add_argument("--dup-basenames", action="store_true", help="List notes sharing the same basename (breaks Quartz bare links)")
     parser.add_argument("--top", type=int, default=30, help="Number of top red-links to display")
     parser.add_argument("--target", type=str, default=None, help="Inspect specific wikilink target")
     parser.add_argument("--json-out", type=Path, default=None, help="Save variant bugs to JSON file")
@@ -281,6 +282,23 @@ def main() -> None:
     print("  [Vault Wikilink & Variant Auditor]")
     print(f"  Vault: {args.vault}")
     print("=" * 72)
+
+    if args.dup_basenames:
+        # 同名 basename は Quartz の bare リンクを曖昧にして壊す（Obsidian は最短パスで解決するため気づきにくい）
+        skip = {"_work", ".obsidian", ".trash", ".git", ".venv", "node_modules"}
+        by_name: dict[str, list[str]] = defaultdict(list)
+        for root, dirs, files in os.walk(args.vault):
+            dirs[:] = [d for d in dirs if d not in skip]
+            for fn in files:
+                if fn.endswith(".md"):
+                    by_name[norm_nfc(fn[:-3])].append(os.path.relpath(os.path.join(root, fn), args.vault))
+        dups = {k: v for k, v in by_name.items() if len(v) > 1}
+        print(f"  Duplicate basenames: {len(dups)}")
+        for k, v in sorted(dups.items()):
+            print(f"    - {k}")
+            for rel in v:
+                print(f"        {rel}")
+        return
 
     md_stems, all_basenames, stem_to_actual = build_vault_universe(args.vault)
     print(f"  Indexed {len(md_stems):,} markdown notes and {len(all_basenames):,} total files.")

@@ -58,6 +58,7 @@ def audit_quartz_links(
     public_dir: Path,
     report_file: Path | None = None,
     top: int = 30,
+    detail: bool = False,
 ) -> tuple[int, int, int]:
     """Audit links in public_dir.
 
@@ -127,6 +128,11 @@ def audit_quartz_links(
         print(f"\n  Top {min(top, len(broken_targets))} broken link targets:")
         for tgt, count in broken_targets.most_common(top):
             print(f"    - [{count:>3}x] {tgt}")
+        if detail:
+            print("\n  Link sources (target <- pages):")
+            for tgt, _ in broken_targets.most_common(top):
+                srcs = sorted({pg for pg, ls in broken_by_page.items() if any(t == tgt for _, t in ls)})
+                print(f"    - {tgt} <- " + ", ".join(srcs[:5]) + (" ..." if len(srcs) > 5 else ""))
     else:
         print("\n  [PASS] All internal links resolve cleanly! 0 broken links found.")
 
@@ -160,6 +166,12 @@ def audit_quartz_links(
         for page, links in sorted(broken_by_page.items(), key=lambda x: -len(x[1]))[:30]:
             lines.append(f"| `{page}` | {len(links)} |")
         lines.append("")
+        lines.append("## リンク元詳細（ターゲット別）")
+        lines.append("")
+        for tgt, _ in broken_targets.most_common(100):
+            srcs = sorted({pg for pg, ls in broken_by_page.items() if any(t == tgt for _, t in ls)})
+            lines.append(f"- `{tgt}`: " + ", ".join(f"`{s}`" for s in srcs[:10]) + (" …" if len(srcs) > 10 else ""))
+        lines.append("")
 
         report_file.parent.mkdir(parents=True, exist_ok=True)
         report_file.write_text("\n".join(lines), encoding="utf-8")
@@ -180,12 +192,14 @@ def main() -> None:
     parser.add_argument("--report-file", type=Path, default=None, help="Save markdown report to file")
     parser.add_argument("--top", type=int, default=30, help="Number of top broken targets to display")
     parser.add_argument("--fail-on-error", action="store_true", help="Exit code 1 if broken links found")
+    parser.add_argument("--detail", action="store_true", help="Print source pages for each broken target")
     args = parser.parse_args()
 
     _, broken_targets_count, _ = audit_quartz_links(
         public_dir=args.public_dir,
         report_file=args.report_file,
         top=args.top,
+        detail=args.detail,
     )
     if args.fail_on_error and broken_targets_count > 0:
         sys.exit(1)
