@@ -94,3 +94,16 @@ uv run python -m convmd.cli find "<自然文クエリ>" --semantic [--domain <�
 5. 実行後、出力された.mdファイルパスをユーザーに報告する。生成物の中身をこのSkillが独自に加工/要約することはしない（`--transform`はconvMD側の機能として使う）。
 
 詳細な実装（モジュール構成、Gemini呼び出し規約など）は `<convmd-repo>/CLAUDE.md` と `README.md` を参照。
+
+## 文字層のない PDF の OCR（`scripts/pdf_ocr.py`）
+
+スキャン PDF や、文字化けして抽出できない PDF（官報・関税表など）の指定ページを、Gemini で OCR してページごとに Markdown 保存する。通常の PDF は先に上の取込を試す。
+
+```bash
+cd "<convmd-repo>"
+uv run --with pymupdf python -X utf8 <skills>/convmd/scripts/pdf_ocr.py <PDF> --pages 76-84 --out-dir <出力先> [--prompt-file <プロンプト.txt>] [--zoom 2.5] [--workers 4]
+```
+
+- `--pages` は `5` / `1-3` / `1,4,7-9`（1始まり）。出力は `<out-dir>/<PDF名>_p<ページ>.md`。同じ入力はキャッシュ（`<out-dir>/.ocr_cache`）を再利用する。
+- 表は列名と値の写し方を `--prompt-file` に書くと精度が上がる。API キー（`GEMINI_API_KEY` / `GOOGLE_API_KEY`）が要る。
+- 結果は OCR であり原典ではない。数値は原本と突き合わせてから根拠にする（確度 ⚠️）。5MB 以上の変換結果は Vault の `sources/` に置かず、原典 URL のリンクだけ残す（`rules/06_cpg.md`）。

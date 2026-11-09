@@ -97,6 +97,9 @@ def _fix_frontmatter_body(body: str) -> str:
         val = m.group(2).strip()
         if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
             return m.group(0)
+        # repl_array で整形済みの flow sequence（[...]）を文字列で包み直さない
+        if val.startswith("[") and not val.startswith("[[") and val.endswith("]"):
+            return m.group(0)
         escaped = val.replace('"', '\\"')
         return f'{key}: "{escaped}"'
 

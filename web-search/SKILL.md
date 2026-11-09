@@ -1,11 +1,25 @@
 ---
 name: web-search
-description: Web検索・URL取得。Gemini API（gemini_websearch.py / gemini_webfetch.py）を既定に、失敗時は Claude の WebSearch/WebFetch へフォールバック。2件以上・多段の調査は gemini_parallel.py で Gemini CLI に並列委譲する。
+description: Web検索・URL取得。事実の確定は Claude の WebFetch で出典を直接読む。gemini_websearch.py は Claude の WebSearch で候補が出ないニッチな日本語情報の「候補出し」専用（採用は団体名・URLまで）。gemini_parallel.py は使わない。
 ---
 
 # web-search
 
-Web検索・URL取得を行うスキル。**標準ではGemini APIを使い、うまくいかない場合のみClaudeネイティブのWebSearch/WebFetchにフォールバックする。**
+Web検索・URL取得を行うスキル。
+
+## 運用方針（2026-11-07 改訂。以降の記述より優先する）
+
+宗教団体の炊き出し・子ども食堂の調査（約 40 件の主張を出典ページで確認）での実測に基づく。
+
+1. **事実の確定は Claude の WebFetch**（保存が必要なら `convmd`）で出典ページを直接読む。Gemini の要約は根拠にしない。
+2. **`gemini_parallel.py` は使わない。** 2〜5 分かかり、引用が出典と一致しない行が大半で、結果が返らない調査もあった。生存 URL が 0 件で「結論未確認」だけが返った例が 2 件あった。
+3. **`gemini_websearch.py`（単発・約 20 秒）は候補出し専用。** Claude の WebSearch で候補が出ないニッチな日本語情報（生活支援・地域団体など）に使う。出力から採用してよいのは団体名・URL まで。日時・場所・数値などの記載内容は WebFetch で確認する。
+4. **Gemini の「記載なし」を否定の根拠にしない。** 実在する事実を落とした例がある（サティヤ・サイの東京での配食）。逆に、裏付けのない団体名・日時を挙げた例も複数ある。
+5. 以下の「標準ではGemini」「並列委譲」を前提にした記述は、旧運用の記録として残している。上の 1〜4 と食い違う場合は 1〜4 に従う。
+
+## 旧運用の記述（参考）
+
+**旧運用では、標準でGemini APIを使い、うまくいかない場合のみClaudeネイティブのWebSearch/WebFetchにフォールバックしていた。**
 
 ## 目的：Claude側のWebSearch回数上限（クォータ）の節約
 
@@ -92,9 +106,9 @@ uv run --project "C:/Users/iidam/claude-gemini-skills/web-search" python "C:/Use
 - **要約でなく欲しい情報だけを狙ったクエリ・追加指示を書く。** `--max-chars`は生成された回答を後から切り詰めるだけだが、クエリ自体に「一言で」「表形式で数値だけ」のように出力形式を指定すると、Gemini側の生成段階で回答が短くなる（`gemini_webfetch.py`の追加指示についても同様、上記の例を参照）。
 - **複数企業・複数URLにまたがる調査、または1件でも重いページ（PDF・長文記事）の要約は、Claudeのサブエージェント（Agent）ではなく `gemini_parallel.py` でGemini CLIエージェントに並列委譲する。** Claudeのサブエージェントは1体ごとにシステムプロンプト・ツール定義・取得ページ本文がClaudeのトークンとして積み上がるため、Web調査では使わない。`gemini_parallel.py` は各調査を独立したGemini CLI（headless・読み取り専用の`--approval-mode plan`）で実行し、検索・ページ取得・要約をすべてGemini側で完結させる。Claude側に載るのは各調査の先頭N文字とファイルパスだけ。
 
-判断の目安: 1〜2件の軽い単発確認は`gemini_websearch.py`＋`--max-chars`＋`--no-audit`＋`--no-sources`＋絞ったクエリ。2件以上の並行調査・重いページの要約・多段の調べもの（検索→取得→再検索）は`gemini_parallel.py`。Claudeのサブエージェントは、Gemini側が両方失敗した場合の最後の手段に限る。
+判断の目安（旧運用。現在は`gemini_parallel.py`を使わない）: 1〜2件の軽い単発確認は`gemini_websearch.py`＋`--max-chars`＋`--no-audit`＋`--no-sources`＋絞ったクエリ。2件以上の並行調査・重いページの要約・多段の調べもの（検索→取得→再検索）は`gemini_parallel.py`。Claudeのサブエージェントは、Gemini側が両方失敗した場合の最後の手段に限る。
 
-### 並列Web調査（Gemini CLIエージェントに丸ごと委譲）
+### 並列Web調査（Gemini CLIエージェントに丸ごと委譲）【非推奨・使わない。上の「運用方針」2 参照】
 
 ```powershell
 uv run --project "C:/Users/iidam/claude-gemini-skills/web-search" python "C:/Users/iidam/claude-gemini-skills/web-search/tools/gemini_parallel.py" -o "<scratchpad>/research" "調査1" "調査2" "調査3"
@@ -140,8 +154,9 @@ Geminiに任せて得をするのは**Web調査の部分だけ**。実装・検�
 
 ## 判断フロー
 
-1. まずGemini経由（標準の軽量モード）を試す。
-2. 取得ステータスが`FAILED`、または回答が空・的外れ・情報不足の場合 → ClaudeネイティブのWebSearch/WebFetchツールで再試行する。
+0. **（2026-11-07 改訂）まず Claude の WebSearch / WebFetch を使う。** WebSearch で候補が出ないニッチな日本語情報だけ、`gemini_websearch.py` で候補（団体名・URL）を出し、内容は WebFetch で確認する。以下 1〜2 の「まずGemini経由」は旧運用。
+1. （旧）まずGemini経由（標準の軽量モード）を試す。
+2. （旧）取得ステータスが`FAILED`、または回答が空・的外れ・情報不足の場合 → ClaudeネイティブのWebSearch/WebFetchツールで再試行する。
 3. Claude側もエラー（証明書エラー、予算上限到達等）になった場合 → Gemini側の結果を「参考情報」として明示した上でユーザーに報告する。両方失敗した場合は素直にその旨を伝える。
 4. 出典URLを一次資料としてノート等に記録する場合、`gemini_websearch.py`が自動解決した実URLはそのまま使ってよい。ただし出典表示に`(解決失敗、リダイレクトURLのまま)`と付いている場合は、リダイレクトURLを一次資料として記録せず、Claude側のWebFetch/WebSearchで実URLを確認するか、そのドメイン名（タイトル欄）を手がかりに直接検索する。
 5. 検索結果が「AとBに関係がある」「Xという施設・法人格が実在する」といった**関係性・実在性の主張**を含み、それをそのまま重要な事実として扱う場合は、上記オプション機能（`--verify-claim`または`--refute`）での裏取りを検討する（2026-08-02に複数回の誤情報実例あり）。ただし、この裏取りはコストがかかるオプションであり、全ての検索に自動的に適用するものではない——ユーザーが正確性を必要としている文脈かどうかで判断する。
