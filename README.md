@@ -30,6 +30,7 @@ Claude Code と Gemini CLI の両方から共有して使う、自作エージ�
 | [`pe-market-research`](./pe-market-research/) | PE投資先候補調査（プレイヤーマップ構築→資本構造・株主確認→M&A/OEM適性評価→ファクトチェック）を業界横断で行いたいとき | Workflowツール（`market_map_workflow.js`をagent実行）、WebSearch/WebFetch相当のツールアクセス |
 | [`solution-market-research`](./solution-market-research/) | 特定機能領域（WMS/TMS/ERP/MES/CRM等）向けのソフトウェア/システムソリューションを業界横断で調査し、RFP候補一覧・ベンダー比較表・Fit/Gap適合度マトリクスを作りたいとき。AI生成の既存調査資料の裏取り・ハルシネーション（実在しない製品名等）チェックにも使う | `web-search`スキル |
 | [`value-chain-research`](./value-chain-research/) | 業界のバリューチェーン/サプライチェーン構造（組織ガバナンス、S&OP等のプロセス、企業別ITスタック、学術論文サーベイ、地域権限分界）を体系調査したいとき | `web-search`スキル |
+| [`new-business-research`](./new-business-research/) | 企業の新規事業・M&A候補・中長期戦略シナリオを、一次資料を保存して外部環境・PPM・市場・規制・競合M&A・候補の実在確認まで体系調査したいとき | `convmd`、`web-search`スキル |
 
 ### 開発・レビュー系
 
