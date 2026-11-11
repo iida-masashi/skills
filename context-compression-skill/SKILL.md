@@ -55,6 +55,12 @@ npm run build *> $LOG; "exit=$LASTEXITCODE"; Get-Content $LOG -Tail 30
 ## 5. 構造化出力・DataFrame・MCP/API
 
 *   **CLI / SQL**: 罫線表や `SELECT *` を避け、必要列＋`LIMIT` を高密度形式（インデントなし JSON / CSV）で取る（`gh pr list --json number,title -q '.[]'`, `jq -c`）。行ダンプ前に `COUNT(*)` 等の集計を検討。
+*   **GitHub Issue / PR（`gh` CLI）**:
+    *   明示的な指示がない限り **`--state open` のみ**を対象とする（`--state all` や Closed 全件取得は禁止）。
+    *   一覧取得（`gh issue list` / `gh pr list`）で `body` や `comments` 全文をそのまま出力することは禁止。`--jq` で 1 件 1 行の要約（番号・ラベル・コメント数・最終コメント投稿者・更新日・タイトル）に射影し、確認が必要な Issue のみ `gh issue view <num> --json comments --jq '.comments[-1]'` で最新コメントを個別取得する：
+        ```powershell
+        gh issue list --repo <owner/repo> --author "@me" --state open --json number,title,labels,comments,updatedAt --jq '.[] | "#\(.number) [\([.labels[].name] | join(","))] (comments:\(.comments | length), last:\(.comments[-1].author.login // "none")@\(.updatedAt[0:10])) \(.title)"'
+        ```
 *   **DataFrame**: `print(df)` 禁止。Polars は `df.schema`, `df.head(3)`, `df.tail(3)`（pandas は `dtypes`, `info()`, `head(3)`）。多列・ネスト列は先に `select` で絞ってから `glimpse()`。
 *   **MCP / 外部 API**: 初回取得は必ず `limit` / `per_page` を最小限（5〜10件）に絞る。
 
